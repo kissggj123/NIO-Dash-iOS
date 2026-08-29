@@ -55,6 +55,7 @@ private extension View {
 
 // MARK: - 萌系徽章
 
+@MainActor
 private struct NIOAnimeBadge: View {
     let text: String
     let active: Bool
@@ -78,6 +79,7 @@ private struct NIOAnimeBadge: View {
 
 // MARK: - 萌系卡片容器
 
+@MainActor
 private struct NIOAnimeCardContainer<Content: View>: View {
     let title: String
     let icon: String
@@ -155,6 +157,7 @@ private struct NIOAnimeCardContainer<Content: View>: View {
 
 // MARK: - 梦幻二次元背景
 
+@MainActor
 private struct NIOAnimeBackground: View {
     let colors: NIOAnimeColors
 
@@ -193,6 +196,7 @@ private struct NIOAnimeBackground: View {
 
 // MARK: - 1. 萌宠气泡对话框
 
+@MainActor
 private struct NIOAnimeMascotHeader: View {
     let status: NIOVehicleStatus?
     let isLoadingVehicle: Bool
@@ -218,71 +222,61 @@ private struct NIOAnimeMascotHeader: View {
                 mascotTapCount += 1
                 let quotes = [
                     "主人今天也要元气满满地出发喵！🌸✨",
-                    "Clean Park 里的雪豹正在巡视车周呢~ 🐆🐾",
-                    "海獭宝宝把车窗抱得紧紧的，风雨无阻啦！🦦💖",
-                    "ET5 动力充沛，兔可可随时等待你的召唤~ ⚡️🌸",
-                    "兔可可、雪豹与海獭萌宠守护天团就绪！🚗💨"
+                    "爱车已进入最优电能守护状态~ ⚡️",
+                    "要经常来看看兔可可喔，我会一直在这里等你！🐰💖",
+                    "座舱空气已达到森林级清新标准啦！🍃",
+                    "戳我干嘛喵？快去开车兜风啦~ 🚗💨"
                 ]
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    customMascotText = quotes[mascotTapCount % quotes.count]
-                }
+                customMascotText = quotes[mascotTapCount % quotes.count]
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        isMascotBouncing = false
-                    }
+                    isMascotBouncing = false
                 }
             }) {
                 ZStack {
                     Circle()
-                        .fill(LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .fill(
+                            LinearGradient(
+                                colors: [sakuraPink.opacity(0.8), lavenderDream.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .frame(width: 44, height: 44)
-                        .shadow(color: sakuraPink.opacity(0.5), radius: 8)
+                        .shadow(color: sakuraPink.opacity(0.4), radius: 6, y: 2)
 
                     Text("🐰")
                         .font(.system(size: 24))
+                        .scaleEffect(isMascotBouncing ? 1.25 : 1.0)
+                        .rotationEffect(.degrees(isMascotBouncing ? 12 : 0))
                 }
-                .scaleEffect(isMascotBouncing ? 1.25 : 1.0)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PlainButtonStyle())
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text("兔可可")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(sakuraPink)
-
-                    Text("✨ 点击互动")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(lavenderDream)
-
-                    Spacer()
-
-                    refreshTimeBadge
-                }
-
-                // 智能萌动台词（带平滑切换动画）
+            VStack(alignment: .leading, spacing: 6) {
+                // 对话气泡
                 Text(customMascotText ?? mascotDialogue)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.text.opacity(0.9))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(NIOThemePaint.text)
                     .lineLimit(2)
-                    .id(customMascotText ?? mascotDialogue)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(NIOThemePaint.fill)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(NIOThemePaint.fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(
-                                LinearGradient(colors: [sakuraPink.opacity(0.4), lavenderDream.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                lineWidth: 1
-                            )
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(sakuraPink.opacity(0.3), lineWidth: 0.8)
                     )
-            )
+
+                // 底部刷新时间小胶囊
+                refreshTimeBadge
+            }
+
+            Spacer()
         }
     }
 
+    @MainActor
+    @ViewBuilder
     private var refreshTimeBadge: some View {
         HStack(spacing: 4) {
             if isLoadingVehicle {
@@ -334,19 +328,17 @@ private struct NIOAnimeMascotHeader: View {
         if isDry {
             return "座舱高温超强干燥运行中！正在为您抑菌烘干座舱空调系统~ ♨️✨"
         } else if isDefrost {
-            return "极速除霜除雾开启中！前方视野马上变得清晰明亮啦~ ❄️👀"
-        } else if camping {
-            return "露营模式开启中！舒适座舱与星空相伴，尽情享受户外美好时光吧~ ⛺️✨"
-        } else if powerHold {
-            return "离车不下电运行中！车内用电器持续供电，离开一会儿也很安心~ 🔋✨"
+            return "极速除雾除霜运行中！全功率扫清车窗视野~ ❄️💨"
         } else if isRealCharging {
-            return "爱车正在大口大口喝电中呢~ 动力慢慢充满啦！⚡️✨"
-        } else if pet {
-            return "宠物模式运行中！车内环境超舒适，海獭和毛孩子很安心哦~ 🐾🦦"
+            return "爱车正在全力补能中⚡️ 兔可可为你时刻关注充电进度喵~ 🌸"
         } else if defender {
-            return "雪豹守卫结界全开中！任何风吹草动都会被盯紧哒！🐆🛡️"
-        } else if soc < 20 {
-            return "呜哇！电量只剩 \(Int(soc))% 啦，主人记得带爱车去喝电呀~ 🔋⚠️"
+            return "守卫模式全天候警戒中！任何风吹草动我都会帮你盯紧哒~ 🛡️✨"
+        } else if pet {
+            return "宠物关怀模式开启中🐾 车内温度保持舒适，宝贝很安全哦~"
+        } else if camping {
+            return "露营模式已就绪⛺️ 享受静谧舒适的座舱时光吧~ 🌙"
+        } else if powerHold {
+            return "离车不下电模式已开启！空调与车载用电器持续供电中~ ⚡️"
         } else if temp > 30 {
             return "车里温度达到 \(String(format: "%.1f℃", temp)) 啦，出发前记得提前开空调降温哦~ 🍧"
         } else {
@@ -357,6 +349,7 @@ private struct NIOAnimeMascotHeader: View {
 
 // MARK: - 鉴权失效提示卡片
 
+@MainActor
 private struct NIOAnimeAuthExpiredCard: View {
     let colors: NIOAnimeColors
     let onUpdate: () -> Void
@@ -396,6 +389,7 @@ private struct NIOAnimeAuthExpiredCard: View {
 
 // MARK: - 未配置欢迎卡片
 
+@MainActor
 private struct NIOWelcomeSetupCard: View {
     let colors: NIOAnimeColors
     let onConfigure: () -> Void
@@ -449,6 +443,7 @@ private struct NIOWelcomeSetupCard: View {
 
 // MARK: - 2. 爱车萌动形象卡片 (3D 车图 + 状态胶囊 + 总里程)
 
+@MainActor
 private struct NIOAnimeHeroVehicleCard: View {
     let status: NIOVehicleStatus?
     let lastVehicleFetch: Date?
@@ -715,6 +710,7 @@ private struct NIOAnimeHeroVehicleCard: View {
 
 // MARK: - 3. ⚡️ 超能萌动电量与续航
 
+@MainActor
 private struct NIOAnimeBatteryCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -926,6 +922,7 @@ private struct NIOAnimeBatteryCard: View {
 
 // MARK: - 4. 💻 车机系统与固件版本 (FOTA)
 
+@MainActor
 private struct NIOAnimeFotaCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -1013,6 +1010,7 @@ private struct NIOAnimeFotaCard: View {
 
 // MARK: - 5. 📍 停车位置与寻车导航卡片
 
+@MainActor
 private struct NIOAnimeLocationCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -1153,6 +1151,7 @@ private struct NIOAnimeLocationCard: View {
 
 // MARK: - 6. 🚪 守护结界 · 车门车锁动态全景
 
+@MainActor
 private struct NIOAnimeDoorsCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -1283,6 +1282,7 @@ private struct NIOAnimeTyreGridCard: View {
 
 // MARK: - 8. 🌡️ 暖风座舱与超强干燥模式
 
+@MainActor
 private struct NIOAnimeCockpitCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -1420,6 +1420,7 @@ private struct NIOAnimeCockpitCard: View {
 
 // MARK: - 9. 🧊 车载智能冰箱与座舱空气健康
 
+@MainActor
 private struct NIOAnimeCabinExtrasCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -1498,6 +1499,7 @@ private struct NIOAnimeCabinExtrasCard: View {
 
 // MARK: - 10. 💡 车外灯光与照明系统
 
+@MainActor
 private struct NIOAnimeLightsCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -1535,6 +1537,7 @@ private struct NIOAnimeLightsCard: View {
 
 // MARK: - 11. ⚡️ 远程车控与快捷指令中心
 
+@MainActor
 private struct NIOAnimeRemoteControlCard: View {
     let colors: NIOAnimeColors
 
@@ -1577,6 +1580,7 @@ private struct NIOAnimeRemoteControlCard: View {
 
 // MARK: - 12. 📑 换电站足迹与财务大屏
 
+@MainActor
 private struct NIOAnimeOrdersCard: View {
     let summary: NIOServiceSummary?
     let colors: NIOAnimeColors
@@ -1833,6 +1837,7 @@ private struct NIOAnimeOrdersCard: View {
 
 // MARK: - 13. 📅 每日签到卡片
 
+@MainActor
 private struct NIOAnimeCheckinCard: View {
     let checkinData: NIOCheckinData?
     let colors: NIOAnimeColors
@@ -1914,6 +1919,7 @@ private struct NIOAnimeCheckinCard: View {
 
 // MARK: - 14. 📈 能耗达成率与百公里电耗评分
 
+@MainActor
 private struct NIOAnimeEfficiencyCard: View {
     let socStatus: NIOSocStatus?
     let colors: NIOAnimeColors
@@ -2033,6 +2039,7 @@ private struct NIOAnimeEfficiencyCard: View {
 
 // MARK: - 15. 🔧 维保周期与耗材寿命追踪
 
+@MainActor
 private struct NIOAnimeMaintenanceCard: View {
     let mileage: Double?
     let orders: [NIOServiceOrder]
@@ -2141,6 +2148,7 @@ private struct NIOAnimeMaintenanceCard: View {
 
 // MARK: - 顶部导航栏配件
 
+@MainActor
 private struct NIOAnimeBrandBadge: View {
     let colors: NIOAnimeColors
 
@@ -2211,6 +2219,7 @@ private struct NIOAnimeBrandBadge: View {
     }
 }
 
+@MainActor
 private struct NIOAnimeDashboardActions: View {
     let colors: NIOAnimeColors
     let isLiveActivityActive: Bool
@@ -2319,6 +2328,7 @@ private struct NIOAnimeDashboardActions: View {
 
 // MARK: - 原始 JSON 查看弹窗
 
+@MainActor
 private struct NIOAnimeRawJSONSheet: View {
     let title: String?
     let json: String?

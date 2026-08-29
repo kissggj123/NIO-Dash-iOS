@@ -307,7 +307,6 @@ enum NIOVehicleLib {
         guard !validPoints.isEmpty else { return [] }
 
         var byDay: [String: [NIOVehicleSnapshot]] = [:]
-        let cal = Calendar.current
         let dayFmt = NIOFormatters.dayKey
         let labelFmt = NIOFormatters.dayLabel
 

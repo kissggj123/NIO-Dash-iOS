@@ -120,8 +120,10 @@ final class NIOService: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             // 进入后台暂停轮询定时器，彻底杜绝后台无效网络唤醒与并发冲突
-            self?.vehicleTimer?.invalidate()
-            self?.vehicleTimer = nil
+            MainActor.assumeIsolated {
+                self?.vehicleTimer?.invalidate()
+                self?.vehicleTimer = nil
+            }
         }
 
         NotificationCenter.default.addObserver(
@@ -273,7 +275,6 @@ final class NIOService: ObservableObject {
 
             let rawJson = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
             let resultCode = (rawJson?["result_code"] as? String) ?? (rawJson?["resultCode"] as? String) ?? ""
-            let debugMsg = (rawJson?["debug_msg"] as? String) ?? ""
 
             // 精准区分【签名不匹配 sign_failed】与【账号 Token 被踢 auth_failed】
             if resultCode == "sign_failed" || resultCode.contains("sign") {
@@ -586,18 +587,24 @@ final class NIOService: ObservableObject {
                 logs = (try? JSONDecoder().decode([NIOFetchLogEntry].self, from: data)) ?? []
             }
 
+            let finalVehicle = vehicle
+            let finalFetchedAt = fetchedAt
+            let finalHistory = history
+            let finalCheckin = checkin
+            let finalLogs = logs
+
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
-                if let vehicle = vehicle {
-                    self.vehicleData = vehicle
-                    self.lastVehicleFetch = fetchedAt
+                if let v = finalVehicle {
+                    self.vehicleData = v
+                    self.lastVehicleFetch = finalFetchedAt
                 }
-                if !history.isEmpty {
-                    self.history = history
-                    self.updateDerivedMetrics(from: history)
+                if !finalHistory.isEmpty {
+                    self.history = finalHistory
+                    self.updateDerivedMetrics(from: finalHistory)
                 }
-                if let checkin = checkin { self.checkinData = checkin }
-                if !logs.isEmpty { self.fetchLogs = logs }
+                if let c = finalCheckin { self.checkinData = c }
+                if !finalLogs.isEmpty { self.fetchLogs = finalLogs }
             }
         }
     }
