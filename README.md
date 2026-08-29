@@ -1,4 +1,4 @@
-# 🐰 YumikoToysRR for NIO (iOS) · 二次元智能蔚来看板与灵动岛实时监控
+# 🐰 YumikoToysRR for NIO (iOS)
 
 <p align="center">
   <img src="docs/screenshots/dynamic_island.png" alt="灵动岛胶囊状态" width="180" style="border-radius: 14px; margin-bottom: 8px;">
