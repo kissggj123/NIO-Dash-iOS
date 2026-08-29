@@ -1,4 +1,4 @@
-# 🐰 YumikoToysRR for NIO (iOS)
+<h1 align="center">🐰 YumikoToysRR for NIO (iOS)</h1>
 
 <p align="center">
   <img src="docs/screenshots/dynamic_island.png" alt="灵动岛胶囊状态" width="180" style="border-radius: 14px; margin-bottom: 8px;">
