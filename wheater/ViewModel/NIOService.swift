@@ -132,10 +132,10 @@ final class NIOService: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             // 回到前台后平滑恢复调度，若数据已超 2 分钟则轻量刷新一次
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 guard let self = self else { return }
                 if let last = self.lastVehicleFetch, Date().timeIntervalSince(last) > 120 {
-                    Task { await self.fetchVehicle(force: false) }
+                    Task { [weak self] in await self?.fetchVehicle(force: false) }
                 }
                 self.scheduleNextVehiclePoll()
             }
@@ -168,7 +168,7 @@ final class NIOService: ObservableObject {
         let finalInterval = max(60.0, baseInterval + jitter)
 
         vehicleTimer = Timer.scheduledTimer(withTimeInterval: finalInterval, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 await self?.fetchVehicle()
                 self?.scheduleNextVehiclePoll()
             }
