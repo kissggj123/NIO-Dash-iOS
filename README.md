@@ -1,7 +1,9 @@
 # 🐰 YumikoToysRR for NIO (iOS) · 二次元智能蔚来看板与灵动岛实时监控
 
 <p align="center">
-  <img src="wheater/Assets.xcassets/AppIcon.appiconset/1024.png" alt="YumikoToys Logo" width="110" height="110" style="border-radius: 22px;">
+  <img src="docs/screenshots/dynamic_island.png" alt="灵动岛胶囊状态" width="180" style="border-radius: 14px; margin-bottom: 8px;">
+  <br>
+  <img src="docs/screenshots/live_activity.png" alt="锁屏实时活动车况卡片" width="520" style="border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
 </p>
 
 <p align="center">
