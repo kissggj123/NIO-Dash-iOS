@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@MainActor
 struct IOSNIOConfigView: View {
     @ObservedObject var service = NIOService.shared
     @Environment(\.dismiss) private var dismiss

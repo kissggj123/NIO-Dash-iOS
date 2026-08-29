@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@MainActor
 struct IOSAboutView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var themeService = AnimeThemeService.shared

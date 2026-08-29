@@ -642,6 +642,8 @@ private struct NIOAnimeHeroVehicleCard: View {
         }
     }
 
+    @MainActor
+    @ViewBuilder
     private func quickStatusColumn(icon: String, label: String, tint: Color) -> some View {
         VStack(spacing: 2) {
             Image(systemName: icon)
@@ -1182,6 +1184,8 @@ private struct NIOAnimeDoorsCard: View {
         }
     }
 
+    @MainActor
+    @ViewBuilder
     private func doorTile(item: NIOVehicleLib.ParsedDoorItem) -> some View {
         VStack(spacing: 3) {
             HStack(spacing: 3) {
@@ -1206,6 +1210,7 @@ private struct NIOAnimeDoorsCard: View {
 
 // MARK: - 7. 🛞 萌爪胎压与温度监测
 
+@MainActor
 private struct NIOAnimeTyreGridCard: View {
     let status: NIOVehicleStatus?
     let colors: NIOAnimeColors
@@ -1244,6 +1249,8 @@ private struct NIOAnimeTyreGridCard: View {
         }
     }
 
+    @MainActor
+    @ViewBuilder
     private func tyreTile(pos: String, info: NIOVehicleLib.TyreWheelInfo) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -2338,6 +2345,7 @@ private struct NIOAnimeRawJSONSheet: View {
 
 // MARK: - 主看板视图（保持轻量，仅负责组装子视图）
 
+@MainActor
 struct IOSNIODashboardView: View {
     @ObservedObject var service = NIOService.shared
     @State private var showConfigSheet = false
