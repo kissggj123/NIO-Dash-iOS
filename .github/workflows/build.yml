@@ -8,6 +8,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -16,6 +19,8 @@ jobs:
   build-ipa:
     name: Build & Package Unsigned IPA
     runs-on: macos-14
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
