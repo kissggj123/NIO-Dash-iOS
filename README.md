@@ -36,6 +36,15 @@
 
 ---
 
+## 🙏 致谢与灵感来源 (Acknowledgements)
+
+本项目在接口逆向、数据结构设计与车况监控逻辑上深受以下优秀的开源项目启发，在此致以诚挚的感谢：
+
+- [real3841/NIO-Dash](https://github.com/real3841/NIO-Dash) - 优秀的蔚来车况仪表板与数据可视化方案
+- [genelee26/ha-nio](https://github.com/genelee26/ha-nio) - 蔚来车辆 Home Assistant 集成插件与 API 协议参考
+
+---
+
 ## 📄 开源许可证
 
 本项目基于 MIT License 协议开源。
