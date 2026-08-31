@@ -453,6 +453,40 @@ struct IOSNIOConfigView: View {
                     }
                 }
 
+                if vpnManager.isVPNActive {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Circle().fill(mintCyan).frame(width: 6, height: 6)
+                            Text("抓包服务已在 127.0.0.1:8998 监听中")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(mintCyan)
+                            Spacer()
+                            Button(action: {
+                                UIPasteboard.general.string = "127.0.0.1:8998"
+                                let impact = UIImpactFeedbackGenerator(style: .light)
+                                impact.impactOccurred()
+                            }) {
+                                Text("复制代理地址")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(mintCyan.opacity(0.2))
+                                    .foregroundStyle(mintCyan)
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        Text("💡 快速捕获指引：进入手机「设置 -> 无线局域网 -> ⓘ -> 配置代理 -> 手动」填入 127.0.0.1 端口 8998，打开蔚来 App 下拉刷新一次即可自动截获并回填！")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                            .lineSpacing(1.5)
+                    }
+                    .padding(8)
+                    .background(mintCyan.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(mintCyan.opacity(0.25), lineWidth: 0.5))
+                }
+
                 if certManager.certInstalledHint {
                     HStack(alignment: .top, spacing: 4) {
                         Image(systemName: "info.circle.fill")
