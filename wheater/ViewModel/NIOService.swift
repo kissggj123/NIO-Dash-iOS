@@ -74,10 +74,14 @@ final class NIOService: ObservableObject {
     @Published var is403Detected = false
 
     var isConfigured: Bool {
+        // 与 Electron 版 loadFetchConfig 的获取策略一致：完整抓包 RVS URL 优先，Widget 签名模式仅作回退
+        if !nioVehicleApiURL.isEmpty && !nioVehicleAccessToken.isEmpty {
+            return true
+        }
         if nioVehicleApiMode == "widget" || (!nioVehicleId.isEmpty && !nioDeviceId.isEmpty && !nioVehicleSignSecret.isEmpty) {
             return !nioVehicleId.isEmpty && !nioDeviceId.isEmpty && !nioVehicleAccessToken.isEmpty
         }
-        return !nioVehicleApiURL.isEmpty && !nioVehicleAccessToken.isEmpty
+        return false
     }
 
     // MARK: - 调度状态
@@ -205,8 +209,28 @@ final class NIOService: ObservableObject {
 
         var targetURL: URL? = nil
 
-        // 1. 若配置为 Widget 签名模式，或具备完整的 Widget 参数，动态生成带当前时间戳和签名的 URL
-        if nioVehicleApiMode == "widget" || (!nioVehicleId.isEmpty && !nioDeviceId.isEmpty && !nioVehicleSignSecret.isEmpty) {
+        // 1. 与 Electron 版 loadFetchConfig 一致的获取策略：优先原样重放抓包的完整 RVS URL。
+        //    该 URL 的 field= 参数覆盖 tyre_status（胎压）等全部状态块；
+        //    Widget 接口是桌面小组件的精简数据源，不含胎压块，仅作未配置 URL 时的回退。
+        if !nioVehicleApiURL.isEmpty {
+            let trimmedUrl = nioVehicleApiURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            var fullUrl = trimmedUrl
+            if !trimmedUrl.lowercased().hasPrefix("http://") && !trimmedUrl.lowercased().hasPrefix("https://") {
+                fullUrl = "https://\(trimmedUrl)"
+            }
+            // 已配置动态签名密钥时，对 RVS URL 每次重签名（自校验通过才生效）：
+            // 保留 field=tyre 等参数拿胎压，同时 sign/timestamp 每次都是新的，永不失效
+            if let resigned = NIOVehicleLib.autoResignRvsURL(fullUrl, secret: nioVehicleSignSecret, algo: nioVehicleSignAlgo) {
+                targetURL = URL(string: resigned)
+            }
+            if targetURL == nil {
+                targetURL = URL(string: fullUrl)
+            }
+        }
+
+        // 2. 未配置 URL 且具备完整的 Widget 参数时，动态生成带当前时间戳和签名的 URL 回退
+        if targetURL == nil,
+           nioVehicleApiMode == "widget" || (!nioVehicleId.isEmpty && !nioDeviceId.isEmpty && !nioVehicleSignSecret.isEmpty) {
             if let built = NIOVehicleLib.buildWidgetURL(
                 vehicleId: nioVehicleId,
                 deviceId: nioDeviceId,
@@ -214,16 +238,6 @@ final class NIOService: ObservableObject {
                 algo: nioVehicleSignAlgo.isEmpty ? "md5_append" : nioVehicleSignAlgo
             ) {
                 targetURL = built.url
-            }
-        }
-
-        // 2. 若不是动态 Widget 模式，使用配置的 URL
-        if targetURL == nil && !nioVehicleApiURL.isEmpty {
-            let trimmedUrl = nioVehicleApiURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedUrl.lowercased().hasPrefix("http://") && !trimmedUrl.lowercased().hasPrefix("https://") {
-                targetURL = URL(string: "https://\(trimmedUrl)")
-            } else {
-                targetURL = URL(string: trimmedUrl)
             }
         }
 
@@ -396,22 +410,42 @@ final class NIOService: ObservableObject {
         isLoadingChange = true
         defer { isLoadingChange = false }
 
+        // 自动纠正旧的 404 路由为官方网关路由
+        var targetChangeURL = nioChangeApiURL
+        if targetChangeURL.contains("app.nio.com/app/api/service_charge") {
+            targetChangeURL = "https://gateway-front-external.nio.com/moat/1100367/api/v1/otd/car/ext/general/serviceOrder/getTabOrder?offset=0&limit=200&orderTypes=pe_shaman,pe_shaman_change,service_pe_discharge,battery_flexible_upgrade,nsom_so_maintenance,nsom_so_chauffeur,chauffeur_vehicle_delivery,so_case_accident&hash_type=sha256&lang=zh&region=US&tz_offset=28800&app_ver=6.5.3"
+            self.nioChangeApiURL = targetChangeURL
+        }
+
         do {
-            guard let url = URL(string: nioChangeApiURL) else { return }
+            guard let url = URL(string: targetChangeURL) else { return }
             var req = URLRequest(url: url)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Accept")
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue("VehicleWidgetExtension/6.5.3 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2612; iOS 26.5.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
             let token = normalizeBearer(nioChangeAccessToken.isEmpty ? nioVehicleAccessToken : nioChangeAccessToken)
             if !token.isEmpty {
                 req.setValue(token, forHTTPHeaderField: "Authorization")
             }
             req.httpBody = try? JSONSerialization.data(withJSONObject: ["page_num": 1, "page_size": 20])
 
-            let (data, _) = try await urlSession.data(for: req)
-            let decoded = try JSONDecoder().decode(NIOChangeResponse.self, from: data)
-            let summary = NIOOrderLib.analyzeServiceOrders(decoded)
-            self.serviceSummary = summary
+            let (data, response) = try await urlSession.data(for: req)
+            let http = response as? HTTPURLResponse
+            if http?.statusCode == 200 {
+                let decoded = try JSONDecoder().decode(NIOChangeResponse.self, from: data)
+                let summary = NIOOrderLib.analyzeServiceOrders(decoded)
+                self.serviceSummary = summary
+            } else if let code = http?.statusCode, code >= 400 {
+                let text = String(data: data, encoding: .utf8) ?? ""
+                appendLog(NIOFetchLogEntry(
+                    category: "change", level: "warning",
+                    message: "换电拉取失败: HTTP \(code)", detail: text,
+                    timestamp: Date(),
+                    requestURL: targetChangeURL, requestMethod: "POST",
+                    requestBody: nil, responsePreview: String(text.prefix(200)), statusCode: code
+                ))
+            }
         } catch {
             // 静默失败
         }
@@ -425,19 +459,41 @@ final class NIOService: ObservableObject {
         isLoadingCheckin = true
         defer { isLoadingCheckin = false }
 
+        // 自动纠正旧的 404 路由为官方网关路由
+        var targetCheckinURL = nioCheckinApiURL
+        if targetCheckinURL.contains("app.nio.com/app/api/users/checkin") {
+            targetCheckinURL = "https://gateway-front-external.nio.com/moat/10086//n/c/award/square?event=checkin&collection_id=1843940587332317185"
+            self.nioCheckinApiURL = targetCheckinURL
+        }
+
         do {
-            guard let url = URL(string: nioCheckinApiURL) else { return }
+            guard let url = URL(string: targetCheckinURL) else { return }
             var req = URLRequest(url: url)
             req.httpMethod = "GET"
             req.setValue("application/json", forHTTPHeaderField: "Accept")
+            req.setValue("VehicleWidgetExtension/6.5.3 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2612; iOS 26.5.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
             let token = normalizeBearer(nioCheckinAccessToken.isEmpty ? nioVehicleAccessToken : nioCheckinAccessToken)
             if !token.isEmpty {
                 req.setValue(token, forHTTPHeaderField: "Authorization")
             }
-            let (data, _) = try await urlSession.data(for: req)
-            if let ci = try? JSONDecoder().decode(NIOCheckinData.self, from: data) {
-                self.checkinData = ci
-                saveJSONAsync(ci, to: checkinFile)
+            let (data, response) = try await urlSession.data(for: req)
+            let http = response as? HTTPURLResponse
+            if http?.statusCode == 200 {
+                if let rawJson = try? JSONSerialization.jsonObject(with: data) {
+                    if let ci = NIOOrderLib.extractCheckinData(from: rawJson) {
+                        self.checkinData = ci
+                        saveJSONAsync(ci, to: checkinFile)
+                    }
+                }
+            } else if let code = http?.statusCode, code >= 400 {
+                let text = String(data: data, encoding: .utf8) ?? ""
+                appendLog(NIOFetchLogEntry(
+                    category: "checkin", level: "warning",
+                    message: "签到拉取失败: HTTP \(code)", detail: text,
+                    timestamp: Date(),
+                    requestURL: targetCheckinURL, requestMethod: "GET",
+                    requestBody: nil, responsePreview: String(text.prefix(200)), statusCode: code
+                ))
             }
         } catch {
             // 静默失败
