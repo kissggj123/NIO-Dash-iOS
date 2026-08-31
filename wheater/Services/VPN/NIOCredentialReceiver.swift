@@ -31,6 +31,7 @@ final class NIOCredentialReceiver: ObservableObject {
 
     func startListening() {
         guard listener == nil else { return }
+        statusMessage = "🟡 正在启动端口 8997…"
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
@@ -137,6 +138,18 @@ final class NIOCredentialReceiver: ObservableObject {
         lastReceivedAt = Date()
         let summary = applied.joined(separator: " · ")
         statusMessage = "✅ 已回填: \(summary)"
+
+        // 自动复制精简凭证 JSON 到剪贴板
+        var clipDict: [String: String] = [:]
+        if !token.isEmpty     { clipDict["vehicle_token"] = token }
+        if !vehicleId.isEmpty { clipDict["vehicle_id"]    = vehicleId }
+        if !deviceId.isEmpty  { clipDict["device_id"]     = deviceId }
+        if !vehicleUrl.isEmpty { clipDict["vehicle_url"]  = vehicleUrl }
+        if !sign.isEmpty      { clipDict["sign"]          = sign }
+        if let clipData = try? JSONSerialization.data(withJSONObject: clipDict, options: [.prettyPrinted, .sortedKeys]),
+           let clipStr = String(data: clipData, encoding: .utf8) {
+            UIPasteboard.general.string = clipStr
+        }
 
         // 震动
         let gen = UINotificationFeedbackGenerator()

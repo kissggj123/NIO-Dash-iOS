@@ -23,6 +23,7 @@ struct IOSNIOConfigView: View {
     @ObservedObject private var themeService = AnimeThemeService.shared
     @ObservedObject private var vpnManager = NIOVPNManager.shared
     @ObservedObject private var certManager = NIOVPNCertManager.shared
+    @ObservedObject private var receiver = NIOCredentialReceiver.shared
     @AppStorage("nio_vehicle_selected_model") private var selectedModelSlug = "et5_special"
     @AppStorage("nio_vehicle_selected_color") private var selectedColorSlug = "nature_wonder"
 
@@ -374,7 +375,6 @@ struct IOSNIOConfigView: View {
     /// Shadowrocket 直推凭证接收面板（推荐）
     @ViewBuilder
     private var shadowrocketPushCard: some View {
-        let receiver = NIOCredentialReceiver.shared
         cardContainer(title: "🚀 Shadowrocket 直推（推荐）", icon: "bolt.horizontal.fill", accentColor: sakuraPink) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("需安装 Shadowrocket（已开启 MITM）。脚本运行后会将 Token / VehicleID 直接推送到本 App，**全程无需手动复制粘贴**。")
@@ -383,26 +383,47 @@ struct IOSNIOConfigView: View {
                     .lineSpacing(2)
 
                 // 状态行
+                // 状态行（即时响应 @Published 变化）
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(receiver.isListening ? sakuraPink : NIOThemePaint.text.opacity(0.3))
+                        .fill(receiver.statusMessage.hasPrefix("✅") ? sakuraPink :
+                              receiver.statusMessage.hasPrefix("🟢") ? mintCyan :
+                              receiver.statusMessage.hasPrefix("🟡") ? pastelYellow :
+                              NIOThemePaint.text.opacity(0.3))
                         .frame(width: 6, height: 6)
+                        .animation(.easeInOut(duration: 0.3), value: receiver.statusMessage)
                     Text(receiver.statusMessage)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(NIOThemePaint.text.opacity(0.75))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.85))
                         .lineLimit(2)
+                        .animation(.easeInOut(duration: 0.2), value: receiver.statusMessage)
                 }
 
+                // 接收成功横幅（含剪贴板已复制提示）
                 if receiver.receiveCount > 0, let t = receiver.lastReceivedAt {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.seal.fill").foregroundStyle(sakuraPink)
-                        Text("已接收 \(receiver.receiveCount) 次 · 最近: \(t.formatted(date: .omitted, time: .shortened))")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(sakuraPink)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.seal.fill").foregroundStyle(sakuraPink)
+                            Text("已接收 \(receiver.receiveCount) 次 · 最近: \(t.formatted(date: .omitted, time: .shortened))")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(sakuraPink)
+                        }
+                        HStack(spacing: 4) {
+                            Image(systemName: "doc.on.clipboard.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(mintCyan)
+                            Text("凭证 JSON 已自动复制到剪贴板 · 可直接点击「剪贴板读取并识别」")
+                                .font(.system(size: 8))
+                                .foregroundStyle(mintCyan.opacity(0.9))
+                        }
                     }
-                    .padding(6)
-                    .background(sakuraPink.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(sakuraPink.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(sakuraPink.opacity(0.25), lineWidth: 0.5))
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.75), value: receiver.receiveCount)
                 }
 
                 HStack(spacing: 8) {
