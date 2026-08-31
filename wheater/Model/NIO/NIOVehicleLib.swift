@@ -789,101 +789,45 @@ enum NIOVehicleLib {
     }
 
     static func parseFotaInfo(version: String?, model: String? = nil) -> FotaDisplayInfo {
-        var raw = version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let raw = version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if raw.isEmpty {
-            raw = "Banyan 3.0.0"
-        }
-        var os = ""
-
-        // 优先匹配 Cedar S，再匹配 Cedar，以及 Banyan, Alder, Aspen, Coconut, SkyOS, Pine 等
-        let osCandidates = ["Cedar S", "Cedar_S", "Cedar-S", "Cedar", "Banyan", "Alder", "Aspen", "Coconut", "SkyOS", "Pine"]
-        for candidate in osCandidates {
-            if raw.localizedCaseInsensitiveContains(candidate) {
-                if candidate.hasPrefix("Cedar") {
-                    os = candidate.contains("S") ? "Cedar S" : "Cedar"
-                } else {
-                    os = candidate
-                }
-                break
-            }
-        }
-
-        // 中文别名容错
-        if os.isEmpty {
-            if raw.contains("雪松S") || raw.contains("雪松 S") {
-                os = "Cedar S"
-            } else if raw.contains("雪松") {
-                os = "Cedar"
-            } else if raw.contains("榕") {
-                os = "Banyan"
-            } else if raw.contains("赤杨") {
-                os = "Alder"
-            } else if raw.contains("白杨") {
-                os = "Aspen"
-            } else if raw.contains("椰子") || raw.contains("乐道") {
-                os = "Coconut"
-            } else if raw.contains("天枢") {
-                os = "SkyOS"
-            }
-        }
-
-        // 若字符串中未显式包含 OS 名称，根据车型推断
-        if os.isEmpty {
-            let m = (model ?? "").uppercased()
-            if m.contains("ET9") || m.contains("NT2.5") || m.contains("NT3") {
-                os = "Cedar S"
-            } else if m.contains("L60") || m.contains("ONVO") {
-                os = "Coconut"
-            } else if m.contains("ET5") || m.contains("ET7") || m.contains("ES7") || m.contains("EC7") || m.contains("ES6") || m.contains("EC6") || m.contains("ES8") {
-                os = "Banyan"
-            } else {
-                os = "Banyan"
-            }
+            return FotaDisplayInfo(osName: "", shortVer: "", fullDisplay: "待抓取", rawVersion: "")
         }
 
         var verNum = ""
+
+        // 1. 如果包含 * 分隔（如 20240815*Banyan 2.6.5*2.6.5），从各段中优先匹配纯数字版本号
         if raw.contains("*") {
             let parts = raw.components(separatedBy: "*")
-            if parts.count > 1, let match = parts.last?.range(of: #"\d+(\.\d+)+"#, options: .regularExpression) {
-                verNum = String(parts.last![match])
+            for part in parts.reversed() {
+                if let match = part.range(of: #"\d+(\.\d+)+"#, options: .regularExpression) {
+                    verNum = String(part[match])
+                    break
+                }
             }
         }
+
+        // 2. 正则提取标准版本号 (如 2.6.5, 3.0.0, 1.2.0)
         if verNum.isEmpty {
             let pattern = #"\d+(\.\d+)+"#
             if let match = raw.range(of: pattern, options: .regularExpression) {
                 verNum = String(raw[match])
             }
         }
+
+        // 3. 提取整数版本 (如 v2, 3)
         if verNum.isEmpty {
             let intPattern = #"(?:v|ver|version|V)?\s*(\d{1,2})\b"#
             if let match = raw.range(of: intPattern, options: .regularExpression) {
                 verNum = String(raw[match])
             }
         }
-        if verNum.isEmpty {
-            let cleaned = raw.replacingOccurrences(of: os, with: "")
-                .replacingOccurrences(of: "智能系统", with: "")
-                .replacingOccurrences(of: "系统", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !cleaned.isEmpty {
-                verNum = cleaned
-            }
-        }
 
         if verNum.isEmpty {
-            verNum = "3.0.0"
+            verNum = raw
         }
 
-        let fullDisplay: String
-        if !verNum.isEmpty {
-            fullDisplay = "\(os) \(verNum)"
-        } else if !raw.isEmpty && raw != "智能系统" {
-            fullDisplay = raw
-        } else {
-            fullDisplay = "\(os) 3.0.0"
-        }
-
-        return FotaDisplayInfo(osName: os, shortVer: verNum, fullDisplay: fullDisplay, rawVersion: raw)
+        return FotaDisplayInfo(osName: "", shortVer: verNum, fullDisplay: verNum, rawVersion: raw)
     }
 
     static func shortFotaVersion(_ version: String?) -> String {

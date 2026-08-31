@@ -280,10 +280,15 @@ struct NIOHvacStatus: Codable {
         case cbnT = "cbn_t"
         case insideTemperature = "inside_temperature"
         case cabinTemperature = "cabin_temperature"
+        case inTemp = "in_temp"
+        case cabinTemp = "cabin_temp"
+        case temp = "temp"
         case outsideTemperature = "outside_temperature"
         case ccuAmbT = "ccu_amb_t"
         case ambT = "amb_t"
         case ambientTemperature = "ambient_temperature"
+        case outTemp = "out_temp"
+        case outsideTemp = "outside_temp"
         case airConditionerOn = "air_conditioner_on"
         case acOn = "ac_on"
         case ccuAcOn = "ccu_ac_on"
@@ -298,54 +303,23 @@ struct NIOHvacStatus: Codable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        if let d = try? c.decodeIfPresent(Double.self, forKey: .temperature) {
-            temperature = d
-        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .ccuCbnT) {
-            temperature = d
-        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .cbnT) {
-            temperature = d
-        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .insideTemperature) {
-            temperature = d
-        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .cabinTemperature) {
-            temperature = d
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .temperature) {
-            temperature = Double(i)
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .ccuCbnT) {
-            temperature = Double(i)
-        } else if let s = try? c.decodeIfPresent(String.self, forKey: .temperature) {
-            temperature = Double(s)
-        } else if let s = try? c.decodeIfPresent(String.self, forKey: .ccuCbnT) {
-            temperature = Double(s)
+
+        func decodeTemp(_ keys: [CodingKeys]) -> Double? {
+            for key in keys {
+                if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return d }
+                if let i = try? c.decodeIfPresent(Int.self, forKey: key) { return Double(i) }
+                if let s = try? c.decodeIfPresent(String.self, forKey: key), let d = Double(s) { return d }
+            }
+            return nil
         }
 
-        if let d = try? c.decodeIfPresent(Double.self, forKey: .outsideTemperature) {
-            outsideTemperature = d
-        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .ccuAmbT) {
-            outsideTemperature = d
-        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .ambT) {
-            outsideTemperature = d
-        } else if let d = try? c.decodeIfPresent(Double.self, forKey: .ambientTemperature) {
-            outsideTemperature = d
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .outsideTemperature) {
-            outsideTemperature = Double(i)
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .ccuAmbT) {
-            outsideTemperature = Double(i)
-        } else if let s = try? c.decodeIfPresent(String.self, forKey: .outsideTemperature) {
-            outsideTemperature = Double(s)
-        } else if let s = try? c.decodeIfPresent(String.self, forKey: .ccuAmbT) {
-            outsideTemperature = Double(s)
-        }
+        temperature = decodeTemp([.temperature, .ccuCbnT, .cbnT, .insideTemperature, .cabinTemperature, .inTemp, .cabinTemp, .temp])
+        outsideTemperature = decodeTemp([.outsideTemperature, .ccuAmbT, .ambT, .ambientTemperature, .outTemp, .outsideTemp])
 
-        if let b = try? c.decodeIfPresent(Bool.self, forKey: .airConditionerOn) {
-            airConditionerOn = b
-        } else if let b = try? c.decodeIfPresent(Bool.self, forKey: .acOn) {
-            airConditionerOn = b
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .airConditionerOn) {
-            airConditionerOn = (i != 0)
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .acOn) {
-            airConditionerOn = (i != 0)
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .ccuAcOn) {
-            airConditionerOn = (i != 0)
+        for key in [CodingKeys.airConditionerOn, .acOn, .ccuAcOn] {
+            if let b = try? c.decodeIfPresent(Bool.self, forKey: key) { airConditionerOn = b; break }
+            if let i = try? c.decodeIfPresent(Int.self, forKey: key) { airConditionerOn = (i != 0); break }
+            if let s = try? c.decodeIfPresent(String.self, forKey: key) { airConditionerOn = (s == "1" || s.lowercased() == "true" || s == "on"); break }
         }
 
         if let i = try? c.decodeIfPresent(Int.self, forKey: .sampleTime) {

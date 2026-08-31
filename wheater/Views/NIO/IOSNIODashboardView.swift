@@ -1069,22 +1069,14 @@ private struct NIOAnimeFotaCard: View {
                         Text("当前版本号")
                             .font(.system(size: 9))
                             .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(!shortVer.isEmpty ? shortVer : "—")
-                                .font(.system(size: 20, weight: .heavy, design: .rounded))
-                                .foregroundStyle(mintCyan)
-                            if !currentVer.isEmpty && currentVer != shortVer {
-                                Text("(\(currentVer))")
-                                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                                    .foregroundStyle(lavenderDream.opacity(0.85))
-                                    .lineLimit(1)
-                            }
-                        }
+                        Text(!shortVer.isEmpty ? shortVer : "待抓取 🐾")
+                            .font(.system(size: 20, weight: .heavy, design: .rounded))
+                            .foregroundStyle(mintCyan)
                     }
 
                     Spacer()
 
-                    NIOAnimeBadge(text: fotaDesc, active: true, activeColor: fotaSts == 0 ? .green : sakuraPink)
+                    NIOAnimeBadge(text: !shortVer.isEmpty ? fotaDesc : "下拉爱车页同步", active: true, activeColor: fotaSts == 0 && !shortVer.isEmpty ? .green : sakuraPink)
                 }
 
                 HStack(spacing: 12) {
@@ -1614,7 +1606,7 @@ private struct NIOAnimeCockpitCard: View {
                             Text("车内温度")
                                 .font(.system(size: 9))
                                 .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                            Text(verbatim: hvac?.temperature != nil ? String(format: "%.1f℃", hvac!.temperature!) : "—")
+                            Text(verbatim: hvac?.temperature != nil ? String(format: "%.1f℃", hvac!.temperature!) : "待同步 🐾")
                                 .font(.system(size: 20, weight: .heavy, design: .rounded))
                                 .foregroundStyle(mintCyan)
                         }
@@ -1623,7 +1615,7 @@ private struct NIOAnimeCockpitCard: View {
                             Text("车外温度")
                                 .font(.system(size: 9))
                                 .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                            Text(verbatim: hvac?.outsideTemperature != nil ? String(format: "%.1f℃", hvac!.outsideTemperature!) : "—")
+                            Text(verbatim: hvac?.outsideTemperature != nil ? String(format: "%.1f℃", hvac!.outsideTemperature!) : "待同步 🐾")
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundStyle(lavenderDream)
                         }
