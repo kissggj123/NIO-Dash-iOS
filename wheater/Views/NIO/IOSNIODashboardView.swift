@@ -3418,7 +3418,7 @@ private struct NIOAnimeFetchLogCard: View {
                                                 .foregroundStyle(code == 200 ? mintCyan : sakuraPink)
                                         }
                                         Spacer()
-                                        Text(NIOVehicleLib.fmtTime(Int(log.timestamp.timeIntervalSince1970)))
+                                        Text(NIOVehicleLib.fmtTime(Int(log.timestamp.timeIntervalSince1970 * 1000)))
                                             .font(.system(size: 8))
                                             .foregroundStyle(NIOThemePaint.text.opacity(0.4))
                                     }

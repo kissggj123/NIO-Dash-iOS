@@ -91,7 +91,7 @@ final class NIOMitmEngine: ObservableObject {
                 return
             }
 
-            let requestStr = String(data: rawData, encoding: .utf8) ?? ""
+            let requestStr = String(decoding: rawData, as: UTF8.self)
             self.inspectAndSniffTraffic(requestStr)
 
             // 解析 CONNECT 隧道请求
@@ -223,6 +223,14 @@ final class NIOMitmEngine: ObservableObject {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
 
+            // 发送系统通知弹窗
+            let content = UNMutableNotificationContent()
+            content.title = "🌸 YumikoToys NIO 凭证提取成功"
+            content.body = msg
+            content.sound = .default
+            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+
             // 发送全局广播通知 UI 刷新
             NotificationCenter.default.post(name: NSNotification.Name("NIO_SNIFF_SUCCESS"), object: nil)
 
@@ -315,9 +323,8 @@ final class NIOMitmEngine: ObservableObject {
             }
 
             if isFromClient {
-                if let str = String(data: chunk, encoding: .utf8) {
-                    self.inspectAndSniffTraffic(str)
-                }
+                let str = String(decoding: chunk, as: UTF8.self)
+                self.inspectAndSniffTraffic(str)
             }
 
             destination.send(content: chunk, completion: .contentProcessed({ sendErr in
