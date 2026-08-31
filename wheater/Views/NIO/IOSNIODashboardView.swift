@@ -945,10 +945,10 @@ private struct NIOAnimeChargingDetailCard: View {
         let chargerType = soc?.chargerType ?? 0
         let isRealCharging = NIOVehicleLib.isRealCharging(socStatus: soc, offcarStatus: status?.offcarModeStatus) || (powerW > 0)
 
-        if isRealCharging || isPortOpen || (soc?.chargeState ?? 0) == 1 {
+        if soc != nil {
             NIOAnimeCardContainer(
                 title: "⚡️ 高压充电与功率实时大屏",
-                icon: "bolt.badge.clock.fill",
+                icon: isRealCharging ? "bolt.badge.clock.fill" : "bolt.badge.automatic.fill",
                 colors: colors,
                 jsonProvider: { nioToJSON(status?.socStatus) },
                 onShowJSON: onShowJSON
@@ -2145,7 +2145,7 @@ private struct NIOAnimeLightsCard: View {
 
             NIOAnimeCardContainer(
                 title: "💡 车外灯光与照明系统",
-                icon: "headlight.daytime.running.fill",
+                icon: "headlight.daytime.running",
                 colors: colors,
                 jsonProvider: { nioToJSON(status?.lightStatus) },
                 onShowJSON: onShowJSON
@@ -2175,7 +2175,7 @@ private struct NIOAnimeLightsCard: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(Color.black)
                         } else if position {
-                            Image(systemName: "headlight.daytime.running.fill")
+                            Image(systemName: "headlight.daytime.running")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(Color.white)
                             Text("示廓位置灯点亮中")
@@ -2240,7 +2240,7 @@ private struct NIOAnimeLightsCard: View {
                         )
                         lightTile(
                             name: "示廓位置灯",
-                            icon: "headlight.daytime.running.fill",
+                            icon: "headlight.daytime.running",
                             isOn: position,
                             activeColor: lavenderDream,
                             onLabel: "已开启 (示宽中)",
