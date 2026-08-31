@@ -921,6 +921,99 @@ private struct NIOAnimeBatteryCard: View {
     }
 }
 
+// MARK: - 3.5 ⚡️ 充电大屏与高压快充详情
+
+@MainActor
+private struct NIOAnimeChargingDetailCard: View {
+    let status: NIOVehicleStatus?
+    let colors: NIOAnimeColors
+    let onShowJSON: (String?, String?) -> Void
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+    private var pastelYellow: Color { colors.pastelYellow }
+
+    var body: some View {
+        let soc = status?.socStatus
+        let isRealCharging = NIOVehicleLib.isRealCharging(socStatus: soc, offcarStatus: status?.offcarModeStatus)
+        let isPortOpen = (status?.doorStatus?["second_charge_port_ajar_status"]?.intValue != 1)
+        let powerW = soc?.chargingPower ?? 0
+        let realCur = soc?.chargerRealCurA ?? 0
+        let realVol = soc?.chargerRealVolV ?? 0
+        let targetSoc = soc?.targetSocPercentage ?? soc?.maxSoc
+        let chargerType = soc?.chargerType ?? 0
+
+        if isRealCharging || isPortOpen || powerW > 0 || chargerType > 0 {
+            NIOAnimeCardContainer(
+                title: "⚡️ 高压充电与功率实时大屏",
+                icon: "bolt.badge.clock.fill",
+                colors: colors,
+                jsonProvider: { nioToJSON(status?.socStatus) },
+                onShowJSON: onShowJSON
+            ) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("充电功率")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                            Text(verbatim: "\(String(format: "%.1f", Double(powerW) / 1000.0)) kW")
+                                .font(.system(size: 14, weight: .heavy, design: .monospaced))
+                                .foregroundStyle(mintCyan)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(7)
+                        .background(NIOThemePaint.fill)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("实时电压 / 电流")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                            Text(verbatim: "\(Int(realVol))V · \(String(format: "%.1f", realCur))A")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(pastelYellow)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(7)
+                        .background(NIOThemePaint.fill)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        if let target = targetSoc, target > 0 {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("目标限充")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                                Text("\(Int(target))%")
+                                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(lavenderDream)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(7)
+                            .background(NIOThemePaint.fill)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+
+                    HStack(spacing: 6) {
+                        NIOAnimeBadge(text: NIOVehicleLib.chargerTypeLabel(chargerType), active: true, activeColor: mintCyan)
+                        if isPortOpen {
+                            NIOAnimeBadge(text: "充电口已开启 ⚡️", active: true, activeColor: sakuraPink)
+                        }
+                        Spacer()
+                        if let est = soc?.estimateChargeEndTime, est > 0 {
+                            Text("预计 " + NIOVehicleLib.fmtTime(est) + " 充满")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - 4. 💻 车机系统与固件版本 (FOTA)
 
 @MainActor
@@ -1205,6 +1298,189 @@ private struct NIOAnimeDoorsCard: View {
         .background(item.isClosed ? NIOThemePaint.fill : sakuraPink.opacity(0.18))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(item.isClosed ? NIOThemePaint.fill : sakuraPink.opacity(0.4), lineWidth: 1))
+    }
+}
+
+// MARK: - 6.5 🪟 车窗与天幕开度全景透视
+
+@MainActor
+private struct NIOAnimeWindowsCard: View {
+    let status: NIOVehicleStatus?
+    let colors: NIOAnimeColors
+    let onShowJSON: (String?, String?) -> Void
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+    private var pastelYellow: Color { colors.pastelYellow }
+
+    var body: some View {
+        let win = status?.windowStatus ?? [:]
+        let fl = win["win_posn_fl"]?.intValue ?? 0
+        let fr = win["win_posn_fr"]?.intValue ?? 0
+        let rl = win["win_posn_rl"]?.intValue ?? 0
+        let rr = win["win_posn_rr"]?.intValue ?? 0
+        let sunRoof = win["sun_roof_posn"]?.intValue ?? 0
+        let mirrorFold = win["rearview_mirror_fold"]?.intValue == 1
+
+        let anyWinOpen = fl > 0 || fr > 0 || rl > 0 || rr > 0 || sunRoof > 0
+
+        NIOAnimeCardContainer(
+            title: "🪟 车窗与天幕开度透视",
+            icon: "macwindow.badge.plus",
+            colors: colors,
+            jsonProvider: { nioToJSON(status?.windowStatus) },
+            onShowJSON: onShowJSON
+        ) {
+            VStack(spacing: 8) {
+                HStack {
+                    Text(anyWinOpen ? "⚠️ 有车窗处于开启状态" : "🔒 全车车窗与天幕已完全关闭")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(anyWinOpen ? sakuraPink : mintCyan)
+                    Spacer()
+                    NIOAnimeBadge(text: mirrorFold ? "后视镜已折叠 🔒" : "后视镜展开", active: mirrorFold, activeColor: mintCyan)
+                }
+
+                // 2x2 四门车窗开度进度条
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                    windowTile(name: "左前车窗", pos: fl)
+                    windowTile(name: "右前车窗", pos: fr)
+                    windowTile(name: "左后车窗", pos: rl)
+                    windowTile(name: "右后车窗", pos: rr)
+                }
+
+                if sunRoof > 0 || win["sun_roof_posn"] != nil {
+                    HStack {
+                        Text("全景天窗/天幕")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        Spacer()
+                        Text(sunRoof > 0 ? "开启 \(sunRoof)%" : "已完全关闭")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(sunRoof > 0 ? sakuraPink : mintCyan)
+                    }
+                    .padding(6)
+                    .background(NIOThemePaint.well.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
+    private func windowTile(name: String, pos: Int) -> some View {
+        let isOpen = pos > 0
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(name)
+                    .font(.system(size: 9))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                Spacer()
+                Text(isOpen ? "开启 \(pos)%" : "已关严")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(isOpen ? sakuraPink : mintCyan)
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(NIOThemePaint.well)
+                    if isOpen {
+                        Capsule()
+                            .fill(LinearGradient(colors: [sakuraPink, pastelYellow], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: max(4, g.size.width * CGFloat(min(100, pos)) / 100.0))
+                    }
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(6)
+        .background(NIOThemePaint.fill)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// MARK: - 6.6 🚗 驾驶模式、行车与泊车详情
+
+@MainActor
+private struct NIOAnimeDrivingParkingCard: View {
+    let status: NIOVehicleStatus?
+    let colors: NIOAnimeColors
+    let onShowJSON: (String?, String?) -> Void
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+    private var pastelYellow: Color { colors.pastelYellow }
+
+    var body: some View {
+        let ext = status?.exteriorStatus
+        let vehlMode = ext?.vehlMode ?? 0
+        let vehlState = ext?.vehicleState ?? 0
+        let tripShare = status?.tripShareStatus?["trip_share_status"]?.intValue ?? 0
+        let isRpa = (status?.specialStatus?["rvs_rpa_out"]?.intValue == 1) || (vehlState == 5)
+
+        let modeDesc: String = {
+            let base = NIOVehicleLib.vehlModeLabel(vehlMode)
+            return vehlState == 2 ? "上次设定: \(base)" : "\(base) ⚡️"
+        }()
+
+        let stateDesc: String = {
+            switch vehlState {
+            case 1: return "行驶中 · D 挡"
+            case 2: return "驻车停放 · P 挡"
+            case 3: return "休眠待机 💤"
+            case 4: return "充电连接中 ⚡️"
+            case 5: return "遥控泊车进行中 🅿️"
+            default: return "安全驻车 · P 挡"
+            }
+        }()
+
+        NIOAnimeCardContainer(
+            title: "🚗 驾驶模式与行车泊车全景",
+            icon: "steeringwheel.and.key",
+            colors: colors,
+            jsonProvider: { nioToJSON(status?.exteriorStatus) },
+            onShowJSON: onShowJSON
+        ) {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("驾驶模式")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        Text(modeDesc)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(mintCyan)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(7)
+                    .background(NIOThemePaint.fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("车辆挡位与状态")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        Text(stateDesc)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(vehlState == 1 ? pastelYellow : (vehlState == 5 ? sakuraPink : lavenderDream))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(7)
+                    .background(NIOThemePaint.fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
+                HStack(spacing: 6) {
+                    NIOAnimeBadge(text: isRpa ? "遥控泊车进行中 🅿️" : "遥控泊车待命", active: isRpa, activeColor: .orange)
+                    NIOAnimeBadge(text: tripShare > 0 ? "行程分享中 📍" : "行程分享关闭", active: tripShare > 0, activeColor: sakuraPink)
+                    Spacer()
+                    if let spd = ext?.speed, spd > 0 {
+                        Text(verbatim: "\(Int(spd)) km/h")
+                            .font(.system(size: 11, weight: .heavy, design: .monospaced))
+                            .foregroundStyle(mintCyan)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1574,72 +1850,92 @@ private struct NIOAnimeKeySensorsCard: View {
         let peUnlock = key["pe_unlock_status"]?.intValue == 1 || key["smart_key_near"]?.intValue == 1
         let handleSensor = key["handle_sensor_status"]?.intValue == 1 || key["door_handle_sensor"]?.intValue == 1
         let lvSoc = lvBatt["lv_batt_soc"]?.intValue
-        let lvVolt = lvBatt["lv_batt_volt"]?.numberValue
+        let lvVolt = lvBatt["lv_batt_volt"]?.numberValue ?? lvBatt["lv_batt_voltage"]?.numberValue
 
-        if !key.isEmpty || !lvBatt.isEmpty {
-            NIOAnimeCardContainer(
-                title: "🔑 钥匙感知与低压供电系统",
-                icon: "key.fill",
-                colors: colors,
-                jsonProvider: { nioToJSON(status?.keyStatus) },
-                onShowJSON: onShowJSON
-            ) {
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("蓝牙靠近解锁")
-                                .font(.system(size: 9))
-                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                            HStack(spacing: 4) {
-                                Image(systemName: peUnlock ? "antenna.radiowaves.left.and.right" : "lock.fill")
-                                    .font(.system(size: 10))
-                                Text(peUnlock ? "已感应" : "待命中")
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .foregroundStyle(peUnlock ? mintCyan : NIOThemePaint.text.opacity(0.6))
+        NIOAnimeCardContainer(
+            title: "🔑 钥匙感知与低压供电系统",
+            icon: "key.fill",
+            colors: colors,
+            jsonProvider: {
+                if let direct = nioToJSON(status?.lvBattStatus), !direct.isEmpty && direct != "{}" {
+                    return "/* lv_batt_status */\n" + direct + "\n\n/* key_status */\n" + (nioToJSON(status?.keyStatus) ?? "{}")
+                }
+                return nioToJSON(status?.keyStatus) ?? "{}"
+            },
+            onShowJSON: onShowJSON
+        ) {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("蓝牙靠近解锁")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        HStack(spacing: 4) {
+                            Image(systemName: peUnlock ? "antenna.radiowaves.left.and.right" : "lock.fill")
+                                .font(.system(size: 10))
+                            Text(peUnlock ? "已感应" : "待命中")
+                                .font(.system(size: 11, weight: .bold))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(7)
-                        .background(NIOThemePaint.well.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(peUnlock ? mintCyan : NIOThemePaint.text.opacity(0.6))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(7)
+                    .background(NIOThemePaint.well.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("隐藏门把手感应")
-                                .font(.system(size: 9))
-                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                            HStack(spacing: 4) {
-                                Image(systemName: handleSensor ? "hand.tap.fill" : "hand.raised.fill")
-                                    .font(.system(size: 10))
-                                Text(handleSensor ? "已伸出/感应" : "收纳锁止")
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .foregroundStyle(handleSensor ? pastelYellow : NIOThemePaint.text.opacity(0.6))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("隐藏门把手感应")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        HStack(spacing: 4) {
+                            Image(systemName: handleSensor ? "hand.tap.fill" : "hand.raised.fill")
+                                .font(.system(size: 10))
+                            Text(handleSensor ? "已伸出/感应" : "收纳锁止")
+                                .font(.system(size: 11, weight: .bold))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(7)
-                        .background(NIOThemePaint.well.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(handleSensor ? pastelYellow : NIOThemePaint.text.opacity(0.6))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(7)
+                    .background(NIOThemePaint.well.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("12V 辅助蓄电池")
-                                .font(.system(size: 9))
-                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                            HStack(spacing: 3) {
-                                Text("\(lvSoc ?? 100)%")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("12V 辅助蓄电池")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        HStack(spacing: 3) {
+                            if let soc = lvSoc {
+                                Text("\(soc)%")
                                     .font(.system(size: 12, weight: .heavy, design: .rounded))
-                                    .foregroundStyle((lvSoc ?? 100) > 40 ? mintCyan : sakuraPink)
+                                    .foregroundStyle(soc > 40 ? mintCyan : sakuraPink)
                                 if let volt = lvVolt {
                                     Text(verbatim: "\(String(format: "%.1f", volt))V")
                                         .font(.system(size: 9, weight: .medium, design: .monospaced))
                                         .foregroundStyle(NIOThemePaint.text.opacity(0.6))
                                 }
+                            } else {
+                                Text("待抓包同步")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(7)
-                        .background(NIOThemePaint.well.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(7)
+                    .background(NIOThemePaint.well.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
+                if lvSoc == nil && key.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 8))
+                        Text("当前为 Widget 动态模式，手机打开蔚来 App 下拉刷新即可捕获全量 12V 电瓶与钥匙遥测")
+                            .font(.system(size: 8))
+                    }
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -1722,6 +2018,82 @@ private struct NIOAnimeCabinExtrasCard: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 9.5 📦 储物空间与行李箱状态
+
+@MainActor
+private struct NIOAnimeStorageBoxCard: View {
+    let status: NIOVehicleStatus?
+    let colors: NIOAnimeColors
+    let onShowJSON: (String?, String?) -> Void
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+    private var pastelYellow: Color { colors.pastelYellow }
+
+    var body: some View {
+        let box = status?.boxStatus ?? [:]
+        let doors = status?.doorStatus ?? [:]
+        let isBoxOpen = box["box_open"]?.boolValue == true || box["box_open"]?.intValue == 1
+        let isBoxLock = box["box_lock"]?.boolValue == true || box["box_lock"]?.intValue == 1
+        let hoodOpen = doors["engine_hood_ajar_status"]?.intValue == 1
+        let trunkOpen = doors["tailgate_ajar_status"]?.intValue == 1
+
+        if isBoxOpen || isBoxLock || hoodOpen || trunkOpen || !box.isEmpty {
+            NIOAnimeCardContainer(
+                title: "📦 储物空间与行李箱状态",
+                icon: "archivebox.fill",
+                colors: colors,
+                jsonProvider: { nioToJSON(status?.boxStatus) },
+                onShowJSON: onShowJSON
+            ) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        storageTile(
+                            title: "前备箱/前舱盖",
+                            statusText: hoodOpen ? "已打开 ⚠️" : "已闭锁 🔒",
+                            isOpen: hoodOpen,
+                            icon: "car.side.front.open.fill"
+                        )
+                        storageTile(
+                            title: "后备箱/电动尾门",
+                            statusText: trunkOpen ? "已开启 ⚠️" : "已锁好 🔒",
+                            isOpen: trunkOpen,
+                            icon: "car.side.rear.open.fill"
+                        )
+                        storageTile(
+                            title: "中控密码手套箱",
+                            statusText: isBoxOpen ? "已开启 🔓" : (isBoxLock ? "密码锁定 🔒" : "关闭已上锁"),
+                            isOpen: isBoxOpen,
+                            icon: "lock.square.stack.fill"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func storageTile(title: String, statusText: String, isOpen: Bool, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+                Text(title)
+                    .font(.system(size: 8))
+            }
+            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+
+            Text(statusText)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(isOpen ? sakuraPink : mintCyan)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(7)
+        .background(NIOThemePaint.fill)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -2978,6 +3350,89 @@ private struct NIOAnimeMaintenanceCard: View {
     }
 }
 
+// MARK: - 16. 📜 抓包请求与运行日志
+
+@MainActor
+private struct NIOAnimeFetchLogCard: View {
+    let logs: [NIOFetchLogEntry]
+    let colors: NIOAnimeColors
+    let onViewAllLogs: () -> Void
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+
+    var body: some View {
+        NIOAnimeCardContainer(
+            title: "📜 抓包请求与运行诊断（\(logs.count)）",
+            icon: "doc.text.magnifyingglass",
+            colors: colors,
+            jsonProvider: { nioToJSON(logs) }
+        ) {
+            VStack(spacing: 8) {
+                if logs.isEmpty {
+                    Text("暂无网络请求日志")
+                        .font(.system(size: 10))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(logs.prefix(3)) { log in
+                            HStack(alignment: .top, spacing: 6) {
+                                Circle()
+                                    .fill(log.level == "error" ? sakuraPink : (log.statusCode == 200 ? mintCyan : lavenderDream))
+                                    .frame(width: 6, height: 6)
+                                    .padding(.top, 4)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    HStack {
+                                        Text(log.category.uppercased())
+                                            .font(.system(size: 8, weight: .heavy, design: .monospaced))
+                                            .foregroundStyle(mintCyan)
+                                        if let code = log.statusCode {
+                                            Text("\(code)")
+                                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                                .foregroundStyle(code == 200 ? mintCyan : sakuraPink)
+                                        }
+                                        Spacer()
+                                        Text(NIOVehicleLib.fmtTime(Int(log.timestamp.timeIntervalSince1970)))
+                                            .font(.system(size: 8))
+                                            .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+                                    }
+                                    Text(log.message)
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(NIOThemePaint.text.opacity(0.85))
+                                        .lineLimit(1)
+                                }
+                            }
+                            .padding(6)
+                            .background(NIOThemePaint.fill)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                    }
+
+                    Button(action: {
+                        let impact = UIImpactFeedbackGenerator(style: .light)
+                        impact.impactOccurred()
+                        onViewAllLogs()
+                    }) {
+                        HStack(spacing: 4) {
+                            Text("查看全部 \(logs.count) 条诊断抓包日志")
+                                .font(.system(size: 10, weight: .bold))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8))
+                        }
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .background(mintCyan.opacity(0.15))
+                        .foregroundStyle(mintCyan)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(mintCyan.opacity(0.3), lineWidth: 0.5))
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - 顶部导航栏配件
 
 @MainActor
@@ -3235,6 +3690,10 @@ struct IOSNIODashboardView: View {
                             NIOAnimeBatteryCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.18)
 
+                            // 3.5 ⚡️ 充电大屏与高压快充详情
+                            NIOAnimeChargingDetailCard(status: status, colors: colors, onShowJSON: showJSON)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.19)
+
                             // 4. 💻 车机系统与固件版本 (FOTA)
                             NIOAnimeFotaCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.20)
@@ -3250,6 +3709,14 @@ struct IOSNIODashboardView: View {
                             // 6. 🚪 守护结界 · 车门车况全景
                             NIOAnimeDoorsCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.25)
+
+                            // 6.5 🪟 车窗与天幕开度透视
+                            NIOAnimeWindowsCard(status: status, colors: colors, onShowJSON: showJSON)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.26)
+
+                            // 6.6 🚗 驾驶模式与行车泊车全景
+                            NIOAnimeDrivingParkingCard(status: status, colors: colors, onShowJSON: showJSON)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.27)
 
                             // 7. 🛞 萌爪胎压与温度监测 (4 轮网格)
                             NIOAnimeTyreGridCard(status: status, colors: colors, onShowJSON: showJSON)
@@ -3270,6 +3737,10 @@ struct IOSNIODashboardView: View {
                             // 9. 🧊 车载智能冰箱与空气健康
                             NIOAnimeCabinExtrasCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.34)
+
+                            // 9.5 📦 储物空间与行李箱状态
+                            NIOAnimeStorageBoxCard(status: status, colors: colors, onShowJSON: showJSON)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.35)
 
                             // 10. 💡 车外灯光与照明系统 (拟物重构)
                             NIOAnimeLightsCard(status: status, colors: colors, onShowJSON: showJSON)
@@ -3310,6 +3781,14 @@ struct IOSNIODashboardView: View {
                                 }
                             )
                             .nioEntry(hasAppeared: hasAppeared, delay: 0.49)
+
+                            // 16. 📜 抓包请求与运行日志
+                            NIOAnimeFetchLogCard(
+                                logs: service.fetchLogs,
+                                colors: colors,
+                                onViewAllLogs: { showLogsSheet = true }
+                            )
+                            .nioEntry(hasAppeared: hasAppeared, delay: 0.50)
                         }
 
                         Spacer(minLength: 30)
