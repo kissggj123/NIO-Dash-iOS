@@ -1073,12 +1073,12 @@ private struct NIOAnimeFotaCard: View {
                             .font(.system(size: 9))
                             .foregroundStyle(NIOThemePaint.text.opacity(0.6))
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(!shortVer.isEmpty ? info.fullDisplay : (!info.osName.isEmpty ? "\(info.osName) (待同步)" : "—"))
-                                .font(.system(size: 17, weight: .heavy, design: .rounded))
+                            Text(!shortVer.isEmpty ? shortVer : "—")
+                                .font(.system(size: 20, weight: .heavy, design: .rounded))
                                 .foregroundStyle(mintCyan)
-                            if !currentVer.isEmpty && currentVer != info.fullDisplay && currentVer != shortVer {
+                            if !currentVer.isEmpty && currentVer != shortVer {
                                 Text("(\(currentVer))")
-                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .font(.system(size: 10, weight: .medium, design: .rounded))
                                     .foregroundStyle(lavenderDream.opacity(0.85))
                                     .lineLimit(1)
                             }

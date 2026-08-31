@@ -746,177 +746,123 @@ struct IOSNIOConfigView: View {
     // MARK: - 3. 车辆 API 必填 (支持 URL 模式 & Widget 动态签名模式)
 
     private var vehicleApiCard: some View {
-        cardContainer(title: "1. 车辆状态 API (必填)", icon: "car.side.fill", accentColor: sakuraPink) {
+        cardContainer(title: "1. 车辆状态 API (智能自适应)", icon: "car.side.fill", accentColor: sakuraPink) {
             VStack(alignment: .leading, spacing: 10) {
-                // 模式切换
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("接口调用模式")
-                        .font(.system(size: 10, weight: .bold))
+                // 智能自动模式指示横幅
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(sakuraPink)
-
-                    HStack(spacing: 8) {
-                        Button(action: { service.nioVehicleApiMode = "url" }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: service.nioVehicleApiMode != "widget" ? "largecircle.fill.circle" : "circle")
-                                    .font(.system(size: 10))
-                                Text("🔗 完整 URL 模式")
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 7)
-                            .background(service.nioVehicleApiMode != "widget" ? sakuraPink.opacity(0.25) : NIOThemePaint.fill)
-                            .foregroundStyle(service.nioVehicleApiMode != "widget" ? sakuraPink : NIOThemePaint.text.opacity(0.7))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(service.nioVehicleApiMode != "widget" ? sakuraPink : NIOThemePaint.stroke, lineWidth: 1))
-                        }
-
-                        Button(action: { service.nioVehicleApiMode = "widget" }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: service.nioVehicleApiMode == "widget" ? "largecircle.fill.circle" : "circle")
-                                    .font(.system(size: 10))
-                                Text("⚡️ Widget 签名模式")
-                                    .font(.system(size: 11, weight: .bold))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 7)
-                            .background(service.nioVehicleApiMode == "widget" ? mintCyan.opacity(0.25) : NIOThemePaint.fill)
-                            .foregroundStyle(service.nioVehicleApiMode == "widget" ? mintCyan : NIOThemePaint.text.opacity(0.7))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(service.nioVehicleApiMode == "widget" ? mintCyan : NIOThemePaint.stroke, lineWidth: 1))
-                        }
-                    }
-                }
-
-                if service.nioVehicleApiMode == "widget" {
-                    // Widget 动态签名模式参数
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Vehicle ID (车辆 ID)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(mintCyan)
-
-                        TextField("如 17位VIN 或 9位车辆ID", text: $service.nioVehicleId)
-                            .font(.system(size: 11, design: .monospaced))
-                            .padding(8)
-                            .background(NIOThemePaint.well)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
-                            .foregroundStyle(NIOThemePaint.text)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Device ID (设备 ID)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(mintCyan)
-
-                        TextField("抓包中的 device_id", text: $service.nioDeviceId)
-                            .font(.system(size: 11, design: .monospaced))
-                            .padding(8)
-                            .background(NIOThemePaint.well)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
-                            .foregroundStyle(NIOThemePaint.text)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Sign Secret (签名密钥)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(mintCyan)
-
-                        SecureField("动态签名密钥，填入后每次自动生成有效签名", text: $service.nioVehicleSignSecret)
-                            .font(.system(size: 11, design: .monospaced))
-                            .padding(8)
-                            .background(NIOThemePaint.well)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
-                            .foregroundStyle(NIOThemePaint.text)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 4) {
-                            Text("签名算法")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(mintCyan)
-                            Spacer()
-                        }
-
-                        Menu {
-                            Button("MD5 (Query + Secret) [推荐]") {
-                                service.nioVehicleSignAlgo = "md5_append"
-                            }
-                            Button("MD5 (Secret + Query)") {
-                                service.nioVehicleSignAlgo = "md5_prepend"
-                            }
-                            Button("MD5 (Query + &key=Secret)") {
-                                service.nioVehicleSignAlgo = "md5_append_key"
-                            }
-                        } label: {
-                            HStack {
-                                Text(algoDisplayName(service.nioVehicleSignAlgo))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(NIOThemePaint.text)
-                                    .lineLimit(1)
-                                Spacer()
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(mintCyan)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(NIOThemePaint.well)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
-                            .foregroundStyle(NIOThemePaint.text)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
-                            .foregroundStyle(NIOThemePaint.text)
-                        }
-                    }
-
-                    Text("💡 提示：普通抓包只能截获每次请求已生成的 sign，无法直接抓到 App 内置的 sign_secret。常规使用推荐切回【🔗 完整 URL 模式】直接一键粘贴即可；若已获取动态密钥则填入本模式享受永久签名。")
-                        .font(.system(size: 9))
-                        .foregroundStyle(pastelYellow.opacity(0.85))
-                        .lineSpacing(2)
-                } else {
-                    // 直连抓包 URL 模式
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("API URL")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("⚡️ 智能自适应最佳链路 (Auto)")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(sakuraPink)
-
-                        TextField("https://icar.nio.com/api/2/rvs/vehicle/.../status", text: $service.nioVehicleApiURL)
-                            .font(.system(size: 11, design: .monospaced))
-                            .padding(8)
-                            .background(NIOThemePaint.well)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
-                            .foregroundStyle(NIOThemePaint.text)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
+                        Text("优先拉取全量 RVS 车况（含 4 轮胎压）；若未提供 URL 或签名过期，自动无感切换至 Widget 动态签名模式（永不失效）！")
+                            .font(.system(size: 8.5))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.65))
+                            .lineSpacing(1.5)
                     }
                 }
+                .padding(8)
+                .background(sakuraPink.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
 
+                // 1. Access Token (必填)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Access Token (Bearer)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(sakuraPink)
+                    HStack {
+                        Text("Access Token (Bearer)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(sakuraPink)
+                        Text("*必填")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.red.opacity(0.8))
+                    }
 
-                    SecureField("Bearer 2.0.xxxx...", text: $service.nioVehicleAccessToken)
+                    SecureField("Bearer 2.0.xxxx... (或直接粘贴完整 cURL)", text: $service.nioVehicleAccessToken)
                         .font(.system(size: 11, design: .monospaced))
                         .padding(8)
                         .background(NIOThemePaint.well)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
-                            .foregroundStyle(NIOThemePaint.text)
+                        .foregroundStyle(NIOThemePaint.text)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 }
 
-                Text(service.nioVehicleApiMode == "widget" ? "⚡️ 动态 Widget 签名模式每次拉取自动生成当前时间戳与 MD5 校验码，长期运行永不失效。" : "💡 包含车辆电量、续航、7门车锁、4轮胎压、座舱温度及实时 GPS。")
+                // 2. Vehicle ID (必填/自动填充)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Vehicle ID (车辆 ID)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(mintCyan)
+                        Text("推荐")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(mintCyan)
+                    }
+
+                    TextField("如 17位VIN 或 9位车辆ID (抓包自动提取)", text: $service.nioVehicleId)
+                        .font(.system(size: 11, design: .monospaced))
+                        .padding(8)
+                        .background(NIOThemePaint.well)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
+                        .foregroundStyle(NIOThemePaint.text)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+
+                // 3. API URL (选填 / 抓包直填全量)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("API URL (完整 RVS 抓包链接，选填)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(lavenderDream)
+
+                    TextField("https://icar.nio.com/api/2/rvs/vehicle/.../status", text: $service.nioVehicleApiURL)
+                        .font(.system(size: 11, design: .monospaced))
+                        .padding(8)
+                        .background(NIOThemePaint.well)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
+                        .foregroundStyle(NIOThemePaint.text)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+
+                // 4. Device ID (选填)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Device ID (设备 ID，选填)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+
+                    TextField("抓包中的 device_id (留空将自动生成)", text: $service.nioDeviceId)
+                        .font(.system(size: 11, design: .monospaced))
+                        .padding(8)
+                        .background(NIOThemePaint.well)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
+                        .foregroundStyle(NIOThemePaint.text)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+
+                // 5. Sign Secret (选填)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Sign Secret (动态签名密钥，选填)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+
+                    SecureField("动态签名密钥 (留空将使用安全默认算法)", text: $service.nioVehicleSignSecret)
+                        .font(.system(size: 11, design: .monospaced))
+                        .padding(8)
+                        .background(NIOThemePaint.well)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.8))
+                        .foregroundStyle(NIOThemePaint.text)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+
+                Text("💡 说明：使用「智能识别」或「Shadowrocket 直推」时会自动填入以上所有参数，无需手动逐项配置。")
                     .font(.system(size: 9))
                     .foregroundStyle(NIOThemePaint.text.opacity(0.5))
             }

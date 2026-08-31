@@ -74,12 +74,10 @@ final class NIOService: ObservableObject {
     @Published var is403Detected = false
 
     var isConfigured: Bool {
-        // 与 Electron 版 loadFetchConfig 的获取策略一致：完整抓包 RVS URL 优先，Widget 签名模式仅作回退
-        if !nioVehicleApiURL.isEmpty && !nioVehicleAccessToken.isEmpty {
-            return true
-        }
-        if nioVehicleApiMode == "widget" || (!nioVehicleId.isEmpty && !nioDeviceId.isEmpty && !nioVehicleSignSecret.isEmpty) {
-            return !nioVehicleId.isEmpty && !nioDeviceId.isEmpty && !nioVehicleAccessToken.isEmpty
+        if !nioVehicleAccessToken.isEmpty {
+            if !nioVehicleApiURL.isEmpty || !nioVehicleId.isEmpty {
+                return true
+            }
         }
         return false
     }
@@ -244,12 +242,12 @@ final class NIOService: ObservableObject {
             }
         }
 
-        // 2. 未配置 URL 且具备完整的 Widget 参数时，动态生成带当前时间戳和签名的 URL 回退
-        if targetURL == nil,
-           nioVehicleApiMode == "widget" || (!nioVehicleId.isEmpty && !nioDeviceId.isEmpty && !nioVehicleSignSecret.isEmpty) {
+        // 2. 自动切换：未配置完整 URL 或 URL 解析失败时，自动无缝切换至 Widget 动态签名模式
+        if targetURL == nil && !nioVehicleId.isEmpty {
+            let devId = nioDeviceId.isEmpty ? "iOS_Device_\(nioVehicleId.prefix(6))" : nioDeviceId
             if let built = NIOVehicleLib.buildWidgetURL(
                 vehicleId: nioVehicleId,
-                deviceId: nioDeviceId,
+                deviceId: devId,
                 secret: nioVehicleSignSecret.isEmpty ? nil : nioVehicleSignSecret,
                 algo: nioVehicleSignAlgo.isEmpty ? "md5_append" : nioVehicleSignAlgo
             ) {
