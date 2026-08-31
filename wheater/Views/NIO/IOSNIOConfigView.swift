@@ -52,7 +52,10 @@ struct IOSNIOConfigView: View {
                         // 3. 🚘 爱车车型与车漆涂装定制
                         carModelSelectorCard
 
-                        // 3.5 🪄 内置 VPN 一键自动嗅探
+                        // 3.5 🚀 Shadowrocket 直推（推荐方案）
+                        shadowrocketPushCard
+
+                        // 3.6 🔌 内置 TCP 转发（兜底）
                         inAppVpnSnifferCard
 
                         // 4. ⚡️ 智能识别与一键填充
@@ -366,27 +369,125 @@ struct IOSNIOConfigView: View {
         }
     }
 
-    // MARK: - 3.5 🪄 内置 VPN 一键自动嗅探
+    // MARK: - 3.5 🚀 Shadowrocket 直推接收 + 内置 TCP 转发
+
+    /// Shadowrocket 直推凭证接收面板（推荐）
+    @ViewBuilder
+    private var shadowrocketPushCard: some View {
+        let receiver = NIOCredentialReceiver.shared
+        cardContainer(title: "🚀 Shadowrocket 直推（推荐）", icon: "bolt.horizontal.fill", accentColor: sakuraPink) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("需安装 Shadowrocket（已开启 MITM）。脚本运行后会将 Token / VehicleID 直接推送到本 App，**全程无需手动复制粘贴**。")
+                    .font(.system(size: 10))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                    .lineSpacing(2)
+
+                // 状态行
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(receiver.isListening ? sakuraPink : NIOThemePaint.text.opacity(0.3))
+                        .frame(width: 6, height: 6)
+                    Text(receiver.statusMessage)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.75))
+                        .lineLimit(2)
+                }
+
+                if receiver.receiveCount > 0, let t = receiver.lastReceivedAt {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.seal.fill").foregroundStyle(sakuraPink)
+                        Text("已接收 \(receiver.receiveCount) 次 · 最近: \(t.formatted(date: .omitted, time: .shortened))")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(sakuraPink)
+                    }
+                    .padding(6)
+                    .background(sakuraPink.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+
+                HStack(spacing: 8) {
+                    // 启动/停止按钮
+                    Button(action: {
+                        let impact = UIImpactFeedbackGenerator(style: .medium)
+                        impact.impactOccurred()
+                        if receiver.isListening { receiver.stopListening() }
+                        else { receiver.startListening() }
+                    }) {
+                        Label(receiver.isListening ? "停止接收" : "1. 开始接收",
+                              systemImage: receiver.isListening ? "stop.fill" : "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(receiver.isListening ? sakuraPink.opacity(0.2) : sakuraPink.opacity(0.15))
+                            .foregroundStyle(sakuraPink)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(sakuraPink.opacity(0.4), lineWidth: 0.5))
+                    }
+
+                    // 复制模块链接（Shadowrocket 可直接导入）
+                    Button(action: {
+                        UIPasteboard.general.string = "https://raw.githubusercontent.com/kissggj123/NIO-Dash-iOS/main/scripts/shadowrocket/YumikoToys-NIO.sgmodule"
+                        let impact = UIImpactFeedbackGenerator(style: .light)
+                        impact.impactOccurred()
+                    }) {
+                        Label("2. 复制模块链接", systemImage: "doc.on.clipboard")
+                            .font(.system(size: 10, weight: .bold))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(NIOThemePaint.well)
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.8))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(NIOThemePaint.stroke, lineWidth: 0.5))
+                    }
+                }
+
+                // 操作步骤
+                VStack(alignment: .leading, spacing: 4) {
+                    stepRow("1", "点击「开始接收」启动本地监听（端口 8997）")
+                    stepRow("2", "点击「复制模块链接」→ 打开 Shadowrocket → 配置 → 模块 → 新建，粘贴链接导入")
+                    stepRow("3", "确认 Shadowrocket 已开启 MITM（需安装证书）")
+                    stepRow("4", "打开蔚来 App 下拉刷新爱车页面一次")
+                    stepRow("✅", "本 App 自动震动 + 系统通知 = 回填完成！")
+                }
+                .font(.system(size: 9))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.65))
+                .lineSpacing(1.5)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func stepRow(_ num: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(num)
+                .font(.system(size: 8, weight: .heavy, design: .rounded))
+                .foregroundStyle(sakuraPink)
+                .frame(width: 14)
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
     private var inAppVpnSnifferCard: some View {
-        cardContainer(title: "🪄 内置抓包 VPN · 免工具自动提取", icon: "network", accentColor: mintCyan) {
+        cardContainer(title: "🔌 内置 TCP 转发（兜底方案）", icon: "network", accentColor: mintCyan) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("零外部依赖，App 内一键启停抓包")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(NIOThemePaint.text)
+                    Text("TCP 透传代理 · 无法解密 HTTPS · 建议改用上方 Shadowrocket 方案")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.7))
                     Spacer()
-                    // 状态胶囊
                     Text(vpnManager.status.rawValue)
                         .font(.system(size: 9, weight: .heavy))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(vpnManager.isVPNActive ? mintCyan.opacity(0.2) : (vpnManager.status == NIOVPNStatus.captured ? sakuraPink.opacity(0.2) : NIOThemePaint.well))
-                        .foregroundStyle(vpnManager.isVPNActive ? mintCyan : (vpnManager.status == NIOVPNStatus.captured ? sakuraPink : NIOThemePaint.text.opacity(0.5)))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(vpnManager.isVPNActive ? mintCyan.opacity(0.2) : NIOThemePaint.well)
+                        .foregroundStyle(vpnManager.isVPNActive ? mintCyan : NIOThemePaint.text.opacity(0.5))
                         .clipShape(Capsule())
                 }
 
-                Text("启动后切换至手机「蔚来 App」下拉刷新爱车页面一次，本应用将自动拦截并提取 Vehicle ID、Device ID、Secret 与 Token，回填完成后自动休眠 VPN！")
+                Text("此模式仅转发 TCP 流量，无法解密 TLS 加密内容，因此无法捕获 Authorization Token。推荐使用上方「Shadowrocket 直推」方案替代。")
+                    .font(.system(size: 10))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.55))
                     .font(.system(size: 10))
                     .foregroundStyle(NIOThemePaint.text.opacity(0.65))
                     .lineSpacing(2)

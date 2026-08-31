@@ -43,6 +43,7 @@
 		AA2000102C3E846A00EED680 /* Services/VPN/NIOVPNCertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */; };
 		AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */; };
 		AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */; };
+		AA2000132C3E846A00EED680 /* Services/VPN/NIOCredentialReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000132C3E846500EED680 /* Services/VPN/NIOCredentialReceiver.swift */; };
 		FC1663B22C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */; };
 		FC1663B32C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */; };
 /* End PBXBuildFile section */
@@ -119,6 +120,7 @@
 		AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOVPNCertManager.swift; sourceTree = "<group>"; };
 		AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOMitmEngine.swift; sourceTree = "<group>"; };
 		AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOVPNManager.swift; sourceTree = "<group>"; };
+		AA1000132C3E846500EED680 /* Services/VPN/NIOCredentialReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOCredentialReceiver.swift; sourceTree = "<group>"; };
 		FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnniversaryViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -180,6 +182,7 @@
 				AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */,
 				AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */,
 				AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */,
+				AA1000132C3E846500EED680 /* Services/VPN/NIOCredentialReceiver.swift */,
 				2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */,
 				2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */,
 				2B2BB25928BFB36600A8B2A3 /* Preview Content */,
@@ -436,6 +439,7 @@
 				AA2000102C3E846A00EED680 /* Services/VPN/NIOVPNCertManager.swift in Sources */,
 				AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */,
 				AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */,
+				AA2000132C3E846A00EED680 /* Services/VPN/NIOCredentialReceiver.swift in Sources */,
 				2B7631FD28C42E1200AE686C /* LocationViewModel.swift in Sources */,
 				2B2BB25428BFB36300A8B2A3 /* wheaterApp.swift in Sources */,
 				2B2BB28328C06DB300A8B2A3 /* WeatherViewModel.swift in Sources */,
