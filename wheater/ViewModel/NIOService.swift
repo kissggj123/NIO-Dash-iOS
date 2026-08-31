@@ -105,10 +105,12 @@ final class NIOService: ObservableObject {
     }
 
     private var vehicleFile: URL { dataDirectory.appendingPathComponent("vehicle.json") }
+    private var cachedTyreFile: URL { dataDirectory.appendingPathComponent("cached_tyre.json") }
     private var historyFile: URL { dataDirectory.appendingPathComponent("history.json") }
     private var checkinFile: URL { dataDirectory.appendingPathComponent("checkin.json") }
     private var logsFile: URL { dataDirectory.appendingPathComponent("logs.json") }
 
+    private var cachedTyreStatus: [String: NIOJSONValue]? = nil
     private var lastFetchTimestamp: Date? = nil
 
     private init() {
@@ -290,6 +292,41 @@ final class NIOService: ObservableObject {
             let rawJson = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
             let resultCode = (rawJson?["result_code"] as? String) ?? (rawJson?["resultCode"] as? String) ?? ""
 
+            // 若合成的 RVS URL 因参数 sign_failed，自动无感降级到小组件接口拉取并恢复胎压缓存
+            if (resultCode == "sign_failed" || resultCode.contains("sign")) && finalURL.host?.contains("icar.nio.com") == true && !self.nioDeviceId.isEmpty && !self.nioVehicleId.isEmpty {
+                if let fallbackBuilt = NIOVehicleLib.buildWidgetURL(
+                    vehicleId: self.nioVehicleId,
+                    deviceId: self.nioDeviceId,
+                    secret: self.nioVehicleSignSecret,
+                    algo: self.nioVehicleSignAlgo.isEmpty ? "md5_append" : self.nioVehicleSignAlgo
+                ) {
+                    var fbReq = URLRequest(url: fallbackBuilt.url)
+                    fbReq.httpMethod = "GET"
+                    fbReq.setValue("application/json", forHTTPHeaderField: "Accept")
+                    fbReq.setValue("VehicleWidgetExtension/6.5.3 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2612; iOS 26.5.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
+                    if !token.isEmpty { fbReq.setValue(token, forHTTPHeaderField: "Authorization") }
+                    if let (fbData, fbResp) = try? await urlSession.data(for: fbReq),
+                       let fbHttp = fbResp as? HTTPURLResponse, fbHttp.statusCode == 200,
+                       let fbJson = (try? JSONSerialization.jsonObject(with: fbData, options: [])) as? [String: Any],
+                       let fbNormData = try? JSONSerialization.data(withJSONObject: RVSRormalizer.normalize(fbJson)),
+                       let fbDecoded = try? JSONDecoder().decode(NIOVehicleResponse.self, from: fbNormData) {
+                        var fbFinal = fbDecoded
+                        if let cached = self.cachedTyreStatus {
+                            fbFinal.data?.status?.tyreStatus = cached
+                        }
+                        self.vehicleData = fbFinal
+                        self.lastVehicleFetch = Date()
+                        self.lastFetchTimestamp = Date()
+                        self.lastError = nil
+                        self.is403Detected = false
+                        saveJSONAsync(fbFinal, to: vehicleFile)
+                        appendSnapshot(fbFinal)
+                        updateLog(logEntry, statusCode: 200, preview: "Widget 智能回退成功（已恢复胎压缓存）")
+                        return
+                    }
+                }
+            }
+
             // 精准区分【签名不匹配 sign_failed】与【账号 Token 被踢 auth_failed】
             if resultCode == "sign_failed" || resultCode.contains("sign") {
                 self.is403Detected = true
@@ -320,10 +357,17 @@ final class NIOService: ObservableObject {
             let normalizedData = try JSONSerialization.data(withJSONObject: normalized)
             var decoded = try JSONDecoder().decode(NIOVehicleResponse.self, from: normalizedData)
 
-            // 智能数据继承：当车辆驻车休眠时，若接口未包含有效胎压或空调温度，自动继承上一轮有效数据
-            if !NIOVehicleLib.extractTyreInfo(decoded.data?.status?.tyreStatus).hasData {
+            // 智能数据继承与落盘缓存：当车辆驻车休眠时，若接口未包含有效胎压或空调温度，自动继承上一轮有效数据
+            if NIOVehicleLib.extractTyreInfo(decoded.data?.status?.tyreStatus).hasData {
+                if let newTyre = decoded.data?.status?.tyreStatus {
+                    self.cachedTyreStatus = newTyre
+                    saveJSONAsync(newTyre, to: cachedTyreFile)
+                }
+            } else {
                 if let oldTyre = self.vehicleData?.data?.status?.tyreStatus, NIOVehicleLib.extractTyreInfo(oldTyre).hasData {
                     decoded.data?.status?.tyreStatus = oldTyre
+                } else if let cached = self.cachedTyreStatus, NIOVehicleLib.extractTyreInfo(cached).hasData {
+                    decoded.data?.status?.tyreStatus = cached
                 }
             }
             if decoded.data?.status?.hvacStatus?.temperature == nil {
@@ -612,19 +656,32 @@ final class NIOService: ObservableObject {
     private func loadPersistedData() {
         // 冷启动 IO + 大 JSON 解码全部移出主线程，避免启动掉帧；完成后回主线程发布
         let vFile = vehicleFile
+        let tFile = cachedTyreFile
         let hFile = historyFile
         let cFile = checkinFile
         let lFile = logsFile
         Task.detached(priority: .userInitiated) { [weak self] in
             var fetchedAt: Date? = nil
             var vehicle: NIOVehicleResponse? = nil
+            var cachedTyre: [String: NIOJSONValue]? = nil
             var history: [NIOVehicleSnapshot] = []
             var checkin: NIOCheckinData? = nil
             var logs: [NIOFetchLogEntry] = []
 
+            if let data = try? Data(contentsOf: tFile),
+               let decodedTyre = try? JSONDecoder().decode([String: NIOJSONValue].self, from: data) {
+                cachedTyre = decodedTyre
+            }
+
             if let data = try? Data(contentsOf: vFile),
                let decoded = try? JSONDecoder().decode(NIOVehicleResponse.self, from: data) {
-                vehicle = decoded
+                var v = decoded
+                if v.data?.status?.tyreStatus == nil || !NIOVehicleLib.extractTyreInfo(v.data?.status?.tyreStatus).hasData {
+                    if let cTyre = cachedTyre {
+                        v.data?.status?.tyreStatus = cTyre
+                    }
+                }
+                vehicle = v
                 if let ts = decoded.data?.status?.socStatus?.sampleTime, ts > 0 {
                     let sec = ts > 1_000_000_000_000 ? (ts / 1000) : ts
                     fetchedAt = Date(timeIntervalSince1970: TimeInterval(sec))
@@ -644,6 +701,7 @@ final class NIOService: ObservableObject {
             }
 
             let finalVehicle = vehicle
+            let finalCachedTyre = cachedTyre
             let finalFetchedAt = fetchedAt
             let finalHistory = history
             let finalCheckin = checkin
@@ -651,6 +709,7 @@ final class NIOService: ObservableObject {
 
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
+                self.cachedTyreStatus = finalCachedTyre
                 if let v = finalVehicle {
                     self.vehicleData = v
                     self.lastVehicleFetch = finalFetchedAt
