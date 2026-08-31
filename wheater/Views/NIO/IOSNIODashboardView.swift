@@ -1287,15 +1287,9 @@ private struct NIOAnimeDoorsCard: View {
             jsonProvider: { nioToJSON(status?.doorStatus) },
             onShowJSON: onShowJSON
         ) {
-            if items.isEmpty {
-                Text("暂无车门数据")
-                    .font(.system(size: 11))
-                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
-            } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                    ForEach(items) { item in
-                        doorTile(item: item)
-                    }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(items) { item in
+                    doorTile(item: item)
                 }
             }
         }

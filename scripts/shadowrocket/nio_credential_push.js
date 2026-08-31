@@ -14,7 +14,7 @@
 const LOCAL_PUSH_URL      = "http://127.0.0.1:8997/credentials";
 const STORE_KEY           = "nio_sniff_data";
 const DEFAULT_CHANGE_URL  = "https://gateway-front-external.nio.com/moat/1100367/api/v1/otd/car/ext/general/serviceOrder/getTabOrder?offset=0&limit=200&orderTypes=pe_shaman,pe_shaman_change,service_pe_discharge,battery_flexible_upgrade,nsom_so_maintenance,nsom_so_chauffeur,chauffeur_vehicle_delivery,so_case_accident&hash_type=sha256&lang=zh&region=US&tz_offset=28800&app_ver=6.5.3";
-const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086//n/c/award/square?event=checkin&collection_id=1843940587332317185";
+const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n/c/award/square?event=checkin&collection_id=1843940587332317185";
 
 (function main() {
     const url     = $request.url;

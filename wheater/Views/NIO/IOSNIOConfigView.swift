@@ -746,26 +746,41 @@ struct IOSNIOConfigView: View {
     // MARK: - 3. 车辆 API 必填 (支持 URL 模式 & Widget 动态签名模式)
 
     private var vehicleApiCard: some View {
-        cardContainer(title: "1. 车辆状态 API (智能自适应)", icon: "car.side.fill", accentColor: sakuraPink) {
+        cardContainer(title: "1. 车辆状态 API (双链路协同)", icon: "car.side.fill", accentColor: sakuraPink) {
             VStack(alignment: .leading, spacing: 10) {
-                // 智能自动模式指示横幅
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(sakuraPink)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("⚡️ 智能自适应最佳链路 (Auto)")
-                            .font(.system(size: 10, weight: .bold))
+                // 双链路协同调度指示横幅
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bolt.horizontal.fill")
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(sakuraPink)
-                        Text("优先拉取全量 RVS 车况（含 4 轮胎压）；若未提供 URL 或签名过期，自动无感切换至 Widget 动态签名模式（永不失效）！")
-                            .font(.system(size: 8.5))
-                            .foregroundStyle(NIOThemePaint.text.opacity(0.65))
-                            .lineSpacing(1.5)
+                        Text("⚡️ 双 API 协同链路架构 (Dual API Engine)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(sakuraPink)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .top, spacing: 4) {
+                            Text("🟢 链路 1 (Widget 动态签名):")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundStyle(mintCyan)
+                            Text("负责实时 SOC 电量、续航、充电功率、车锁、定位与温度（动态计算时间戳与签名，永不失效）")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                        }
+                        HStack(alignment: .top, spacing: 4) {
+                            Text("🔵 链路 2 (RVS 全量遥测):")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundStyle(lavenderDream)
+                            Text("负责 4 轮胎压/胎温、车机 FOTA、12V 小电瓶、车门车窗全景与车载冰箱（自动落盘持久化，各卡片永不为空）")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                        }
                     }
                 }
-                .padding(8)
-                .background(sakuraPink.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(10)
+                .background(sakuraPink.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 // 1. Access Token (必填)
                 VStack(alignment: .leading, spacing: 4) {
