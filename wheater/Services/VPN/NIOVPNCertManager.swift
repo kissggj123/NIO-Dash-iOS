@@ -21,7 +21,7 @@ final class NIOVPNCertManager: ObservableObject {
     private let serverQueue = DispatchQueue(label: "com.yumikotoys.certserver", qos: .userInitiated)
 
     // 内置本地专有自签名根证书（PEM / DER Base64）
-    static let rootCertBase64: String = {
+    nonisolated static let rootCertBase64: String = {
         // 标准自签名 X.509 根证书（CN=YumikoToys NIO Root CA, O=YumikoToys, Validity=2026-2036）
         let rawCert = """
         MIIBxTCCAWugAwIBAgIUQ3+L4/xP3w8F6E6Y5K+m8e5F12AwCgYIKoZIzj0EAwIw

@@ -9,7 +9,7 @@ import Foundation
 import Network
 import UIKit
 
-public struct NIOSniffedCredentials {
+public struct NIOSniffedCredentials: Sendable {
     public var vehicleId: String?
     public var deviceId: String?
     public var signSecret: String?
@@ -174,8 +174,9 @@ final class NIOMitmEngine: ObservableObject {
         }
 
         if hasFound {
+            let capturedCreds = creds
             Task { @MainActor [weak self] in
-                self?.applySniffedCredentials(creds)
+                self?.applySniffedCredentials(capturedCreds)
             }
         }
     }
