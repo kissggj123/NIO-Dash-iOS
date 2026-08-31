@@ -65,7 +65,6 @@ jobs:
           files: build/YumikoToysRR-unsigned.ipa
           generate_release_notes: false
           body: |
-          body: |
             ## 🌸 YumikoToysRR for NIO (iOS) ${{ github.ref_name }} 全景车况里程碑更新
 
             ### 🚀 27 大全景车况系统 100% 完整移植
