@@ -11,6 +11,7 @@
 
 import SwiftUI
 import MapKit
+import Charts
 
 // MARK: - 主题色集合（由 AnimeThemeService 派生，随主题切换实时刷新）
 
@@ -1418,6 +1419,233 @@ private struct NIOAnimeCockpitCard: View {
     }
 }
 
+// MARK: - 8.5 🪑 座椅舒适、加热通风与方向盘加热
+
+@MainActor
+private struct NIOAnimeSeatComfortCard: View {
+    let status: NIOVehicleStatus?
+    let colors: NIOAnimeColors
+    let onShowJSON: (String?, String?) -> Void
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+    private var pastelYellow: Color { colors.pastelYellow }
+
+    var body: some View {
+        let heat = status?.heatingStatus ?? [:]
+        let steer = heat["steer_wheel_heat_sts"]?.intValue ?? heat["steer_wheel_heating_sts"]?.intValue ?? 0
+        let flHeat = heat["seat_heat_frnt_le_sts"]?.intValue ?? heat["seat_heat_front_left"]?.intValue ?? 0
+        let frHeat = heat["seat_heat_frnt_ri_sts"]?.intValue ?? heat["seat_heat_front_right"]?.intValue ?? 0
+        let rlHeat = heat["seat_heat_re_le_sts"]?.intValue ?? heat["seat_heat_rear_left"]?.intValue ?? 0
+        let rrHeat = heat["seat_heat_re_ri_sts"]?.intValue ?? heat["seat_heat_rear_right"]?.intValue ?? 0
+        let flVent = heat["seat_vent_frnt_le_sts"]?.intValue ?? heat["seat_vent_front_left"]?.intValue ?? 0
+        let frVent = heat["seat_vent_frnt_ri_sts"]?.intValue ?? heat["seat_vent_front_right"]?.intValue ?? 0
+        let battPre = heat["hv_batt_pre_sts"]?.intValue == 1
+        let battWarm = heat["btry_warm_up_sts"]?.intValue == 1
+
+        let hasAnyComfort = steer > 0 || flHeat > 0 || frHeat > 0 || rlHeat > 0 || rrHeat > 0 || flVent > 0 || frVent > 0 || battPre || battWarm || !heat.isEmpty
+
+        if hasAnyComfort {
+            NIOAnimeCardContainer(
+                title: "🪑 座椅舒适与方向盘加热",
+                icon: "chair.lounge.fill",
+                colors: colors,
+                jsonProvider: { nioToJSON(status?.heatingStatus) },
+                onShowJSON: onShowJSON
+            ) {
+                VStack(spacing: 8) {
+                    // 2x2 座椅加热与通风状态矩阵
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        seatTile(
+                            title: "主驾座椅",
+                            heatLevel: flHeat,
+                            ventLevel: flVent,
+                            icon: "carseat.left.fill"
+                        )
+                        seatTile(
+                            title: "副驾座椅",
+                            heatLevel: frHeat,
+                            ventLevel: frVent,
+                            icon: "carseat.right.fill"
+                        )
+                        seatTile(
+                            title: "二排左座",
+                            heatLevel: rlHeat,
+                            ventLevel: 0,
+                            icon: "carseat.left.fill"
+                        )
+                        seatTile(
+                            title: "二排右座",
+                            heatLevel: rrHeat,
+                            ventLevel: 0,
+                            icon: "carseat.right.fill"
+                        )
+                    }
+
+                    // 辅助加热与电池温控
+                    HStack(spacing: 6) {
+                        comfortPill(label: "方向盘加热", isOn: steer > 0, level: steer > 0 ? "\(steer)档" : nil, icon: "steeringwheel", color: pastelYellow)
+                        comfortPill(label: "电池预热", isOn: battPre, level: battPre ? "开启" : nil, icon: "flame.fill", color: sakuraPink)
+                        comfortPill(label: "电池保温", isOn: battWarm, level: battWarm ? "开启" : nil, icon: "thermometer.sun.fill", color: mintCyan)
+                    }
+                }
+            }
+        }
+    }
+
+    private func seatTile(title: String, heatLevel: Int, ventLevel: Int, icon: String) -> some View {
+        let isHeat = heatLevel > 0
+        let isVent = ventLevel > 0
+        return HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle((isHeat || isVent) ? (isHeat ? pastelYellow : mintCyan) : NIOThemePaint.text.opacity(0.35))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.85))
+                HStack(spacing: 4) {
+                    if isHeat {
+                        Text("🔥 \(heatLevel)档加热")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(pastelYellow)
+                    }
+                    if isVent {
+                        Text("💨 \(ventLevel)档通风")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(mintCyan)
+                    }
+                    if !isHeat && !isVent {
+                        Text("未开启")
+                            .font(.system(size: 8))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(isHeat ? pastelYellow.opacity(0.1) : (isVent ? mintCyan.opacity(0.1) : NIOThemePaint.well.opacity(0.4))))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke((isHeat || isVent) ? (isHeat ? pastelYellow.opacity(0.3) : mintCyan.opacity(0.3)) : NIOThemePaint.fill.opacity(0.2), lineWidth: 0.5))
+    }
+
+    private func comfortPill(label: String, isOn: Bool, level: String?, icon: String, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 8, weight: .bold))
+            Text(label)
+                .font(.system(size: 8, weight: isOn ? .bold : .medium))
+            if let lvl = level {
+                Text(lvl)
+                    .font(.system(size: 8, weight: .bold))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(color.opacity(0.3))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(isOn ? color.opacity(0.18) : NIOThemePaint.well.opacity(0.4))
+        .foregroundStyle(isOn ? color : NIOThemePaint.text.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(isOn ? color.opacity(0.4) : Color.clear, lineWidth: 0.5))
+    }
+}
+
+// MARK: - 8.6 🔑 智能钥匙感知与低压电瓶健康
+
+@MainActor
+private struct NIOAnimeKeySensorsCard: View {
+    let status: NIOVehicleStatus?
+    let colors: NIOAnimeColors
+    let onShowJSON: (String?, String?) -> Void
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+    private var pastelYellow: Color { colors.pastelYellow }
+
+    var body: some View {
+        let key = status?.keyStatus ?? [:]
+        let lvBatt = status?.lvBattStatus ?? [:]
+        let peUnlock = key["pe_unlock_status"]?.intValue == 1 || key["smart_key_near"]?.intValue == 1
+        let handleSensor = key["handle_sensor_status"]?.intValue == 1 || key["door_handle_sensor"]?.intValue == 1
+        let lvSoc = lvBatt["lv_batt_soc"]?.intValue
+        let lvVolt = lvBatt["lv_batt_volt"]?.numberValue
+
+        if !key.isEmpty || !lvBatt.isEmpty {
+            NIOAnimeCardContainer(
+                title: "🔑 钥匙感知与低压供电系统",
+                icon: "key.fill",
+                colors: colors,
+                jsonProvider: { nioToJSON(status?.keyStatus) },
+                onShowJSON: onShowJSON
+            ) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("蓝牙靠近解锁")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                            HStack(spacing: 4) {
+                                Image(systemName: peUnlock ? "antenna.radiowaves.left.and.right" : "lock.fill")
+                                    .font(.system(size: 10))
+                                Text(peUnlock ? "已感应" : "待命中")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundStyle(peUnlock ? mintCyan : NIOThemePaint.text.opacity(0.6))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(7)
+                        .background(NIOThemePaint.well.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("隐藏门把手感应")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                            HStack(spacing: 4) {
+                                Image(systemName: handleSensor ? "hand.tap.fill" : "hand.raised.fill")
+                                    .font(.system(size: 10))
+                                Text(handleSensor ? "已伸出/感应" : "收纳锁止")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundStyle(handleSensor ? pastelYellow : NIOThemePaint.text.opacity(0.6))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(7)
+                        .background(NIOThemePaint.well.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("12V 辅助蓄电池")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                            HStack(spacing: 3) {
+                                Text("\(lvSoc ?? 100)%")
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                    .foregroundStyle((lvSoc ?? 100) > 40 ? mintCyan : sakuraPink)
+                                if let volt = lvVolt {
+                                    Text(verbatim: "\(String(format: "%.1f", volt))V")
+                                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(7)
+                        .background(NIOThemePaint.well.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - 9. 🧊 车载智能冰箱与座舱空气健康
 
 @MainActor
@@ -1497,7 +1725,7 @@ private struct NIOAnimeCabinExtrasCard: View {
     }
 }
 
-// MARK: - 10. 💡 车外灯光与照明系统
+// MARK: - 10. 💡 车外灯光与照明系统 (拟物化与语义重构)
 
 @MainActor
 private struct NIOAnimeLightsCard: View {
@@ -1516,6 +1744,7 @@ private struct NIOAnimeLightsCard: View {
             let main = lights["main_beam_status"]?.intValue == 1
             let position = lights["position_light_status"]?.intValue == 1
             let hazard = lights["hazard_light_status"]?.intValue == 1
+            let anyOn = dipped || main || position || hazard
 
             NIOAnimeCardContainer(
                 title: "💡 车外灯光与照明系统",
@@ -1524,14 +1753,508 @@ private struct NIOAnimeLightsCard: View {
                 jsonProvider: { nioToJSON(status?.lightStatus) },
                 onShowJSON: onShowJSON
             ) {
-                HStack(spacing: 8) {
-                    NIOAnimeBadge(text: "近光灯 💡", active: dipped, activeColor: mintCyan)
-                    NIOAnimeBadge(text: "远光灯 🔦", active: main, activeColor: pastelYellow)
-                    NIOAnimeBadge(text: "示宽灯 ✨", active: position, activeColor: lavenderDream)
-                    NIOAnimeBadge(text: "双闪 🚨", active: hazard, activeColor: sakuraPink)
+                VStack(spacing: 10) {
+                    // 1. 全局状态总览横幅
+                    HStack(spacing: 8) {
+                        if hazard {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.white)
+                            Text("危险警报双闪开启中")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Color.white)
+                        } else if main {
+                            Image(systemName: "headlight.high.beam.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.black)
+                            Text("远光大灯照明中")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Color.black)
+                        } else if dipped {
+                            Image(systemName: "headlight.low.beam.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.black)
+                            Text("近光大灯照明中")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Color.black)
+                        } else if position {
+                            Image(systemName: "headlight.daytime.running.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.white)
+                            Text("示廓位置灯点亮中")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Color.white)
+                        } else {
+                            Image(systemName: "moon.stars.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(mintCyan)
+                            Text("全车灯光已熄灭 · 安全驻车")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.85))
+                        }
+                        Spacer()
+                        Text(anyOn ? "灯光开启中" : "全部熄灭")
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule().fill(
+                                    anyOn
+                                        ? (hazard ? Color.red.opacity(0.8) : (main ? pastelYellow : mintCyan))
+                                        : NIOThemePaint.well
+                                )
+                            )
+                            .foregroundStyle(anyOn ? (hazard ? Color.white : Color.black) : NIOThemePaint.text.opacity(0.5))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(
+                                hazard
+                                    ? Color.red.opacity(0.85)
+                                    : (main
+                                        ? pastelYellow.opacity(0.85)
+                                        : (dipped
+                                            ? mintCyan.opacity(0.85)
+                                            : (position
+                                                ? lavenderDream.opacity(0.85)
+                                                : NIOThemePaint.well.opacity(0.6))))
+                            )
+                    )
+
+                    // 2. 2x2 拟物化车灯矩阵网格
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        lightTile(
+                            name: "近光大灯",
+                            icon: "headlight.low.beam.fill",
+                            isOn: dipped,
+                            activeColor: mintCyan,
+                            onLabel: "已开启 (照明中)",
+                            offLabel: "已熄灭"
+                        )
+                        lightTile(
+                            name: "远光大灯",
+                            icon: "headlight.high.beam.fill",
+                            isOn: main,
+                            activeColor: pastelYellow,
+                            onLabel: "已开启 (高亮远射)",
+                            offLabel: "已熄灭"
+                        )
+                        lightTile(
+                            name: "示廓位置灯",
+                            icon: "headlight.daytime.running.fill",
+                            isOn: position,
+                            activeColor: lavenderDream,
+                            onLabel: "已开启 (示宽中)",
+                            offLabel: "已熄灭"
+                        )
+                        lightTile(
+                            name: "危险报警双闪",
+                            icon: "exclamationmark.triangle.fill",
+                            isOn: hazard,
+                            activeColor: sakuraPink,
+                            onLabel: "警报闪烁中",
+                            offLabel: "已关闭 (安全)"
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private func lightTile(name: String, icon: String, isOn: Bool, activeColor: Color, onLabel: String, offLabel: String) -> some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(isOn ? activeColor : NIOThemePaint.well)
+                    .frame(width: 32, height: 32)
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(isOn ? Color.black : NIOThemePaint.text.opacity(0.35))
+            }
+            .shadow(color: isOn ? activeColor.opacity(0.5) : Color.clear, radius: 4)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(isOn ? NIOThemePaint.text : NIOThemePaint.text.opacity(0.6))
+                Text(isOn ? onLabel : offLabel)
+                    .font(.system(size: 8, weight: isOn ? .bold : .regular))
+                    .foregroundStyle(isOn ? activeColor : NIOThemePaint.text.opacity(0.4))
+            }
+            Spacer()
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isOn ? activeColor.opacity(0.12) : NIOThemePaint.well.opacity(0.4))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isOn ? activeColor.opacity(0.4) : NIOThemePaint.fill.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - 🗺️ 每日行驶轨迹地图卡片
+
+@MainActor
+private struct NIOAnimeDailyPathCard: View {
+    let dailyPaths: [NIODailyPath]
+    let colors: NIOAnimeColors
+
+    @State private var selectedDayIndex: Int = 0
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+
+    var body: some View {
+        if !dailyPaths.isEmpty {
+            let currentDayIndex = min(selectedDayIndex, dailyPaths.count - 1)
+            let activePath = dailyPaths[currentDayIndex]
+
+            NIOAnimeCardContainer(
+                title: "🗺️ 每日行驶轨迹地图",
+                icon: "map.fill",
+                colors: colors
+            ) {
+                VStack(spacing: 10) {
+                    // 日期选择切换
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(dailyPaths.prefix(7).enumerated()), id: \.element.id) { idx, dp in
+                                Button(action: {
+                                    let impact = UIImpactFeedbackGenerator(style: .light)
+                                    impact.impactOccurred()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        selectedDayIndex = idx
+                                    }
+                                }) {
+                                    Text(dp.label)
+                                        .font(.system(size: 10, weight: selectedDayIndex == idx ? .bold : .medium))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(
+                                            Capsule().fill(
+                                                selectedDayIndex == idx
+                                                    ? LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
+                                                    : LinearGradient(colors: [NIOThemePaint.well, NIOThemePaint.well], startPoint: .leading, endPoint: .trailing)
+                                            )
+                                        )
+                                        .foregroundStyle(selectedDayIndex == idx ? Color.white : NIOThemePaint.text.opacity(0.6))
+                                }
+                            }
+                        }
+                    }
+
+                    // 地图组件
+                    pathMapView(activePath.points)
+                        .frame(height: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(NIOThemePaint.fill, lineWidth: 1)
+                        )
+
+                    // 当日行驶统计指标
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("当日行驶里程")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                            Text(String(format: "%.1f km", activePath.distanceKm))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundStyle(mintCyan)
+                        }
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("轨迹采样时间")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                            Text("\(NIOVehicleLib.fmtClock(activePath.startTime)) ~ \(NIOVehicleLib.fmtClock(activePath.endTime))")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.85))
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+        }
+    }
+
+    private func pathMapView(_ points: [NIOVehicleSnapshot]) -> some View {
+        let coords = points.compactMap { snap -> CLLocationCoordinate2D? in
+            guard snap.isValidGPS else { return nil }
+            return CLLocationCoordinate2D(latitude: snap.lat, longitude: snap.lng)
+        }
+        guard !coords.isEmpty else {
+            return AnyView(
+                ZStack {
+                    NIOThemePaint.well
+                    Text("暂无有效 GPS 行驶轨迹坐标")
+                        .font(.system(size: 11))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                }
+            )
+        }
+        return AnyView(
+            NIOPathMapView(
+                coordinates: coords,
+                strokeColor: UIColor(sakuraPink)
+            )
+        )
+    }
+}
+
+// MARK: - 🗺️ iOS 原生地图轨迹渲染包装器 (支持 iOS 16+)
+
+private struct NIOPathMapView: UIViewRepresentable {
+    let coordinates: [CLLocationCoordinate2D]
+    let strokeColor: UIColor
+
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+        mapView.isScrollEnabled = false
+        mapView.isZoomEnabled = false
+        mapView.isRotateEnabled = false
+        mapView.isPitchEnabled = false
+        mapView.layer.cornerRadius = 12
+        mapView.clipsToBounds = true
+        return mapView
+    }
+
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        mapView.removeOverlays(mapView.overlays)
+        mapView.removeAnnotations(mapView.annotations)
+
+        guard !coordinates.isEmpty else { return }
+
+        let polyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
+        mapView.addOverlay(polyline)
+
+        if let first = coordinates.first {
+            let startAnn = MKPointAnnotation()
+            startAnn.coordinate = first
+            startAnn.title = "起点"
+            mapView.addAnnotation(startAnn)
+        }
+        if let last = coordinates.last, coordinates.count > 1 {
+            let endAnn = MKPointAnnotation()
+            endAnn.coordinate = last
+            endAnn.title = "终点"
+            mapView.addAnnotation(endAnn)
+        }
+
+        let rect = polyline.boundingMapRect
+        let edgePadding = UIEdgeInsets(top: 28, left: 28, bottom: 28, right: 28)
+        mapView.setVisibleMapRect(rect, edgePadding: edgePadding, animated: false)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(strokeColor: strokeColor)
+    }
+
+    class Coordinator: NSObject, MKMapViewDelegate {
+        let strokeColor: UIColor
+
+        init(strokeColor: UIColor) {
+            self.strokeColor = strokeColor
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = strokeColor
+                renderer.lineWidth = 4
+                renderer.lineCap = .round
+                renderer.lineJoin = .round
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            let identifier = "NIOPathPin"
+            var view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+            if view == nil {
+                view = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view?.canShowCallout = false
+            } else {
+                view?.annotation = annotation
+            }
+            if annotation.title == "起点" {
+                view?.markerTintColor = UIColor.systemTeal
+                view?.glyphImage = UIImage(systemName: "flag.fill")
+            } else {
+                view?.markerTintColor = UIColor.systemPink
+                view?.glyphImage = UIImage(systemName: "flag.checkered")
+            }
+            return view
+        }
+    }
+}
+
+// MARK: - 📈 历史趋势与多维图表卡片
+
+private struct TrendPoint: Identifiable {
+    let id = UUID()
+    let idx: Int
+    let value: Double
+}
+
+@MainActor
+private struct NIOAnimeTrendChartsCard: View {
+    let history: [NIOVehicleSnapshot]
+    let dailyDeltas: [NIODailyDelta]
+    let colors: NIOAnimeColors
+
+    @State private var trendPreset: Int = 60
+
+    private var sakuraPink: Color { colors.sakuraPink }
+    private var mintCyan: Color { colors.mintCyan }
+    private var lavenderDream: Color { colors.lavenderDream }
+
+    var body: some View {
+        let recent = Array(history.suffix(trendPreset))
+        if !recent.isEmpty {
+            NIOAnimeCardContainer(
+                title: "📈 历史趋势与多维分析",
+                icon: "chart.xyaxis.line",
+                colors: colors
+            ) {
+                VStack(spacing: 12) {
+                    // 时间范围选择
+                    HStack {
+                        Text("采样点: \(recent.count) 条")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                        Spacer()
+                        HStack(spacing: 4) {
+                            ForEach([30, 60, 180, 500], id: \.self) { p in
+                                Button(action: {
+                                    let impact = UIImpactFeedbackGenerator(style: .light)
+                                    impact.impactOccurred()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        trendPreset = p
+                                    }
+                                }) {
+                                    Text("\(p)")
+                                        .font(.system(size: 9, weight: trendPreset == p ? .bold : .medium))
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(
+                                            Capsule().fill(
+                                                trendPreset == p
+                                                    ? LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
+                                                    : LinearGradient(colors: [NIOThemePaint.well, NIOThemePaint.well], startPoint: .leading, endPoint: .trailing)
+                                            )
+                                        )
+                                        .foregroundStyle(trendPreset == p ? Color.white : NIOThemePaint.text.opacity(0.6))
+                                }
+                            }
+                        }
+                    }
+
+                    socChart(recent)
+                    dailyDeltaChart(dailyDeltas)
+                    mileageChart(recent)
+                }
+            }
+        }
+    }
+
+    private func socChart(_ data: [NIOVehicleSnapshot]) -> some View {
+        let points = data.enumerated().map { idx, snap in
+            TrendPoint(idx: idx, value: snap.soc)
+        }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("电量趋势 (%)")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.75))
+                Spacer()
+                if let last = points.last {
+                    Text(String(format: "当前 %.1f%%", last.value))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(mintCyan)
+                }
+            }
+            Chart(points) { p in
+                LineMark(x: .value("序号", p.idx), y: .value("电量", p.value))
+                    .foregroundStyle(mintCyan)
+                    .interpolationMethod(.monotone)
+                AreaMark(x: .value("序号", p.idx), y: .value("电量", p.value))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [mintCyan.opacity(0.35), mintCyan.opacity(0.02)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            }
+            .chartYScale(domain: 0...100)
+            .frame(height: 70)
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 10).fill(NIOThemePaint.well.opacity(0.5)))
+    }
+
+    private func dailyDeltaChart(_ deltas: [NIODailyDelta]) -> some View {
+        guard !deltas.isEmpty else { return AnyView(EmptyView()) }
+        let recentDeltas = Array(deltas.suffix(14))
+        return AnyView(
+            VStack(alignment: .leading, spacing: 4) {
+                Text("近 14 日增里程 (km)")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.75))
+                Chart(recentDeltas) { d in
+                    BarMark(x: .value("日期", d.label), y: .value("增量", d.delta))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [sakuraPink, lavenderDream],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .cornerRadius(3)
+                }
+                .frame(height: 65)
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(NIOThemePaint.well.opacity(0.5)))
+        )
+    }
+
+    private func mileageChart(_ data: [NIOVehicleSnapshot]) -> some View {
+        let points = data.enumerated().map { idx, snap in
+            TrendPoint(idx: idx, value: snap.mileage)
+        }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("总里程累计趋势 (km)")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.75))
+                Spacer()
+                if let last = points.last {
+                    Text(String(format: "%.1f km", last.value))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(lavenderDream)
+                }
+            }
+            Chart(points) { p in
+                LineMark(x: .value("序号", p.idx), y: .value("里程", p.value))
+                    .foregroundStyle(lavenderDream)
+                    .interpolationMethod(.monotone)
+            }
+            .frame(height: 65)
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 10).fill(NIOThemePaint.well.opacity(0.5)))
     }
 }
 
@@ -1586,6 +2309,8 @@ private struct NIOAnimeOrdersCard: View {
     let colors: NIOAnimeColors
 
     @State private var selectedFilter: String = "all"
+    @State private var showAllOrders: Bool = false
+    @State private var expandedOrderNo: String? = nil
 
     private var sakuraPink: Color { colors.sakuraPink }
     private var mintCyan: Color { colors.mintCyan }
@@ -1610,11 +2335,11 @@ private struct NIOAnimeOrdersCard: View {
                 if selectedFilter == "all" { return summary.orders }
                 return summary.orders.filter { $0.orderType == selectedFilter }
             }()
-            let displayOrders = Array(filteredOrders.prefix(4))
+            let displayOrders = showAllOrders ? filteredOrders : Array(filteredOrders.prefix(5))
 
             NIOAnimeCardContainer(title: "📑 蔚来服务订单与财务大屏 (\(summary.total)单)", icon: "newspaper.fill", colors: colors) {
                 VStack(spacing: 10) {
-                    // 核心历史累计统计
+                    // 1. 核心历史累计统计
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("累计换电")
@@ -1661,7 +2386,28 @@ private struct NIOAnimeOrdersCard: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
 
-                    // 月度换电次数与总支出统计卡片 (支持多月水平滑动)
+                    // 2. 电池灵活升级（若有）
+                    if summary.upgradeCount > 0 {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("🔋 电池灵活升级")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(lavenderDream)
+                                Text("日租 \(summary.upgradeDayCount) 天 · 月租 \(summary.upgradeMonthCount) 天")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                            }
+                            Spacer()
+                            Text("\(summary.upgradeCompleted) 笔完成 · " + NIOOrderLib.fmtMoney(summary.upgradeSpent))
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(mintCyan)
+                        }
+                        .padding(8)
+                        .background(NIOThemePaint.fill)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    // 3. 月度换电次数与总支出统计卡片 (支持多月水平滑动)
                     if !summary.monthlyStats.isEmpty {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("📅 月度换电与消费支出趋势")
@@ -1716,7 +2462,7 @@ private struct NIOAnimeOrdersCard: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
 
-                    // 8 大服务类型水平筛选胶囊栏 (基于 nio-dash 8 大服务分类体系)
+                    // 4. 8 大服务类型水平筛选胶囊栏
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(filterCategories, id: \.id) { cat in
@@ -1726,6 +2472,8 @@ private struct NIOAnimeOrdersCard: View {
                                 }()
                                 if count > 0 || cat.id == "all" {
                                     Button(action: {
+                                        let impact = UIImpactFeedbackGenerator(style: .light)
+                                        impact.impactOccurred()
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             selectedFilter = cat.id
                                         }
@@ -1755,23 +2503,41 @@ private struct NIOAnimeOrdersCard: View {
                         }
                     }
 
-                    // Top 换电站足迹 (仅在查看全部或换电时显示)
+                    // 5. Top 常用换电站排行 (最多 5 个，带进度条)
                     if (selectedFilter == "all" || selectedFilter == "pe_shaman_change") && !summary.topSwapStations.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("🌟 最常打卡的换电站")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(mintCyan)
+                        let maxCount = summary.topSwapStations.map(\.count).max() ?? 1
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("🏆 常用换电站 Top \(min(5, summary.topSwapStations.count))")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(mintCyan)
+                                Spacer()
+                                Text("换电足迹")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                            }
 
-                            ForEach(summary.topSwapStations.prefix(2)) { st in
-                                HStack {
-                                    Text("📍 " + st.name)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(NIOThemePaint.text.opacity(0.85))
-                                        .lineLimit(1)
-                                    Spacer()
-                                    Text("\(st.count)次 · " + NIOOrderLib.fmtMoney(st.spent))
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .foregroundStyle(lavenderDream)
+                            ForEach(Array(summary.topSwapStations.prefix(5).enumerated()), id: \.element.name) { idx, st in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text("\(idx + 1). \(st.name)")
+                                            .font(.system(size: 9, weight: .medium))
+                                            .foregroundStyle(NIOThemePaint.text.opacity(0.9))
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text("\(st.count)次 · \(NIOOrderLib.fmtMoney(st.spent))")
+                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(lavenderDream)
+                                    }
+                                    GeometryReader { g in
+                                        ZStack(alignment: .leading) {
+                                            Capsule().fill(NIOThemePaint.well)
+                                            Capsule()
+                                                .fill(LinearGradient(colors: [mintCyan, sakuraPink], startPoint: .leading, endPoint: .trailing))
+                                                .frame(width: max(4, g.size.width * CGFloat(st.count) / CGFloat(maxCount)))
+                                        }
+                                    }
+                                    .frame(height: 3)
                                 }
                             }
                         }
@@ -1782,7 +2548,7 @@ private struct NIOAnimeOrdersCard: View {
 
                     Divider().background(NIOThemePaint.stroke)
 
-                    // 订单明细列表
+                    // 6. 订单明细列表 (带折叠/展开与详情手风琴)
                     if displayOrders.isEmpty {
                         Text("暂无该类型的服务订单 🍃")
                             .font(.system(size: 10))
@@ -1792,40 +2558,106 @@ private struct NIOAnimeOrdersCard: View {
                     } else {
                         VStack(spacing: 6) {
                             ForEach(displayOrders) { order in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        HStack(spacing: 4) {
-                                            Text(NIOOrderLib.orderTypeLabel(order))
-                                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                .foregroundStyle(NIOThemePaint.text)
-                                            Text(NIOOrderLib.fmtSwapDate(order.createTime))
-                                                .font(.system(size: 8))
-                                                .foregroundStyle(NIOThemePaint.text.opacity(0.45))
-                                        }
-                                        Text(order.resourceAddress ?? order.address ?? order.orderNo ?? "—")
-                                            .font(.system(size: 9))
-                                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                                            .lineLimit(1)
+                                let isExpanded = (expandedOrderNo == order.orderNo)
+                                Button(action: {
+                                    let impact = UIImpactFeedbackGenerator(style: .light)
+                                    impact.impactOccurred()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        expandedOrderNo = (isExpanded ? nil : order.orderNo)
                                     }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text(order.orderStatusName ?? "—")
-                                            .font(.system(size: 9, weight: .bold))
-                                            .padding(.horizontal, 5)
-                                            .padding(.vertical, 2)
-                                            .background(sakuraPink.opacity(0.18))
-                                            .foregroundStyle(sakuraPink)
-                                            .clipShape(Capsule())
-                                        if let cash = order.priceCash, let amt = Double(cash), amt > 0 {
-                                            Text(verbatim: "¥\(String(format: "%.2f", amt))")
-                                                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                                .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                                }) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                HStack(spacing: 4) {
+                                                    Text(NIOOrderLib.orderTypeLabel(order))
+                                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                        .foregroundStyle(NIOThemePaint.text)
+                                                    Text(NIOOrderLib.fmtSwapDate(order.createTime))
+                                                        .font(.system(size: 8))
+                                                        .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+                                                }
+                                                Text(order.resourceAddress ?? order.address ?? order.orderNo ?? "—")
+                                                    .font(.system(size: 9))
+                                                    .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                                                    .lineLimit(1)
+                                            }
+                                            Spacer()
+                                            VStack(alignment: .trailing, spacing: 2) {
+                                                Text(order.orderStatusName ?? "—")
+                                                    .font(.system(size: 9, weight: .bold))
+                                                    .padding(.horizontal, 5)
+                                                    .padding(.vertical, 2)
+                                                    .background(sakuraPink.opacity(0.18))
+                                                    .foregroundStyle(sakuraPink)
+                                                    .clipShape(Capsule())
+                                                if let cash = order.priceCash, let amt = Double(cash), amt > 0 {
+                                                    Text(verbatim: "¥\(String(format: "%.2f", amt))")
+                                                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                                        .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                                                }
+                                            }
+                                        }
+
+                                        // 展开手风琴详细明细
+                                        if isExpanded {
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Divider().background(NIOThemePaint.stroke.opacity(0.5))
+                                                if let no = order.orderNo, !no.isEmpty {
+                                                    HStack {
+                                                        Text("订单编号:")
+                                                            .font(.system(size: 8))
+                                                            .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                                                        Text(no)
+                                                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                                            .foregroundStyle(NIOThemePaint.text.opacity(0.85))
+                                                    }
+                                                }
+                                                if let addr = order.resourceAddress ?? order.address, !addr.isEmpty {
+                                                    HStack {
+                                                        Text("服务地址:")
+                                                            .font(.system(size: 8))
+                                                            .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                                                        Text(addr)
+                                                            .font(.system(size: 8))
+                                                            .foregroundStyle(NIOThemePaint.text.opacity(0.85))
+                                                    }
+                                                }
+                                            }
+                                            .padding(.top, 2)
                                         }
                                     }
+                                    .padding(6)
+                                    .background(RoundedRectangle(cornerRadius: 8).fill(isExpanded ? NIOThemePaint.well.opacity(0.6) : Color.clear))
                                 }
+                                .buttonStyle(.plain)
+
                                 if order.id != displayOrders.last?.id {
                                     Divider().background(NIOThemePaint.fill)
                                 }
+                            }
+
+                            // 展开/收起更多订单按钮
+                            if filteredOrders.count > 5 {
+                                Button(action: {
+                                    let impact = UIImpactFeedbackGenerator(style: .light)
+                                    impact.impactOccurred()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showAllOrders.toggle()
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: showAllOrders ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                                        Text(showAllOrders ? "收起订单列表" : "查看全部 \(filteredOrders.count) 笔订单")
+                                    }
+                                    .font(.system(size: 10, weight: .bold))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 5)
+                                    .background(NIOThemePaint.well)
+                                    .foregroundStyle(mintCyan)
+                                    .clipShape(Capsule())
+                                }
+                                .padding(.top, 4)
                             }
                         }
                     }
@@ -2411,6 +3243,10 @@ struct IOSNIODashboardView: View {
                             NIOAnimeLocationCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.22)
 
+                            // 5.5 🗺️ 每日行驶轨迹地图
+                            NIOAnimeDailyPathCard(dailyPaths: service.dailyPaths, colors: colors)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.24)
+
                             // 6. 🚪 守护结界 · 车门车况全景
                             NIOAnimeDoorsCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.25)
@@ -2423,11 +3259,19 @@ struct IOSNIODashboardView: View {
                             NIOAnimeCockpitCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.31)
 
+                            // 8.5 🪑 座椅舒适与方向盘加热
+                            NIOAnimeSeatComfortCard(status: status, colors: colors, onShowJSON: showJSON)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.32)
+
+                            // 8.6 🔑 智能钥匙感知与低压电瓶健康
+                            NIOAnimeKeySensorsCard(status: status, colors: colors, onShowJSON: showJSON)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.33)
+
                             // 9. 🧊 车载智能冰箱与空气健康
                             NIOAnimeCabinExtrasCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.34)
 
-                            // 10. 💡 车外灯光与照明系统
+                            // 10. 💡 车外灯光与照明系统 (拟物重构)
                             NIOAnimeLightsCard(status: status, colors: colors, onShowJSON: showJSON)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.37)
 
@@ -2442,6 +3286,10 @@ struct IOSNIODashboardView: View {
                             // 13. 📈 能耗达成率与百公里电耗评分
                             NIOAnimeEfficiencyCard(socStatus: status?.socStatus, colors: colors)
                                 .nioEntry(hasAppeared: hasAppeared, delay: 0.45)
+
+                            // 13.5 📊 历史趋势与多维图表分析
+                            NIOAnimeTrendChartsCard(history: service.history, dailyDeltas: service.dailyMileageDeltas, colors: colors)
+                                .nioEntry(hasAppeared: hasAppeared, delay: 0.46)
 
                             // 14. 🔧 维保周期与耗材寿命追踪
                             NIOAnimeMaintenanceCard(
