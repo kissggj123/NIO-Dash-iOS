@@ -292,18 +292,32 @@ final class NIOService: ObservableObject {
             let rawJson = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
             let resultCode = (rawJson?["result_code"] as? String) ?? (rawJson?["resultCode"] as? String) ?? ""
 
-            // 若合成的 RVS URL 因参数 sign_failed，自动无感降级到小组件接口拉取并恢复胎压缓存
-            if (resultCode == "sign_failed" || resultCode.contains("sign")) && finalURL.host?.contains("icar.nio.com") == true && !self.nioDeviceId.isEmpty && !self.nioVehicleId.isEmpty {
-                if let fallbackBuilt = NIOVehicleLib.buildWidgetURL(
-                    vehicleId: self.nioVehicleId,
-                    deviceId: self.nioDeviceId,
-                    secret: self.nioVehicleSignSecret,
-                    algo: self.nioVehicleSignAlgo.isEmpty ? "md5_append" : self.nioVehicleSignAlgo
-                ) {
-                    var fbReq = URLRequest(url: fallbackBuilt.url)
+            // 若 RVS 接口因参数签名校验不匹配（如 invalid_param 或 sign_failed），自动无感降级到小组件接口拉取并从落盘恢复胎压
+            let debugMsg = (rawJson?["debug_msg"] as? String) ?? ""
+            let isSignProblem = (resultCode == "sign_failed" || resultCode.contains("sign") || resultCode == "invalid_param" || debugMsg.contains("sign") || debugMsg.contains("timestamp") || debugMsg.contains("app_id"))
+            if isSignProblem && finalURL.host?.contains("icar.nio.com") == true && !self.nioDeviceId.isEmpty && !self.nioVehicleId.isEmpty {
+                var fallbackURL: URL? = nil
+                if !self.nioVehicleSignSecret.isEmpty {
+                    fallbackURL = NIOVehicleLib.buildWidgetURL(
+                        vehicleId: self.nioVehicleId,
+                        deviceId: self.nioDeviceId,
+                        secret: self.nioVehicleSignSecret,
+                        algo: self.nioVehicleSignAlgo.isEmpty ? "md5_append" : self.nioVehicleSignAlgo
+                    )?.url
+                }
+                if fallbackURL == nil {
+                    let sgn = NIOVehicleLib.extractQueryParam(from: finalURL.absoluteString, key: "sign") ?? ""
+                    let ts = NIOVehicleLib.extractQueryParam(from: finalURL.absoluteString, key: "timestamp") ?? "\(Int(Date().timeIntervalSince1970))"
+                    if !sgn.isEmpty {
+                        let widgetStr = "https://app.nio.com/app/api/icar/v2/widget/info?widget_size=large&app_id=10002&widget_functions=rvs_set_doorlock%2Crvs_set_air_conditioner%2Crvs_set_tailgate%2Crvs_exe_findme&lang=zh-CN&region=cn&device_id=\(self.nioDeviceId)&timestamp=\(ts)&vehicle_id=\(self.nioVehicleId)&app_ver=6.7.15&sign=\(sgn)"
+                        fallbackURL = URL(string: widgetStr)
+                    }
+                }
+                if let fbURL = fallbackURL {
+                    var fbReq = URLRequest(url: fbURL)
                     fbReq.httpMethod = "GET"
                     fbReq.setValue("application/json", forHTTPHeaderField: "Accept")
-                    fbReq.setValue("VehicleWidgetExtension/6.5.3 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2612; iOS 26.5.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
+                    fbReq.setValue("VehicleWidgetExtension/6.7.15 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2644; iOS 27.0.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
                     if !token.isEmpty { fbReq.setValue(token, forHTTPHeaderField: "Authorization") }
                     if let (fbData, fbResp) = try? await urlSession.data(for: fbReq),
                        let fbHttp = fbResp as? HTTPURLResponse, fbHttp.statusCode == 200,
