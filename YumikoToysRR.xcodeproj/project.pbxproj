@@ -40,6 +40,9 @@
 		AA2000072C3E846A00EED680 /* NIO/IOSNIODashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000072C3E846500EED680 /* NIO/IOSNIODashboardView.swift */; };
 		AA2000082C3E846A00EED680 /* NIO/IOSAboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000082C3E846500EED680 /* NIO/IOSAboutView.swift */; };
 		AA2000092C3E846A00EED680 /* NIO/NIOPixelLaunchSplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000092C3E846500EED680 /* NIO/NIOPixelLaunchSplashView.swift */; };
+		AA2000102C3E846A00EED680 /* Services/VPN/NIOVPNCertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */; };
+		AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */; };
+		AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */; };
 		FC1663B22C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */; };
 		FC1663B32C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */; };
 /* End PBXBuildFile section */
@@ -113,6 +116,9 @@
 		AA1000072C3E846500EED680 /* NIO/IOSNIODashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/IOSNIODashboardView.swift; sourceTree = "<group>"; };
 		AA1000082C3E846500EED680 /* NIO/IOSAboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/IOSAboutView.swift; sourceTree = "<group>"; };
 		AA1000092C3E846500EED680 /* NIO/NIOPixelLaunchSplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOPixelLaunchSplashView.swift; sourceTree = "<group>"; };
+		AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOVPNCertManager.swift; sourceTree = "<group>"; };
+		AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOMitmEngine.swift; sourceTree = "<group>"; };
+		AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOVPNManager.swift; sourceTree = "<group>"; };
 		FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnniversaryViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -171,6 +177,9 @@
 				2B2BB27D28C0522400A8B2A3 /* Model */,
 				2B76323F28C447A400AE686C /* Views */,
 				2BE35B7D28C1978600133DFB /* ViewModel */,
+				AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */,
+				AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */,
+				AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */,
 				2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */,
 				2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */,
 				2B2BB25928BFB36600A8B2A3 /* Preview Content */,
@@ -424,6 +433,9 @@
 				AA2000072C3E846A00EED680 /* NIO/IOSNIODashboardView.swift in Sources */,
 				AA2000082C3E846A00EED680 /* NIO/IOSAboutView.swift in Sources */,
 				AA2000092C3E846A00EED680 /* NIO/NIOPixelLaunchSplashView.swift in Sources */,
+				AA2000102C3E846A00EED680 /* Services/VPN/NIOVPNCertManager.swift in Sources */,
+				AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */,
+				AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */,
 				2B7631FD28C42E1200AE686C /* LocationViewModel.swift in Sources */,
 				2B2BB25428BFB36300A8B2A3 /* wheaterApp.swift in Sources */,
 				2B2BB28328C06DB300A8B2A3 /* WeatherViewModel.swift in Sources */,

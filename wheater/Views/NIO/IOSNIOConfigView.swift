@@ -21,6 +21,8 @@ struct IOSNIOConfigView: View {
     @State private var showReleaseNotesSheet = false
     @AppStorage("nio_prefer_actual_range") private var preferActualRange = false
     @ObservedObject private var themeService = AnimeThemeService.shared
+    @ObservedObject private var vpnManager = NIOVPNManager.shared
+    @ObservedObject private var certManager = NIOVPNCertManager.shared
     @AppStorage("nio_vehicle_selected_model") private var selectedModelSlug = "et5_special"
     @AppStorage("nio_vehicle_selected_color") private var selectedColorSlug = "nature_wonder"
 
@@ -49,6 +51,9 @@ struct IOSNIOConfigView: View {
 
                         // 3. 🚘 爱车车型与车漆涂装定制
                         carModelSelectorCard
+
+                        // 3.5 🪄 内置 VPN 一键自动嗅探
+                        inAppVpnSnifferCard
 
                         // 4. ⚡️ 智能识别与一键填充
                         smartParseCard
@@ -356,6 +361,110 @@ struct IOSNIOConfigView: View {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // MARK: - 3.5 🪄 内置 VPN 一键自动嗅探
+
+    private var inAppVpnSnifferCard: some View {
+        cardContainer(title: "🪄 内置抓包 VPN · 免工具自动提取", icon: "network", accentColor: mintCyan) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("零外部依赖，App 内一键启停抓包")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Spacer()
+                    // 状态胶囊
+                    Text(vpnManager.status.rawValue)
+                        .font(.system(size: 9, weight: .heavy))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(vpnManager.isVPNActive ? mintCyan.opacity(0.2) : (vpnManager.status == NIOVPNStatus.captured ? sakuraPink.opacity(0.2) : NIOThemePaint.well))
+                        .foregroundStyle(vpnManager.isVPNActive ? mintCyan : (vpnManager.status == NIOVPNStatus.captured ? sakuraPink : NIOThemePaint.text.opacity(0.5)))
+                        .clipShape(Capsule())
+                }
+
+                Text("启动后切换至手机「蔚来 App」下拉刷新爱车页面一次，本应用将自动拦截并提取 Vehicle ID、Device ID、Secret 与 Token，回填完成后自动休眠 VPN！")
+                    .font(.system(size: 10))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.65))
+                    .lineSpacing(2)
+
+                if let summary = vpnManager.lastCapturedSummary {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(mintCyan)
+                        Text(summary)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(mintCyan)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(mintCyan.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
+                // 操作按钮行
+                HStack(spacing: 8) {
+                    // 1. 证书安装按钮
+                    Button(action: {
+                        certManager.openInstallProfileInSafari()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "lock.shield.fill")
+                                .font(.system(size: 10))
+                            Text("1. 安装抓包证书")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(lavenderDream.opacity(0.15))
+                        .foregroundStyle(lavenderDream)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(lavenderDream.opacity(0.3), lineWidth: 0.5))
+                    }
+
+                    // 2. 启动/停止 VPN 按钮
+                    Button(action: {
+                        let impact = UIImpactFeedbackGenerator(style: .medium)
+                        impact.impactOccurred()
+                        if vpnManager.isVPNActive {
+                            vpnManager.stopCaptureVPN()
+                        } else {
+                            vpnManager.startCaptureVPN()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: vpnManager.isVPNActive ? "stop.fill" : "play.fill")
+                                .font(.system(size: 10))
+                            Text(vpnManager.isVPNActive ? "停止抓包 VPN" : "2. 启动抓包 VPN")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(vpnManager.isVPNActive ? sakuraPink.opacity(0.2) : mintCyan.opacity(0.2))
+                        .foregroundStyle(vpnManager.isVPNActive ? sakuraPink : mintCyan)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke((vpnManager.isVPNActive ? sakuraPink : mintCyan).opacity(0.4), lineWidth: 0.5))
+                    }
+                }
+
+                if certManager.certInstalledHint {
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(pastelYellow)
+                        Text("证书下载后请前往 iOS「设置 -> 已下载描述文件」安装，并在「设置 -> 通用 -> 关于本机 -> 证书信任设置」中开启完全信任。")
+                            .font(.system(size: 8))
+                            .foregroundStyle(pastelYellow.opacity(0.9))
+                    }
+                    .padding(6)
+                    .background(pastelYellow.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
         }
