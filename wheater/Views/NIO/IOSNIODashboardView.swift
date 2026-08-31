@@ -936,15 +936,16 @@ private struct NIOAnimeChargingDetailCard: View {
 
     var body: some View {
         let soc = status?.socStatus
-        let isRealCharging = NIOVehicleLib.isRealCharging(socStatus: soc, offcarStatus: status?.offcarModeStatus)
-        let isPortOpen = (status?.doorStatus?["second_charge_port_ajar_status"]?.intValue != 1)
+        let portRaw = status?.doorStatus?["second_charge_port_ajar_status"]?.intValue ?? status?.doorStatus?["charge_port_status"]?.intValue
+        let isPortOpen = (portRaw != nil && portRaw != 1)
         let powerW = soc?.chargingPower ?? 0
         let realCur = soc?.chargerRealCurA ?? 0
         let realVol = soc?.chargerRealVolV ?? 0
         let targetSoc = soc?.targetSocPercentage ?? soc?.maxSoc
         let chargerType = soc?.chargerType ?? 0
+        let isRealCharging = NIOVehicleLib.isRealCharging(socStatus: soc, offcarStatus: status?.offcarModeStatus) || (powerW > 0)
 
-        if isRealCharging || isPortOpen || powerW > 0 || chargerType > 0 {
+        if isRealCharging || isPortOpen || (soc?.chargeState ?? 0) == 1 {
             NIOAnimeCardContainer(
                 title: "⚡️ 高压充电与功率实时大屏",
                 icon: "bolt.badge.clock.fill",
@@ -954,32 +955,35 @@ private struct NIOAnimeChargingDetailCard: View {
             ) {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
+                        // 1. 补能功率
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("充电功率")
+                            Text("补能功率")
                                 .font(.system(size: 9))
                                 .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                            Text(verbatim: "\(String(format: "%.1f", Double(powerW) / 1000.0)) kW")
+                            Text(verbatim: isRealCharging && powerW > 0 ? "\(String(format: "%.1f", Double(powerW) / 1000.0)) kW" : (isRealCharging ? "通电中…" : "待机 0.0 kW"))
                                 .font(.system(size: 14, weight: .heavy, design: .monospaced))
-                                .foregroundStyle(mintCyan)
+                                .foregroundStyle(isRealCharging ? mintCyan : NIOThemePaint.text.opacity(0.6))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(7)
                         .background(NIOThemePaint.fill)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
 
+                        // 2. 实时电压与电流
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("实时电压 / 电流")
+                            Text("高压电网")
                                 .font(.system(size: 9))
                                 .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                            Text(verbatim: "\(Int(realVol))V · \(String(format: "%.1f", realCur))A")
+                            Text(verbatim: (realVol > 0 || realCur > 0) ? "\(Int(realVol))V · \(String(format: "%.1f", realCur))A" : (isRealCharging ? "通电中 ⚡️" : "未通电 (0V·0A)"))
                                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(pastelYellow)
+                                .foregroundStyle((realVol > 0 || isRealCharging) ? pastelYellow : NIOThemePaint.text.opacity(0.6))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(7)
                         .background(NIOThemePaint.fill)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
 
+                        // 3. 目标限充
                         if let target = targetSoc, target > 0 {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("目标限充")
@@ -996,16 +1000,35 @@ private struct NIOAnimeChargingDetailCard: View {
                         }
                     }
 
+                    // 底部状态栏与倒计时
                     HStack(spacing: 6) {
-                        NIOAnimeBadge(text: NIOVehicleLib.chargerTypeLabel(chargerType), active: true, activeColor: mintCyan)
-                        if isPortOpen {
-                            NIOAnimeBadge(text: "充电口已开启 ⚡️", active: true, activeColor: sakuraPink)
+                        if isRealCharging {
+                            NIOAnimeBadge(text: NIOVehicleLib.chargerTypeLabel(chargerType), active: true, activeColor: mintCyan)
+                            if isPortOpen {
+                                NIOAnimeBadge(text: "充电口盖已开 🔌", active: true, activeColor: sakuraPink)
+                            }
+                        } else if isPortOpen {
+                            NIOAnimeBadge(text: "充电口盖已打开 🔌", active: true, activeColor: sakuraPink)
+                        } else if chargerType > 0 {
+                            NIOAnimeBadge(text: "上次充电: " + NIOVehicleLib.chargerTypeLabel(chargerType), active: false, activeColor: mintCyan)
                         }
+
                         Spacer()
-                        if let est = soc?.estimateChargeEndTime, est > 0 {
-                            Text("预计 " + NIOVehicleLib.fmtTime(est) + " 充满")
+
+                        if isRealCharging {
+                            if let remaining = NIOVehicleLib.chargeRemainingTimeText(estimateEndTimeMs: soc?.estimateChargeEndTime) {
+                                Text(remaining)
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(mintCyan)
+                            } else if let est = soc?.estimateChargeEndTime, est > 0 {
+                                Text("预计 " + NIOVehicleLib.fmtTime(est) + " 充满")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                            }
+                        } else {
+                            Text("插枪后将自动显示实时补能参数")
                                 .font(.system(size: 9))
-                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.45))
                         }
                     }
                 }
@@ -2039,8 +2062,10 @@ private struct NIOAnimeStorageBoxCard: View {
         let doors = status?.doorStatus ?? [:]
         let isBoxOpen = box["box_open"]?.boolValue == true || box["box_open"]?.intValue == 1
         let isBoxLock = box["box_lock"]?.boolValue == true || box["box_lock"]?.intValue == 1
-        let hoodOpen = doors["engine_hood_ajar_status"]?.intValue == 1
-        let trunkOpen = doors["tailgate_ajar_status"]?.intValue == 1
+        let hoodRaw = doors["engine_hood_ajar_status"]?.intValue ?? doors["engine_hood_sts"]?.intValue ?? doors["hood"]?.intValue
+        let hoodOpen = (hoodRaw != nil && hoodRaw != 1)
+        let trunkRaw = doors["tailgate_ajar_status"]?.intValue ?? doors["tailgate_sts"]?.intValue ?? doors["trunk"]?.intValue
+        let trunkOpen = (trunkRaw != nil && trunkRaw != 1)
 
         if isBoxOpen || isBoxLock || hoodOpen || trunkOpen || !box.isEmpty {
             NIOAnimeCardContainer(
@@ -2056,13 +2081,13 @@ private struct NIOAnimeStorageBoxCard: View {
                             title: "前备箱/前舱盖",
                             statusText: hoodOpen ? "已打开 ⚠️" : "已闭锁 🔒",
                             isOpen: hoodOpen,
-                            icon: "car.side.front.open.fill"
+                            icon: hoodOpen ? "car.side.front.open.fill" : "car.side.fill"
                         )
                         storageTile(
                             title: "后备箱/电动尾门",
                             statusText: trunkOpen ? "已开启 ⚠️" : "已锁好 🔒",
                             isOpen: trunkOpen,
-                            icon: "car.side.rear.open.fill"
+                            icon: trunkOpen ? "car.side.rear.open.fill" : "car.side.fill"
                         )
                         storageTile(
                             title: "中控密码手套箱",

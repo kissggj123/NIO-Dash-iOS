@@ -21,19 +21,26 @@ final class NIOVPNCertManager: ObservableObject {
     private let serverQueue = DispatchQueue(label: "com.yumikotoys.certserver", qos: .userInitiated)
 
     // 内置本地专有自签名根证书（PEM / DER Base64）
+    // 内置本地专有自签名根证书（标准 X.509 v3 DER Base64，有效期至 2036 年）
     nonisolated static let rootCertBase64: String = {
-        // 标准自签名 X.509 根证书（CN=YumikoToys NIO Root CA, O=YumikoToys, Validity=2026-2036）
         let rawCert = """
-        MIIBxTCCAWugAwIBAgIUQ3+L4/xP3w8F6E6Y5K+m8e5F12AwCgYIKoZIzj0EAwIw
-        NDEYMBYGA1UEAwwPWWFtaWtvVG95cyBSb290MRowGAYDVQQKDBFZYW1pa29Ub3lz
-        IFN0dWRpbzAeFw0yNjAxMDEwMDAwMDBaFw0zNjAxMDEwMDAwMDBaMDQxGDAWBgNV
-        BAMMD1lhbWlrb1RveXMgUm9vdDEaMBgGA1UECgwRWWFtaWtvVG95cyBTdHVkaW8w
-        WTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARhK4ZJ9F3qH8Vv2p+Q7mR2Lq0rZ1gA
-        +K2wB0V4k1q9n3P6hL5N7uK0m7c3yR2s6V+T5z8G9W2Y4xQ0a2xK8vOyo0UwQzAM
-        BgNVHRMEBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQU8V7q2a1k6N9m
-        4X7Z5Q4V9m4k6N8wCgYIKoZIzj0EAwIDSAAwRQIhAP+F5v7Q7nL2M0e5K6uP2f4W
-        1x8Y5Z9p4f2M1e6Q4b2rAiA/L4m8x9P1w7V4f1R9o2Q8K2uP5f1x8V7nL2M0e5K6
-        uw==
+        MIIDkTCCAnmgAwIBAgIUSDfzJOyNgYCKTIQH5n9gLyPjWWowDQYJKoZIhvcNAQELBQAwWDELMAkG
+        A1UEBhMCQ04xGjAYBgNVBAoMEVl1bWlrb1RveXMgU3R1ZGlvMQwwCgYDVQQLDANOSU8xHzAdBgNV
+        BAMMFll1bWlrb1RveXMgTklPIFJvb3QgQ0EwHhcNMjYwODMxMTExNTU0WhcNMzYwODI4MTExNTU0
+        WjBYMQswCQYDVQQGEwJDTjEaMBgGA1UECgwRWXVtaWtvVG95cyBTdHVkaW8xDDAKBgNVBAsMA05J
+        TzEfMB0GA1UEAwwWWXVtaWtvVG95cyBOSU8gUm9vdCBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEP
+        ADCCAQoCggEBALlIZGMp1y87uSGmq5Zwn24fPtOm3y+//l4r+VmuEA/9imT4Hbf5bzpMA21zOCIX
+        Jhw8zU4ObyAHxX0r9J0C/ItUW6HDtgnyl99is5YLXlbzmjHeumKa/Ma+GCac3u04qPFVVYNYTPkI
+        5AzGNJKNSxxqy+x3vZ3WFv5YdDPhW5mxbSApTx/Tqw6Zl8RYo1LEAN3S1f1fFlaMZoI0tN/G7gs4
+        4K1JRUMGWTlFl0u2wz2XR6K/NbHhBzDA3UyrnqIGZnx8VdyztJV2/nvckiORHKpd8uETmbR+wWpG
+        BI1D/TRMT1ISWrlXcT8PP2pI5X/hNCBxd4b0urNsaVW4OmifVdECAwEAAaNTMFEwHQYDVR0OBBYE
+        FOT6QgOLcYailp3E/89xYxnvl0chMB8GA1UdIwQYMBaAFOT6QgOLcYailp3E/89xYxnvl0chMA8G
+        A1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBABpU3SKmv/QpojAQrYyM+qdfAWsnrwJW
+        B9JXWRdeL0uiE5p9IoRWbLyxTCsVWPl9rqvoaq6FIoR47duEZ+/8RIEoC7B+y9FMJKjsUqOOpOD2
+        k8WX4eMNWUWxXaRlHq7ZznsS/E01OJk0/Jg6PACBU1B78S1SpF+fDvLSmNxhayS05Rk5JxJxU/OY
+        zHTu2Mrk3eX8jCFOAbSNQj8zHWCCBnb1XvBwqGDL+khg4qfR4R0VVzPBNzYmX5wH7tBR3qSXH1Ou
+        3uJIt85s4pY+g/KQzfn4Wc31OK+AYYc3GdUWiki0gsSLcISFS1rnjBKZ1qDMn/LyZi0EjYhaVKw/
+        PEK2dEE=
         """.replacingOccurrences(of: "\n", with: "").replacingOccurrences(of: " ", with: "")
         return rawCert
     }()

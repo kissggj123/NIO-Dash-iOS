@@ -992,6 +992,23 @@ enum NIOVehicleLib {
         return NIOFormatters.dayShort.string(from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
     }
 
+    static func chargeRemainingTimeText(estimateEndTimeMs: Int?) -> String? {
+        guard let ms = estimateEndTimeMs, ms > 0 else { return nil }
+        let end = Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
+        let diff = end.timeIntervalSinceNow
+        if diff <= 0 {
+            return "即将充满 ✨"
+        }
+        let totalMinutes = Int(ceil(diff / 60.0))
+        if totalMinutes < 60 {
+            return "预计还需 \(totalMinutes) 分钟"
+        } else {
+            let hours = totalMinutes / 60
+            let mins = totalMinutes % 60
+            return mins > 0 ? "预计还需 \(hours)小时\(mins)分" : "预计还需 \(hours)小时"
+        }
+    }
+
     // MARK: - 快照提取
 
     static func snapshotFromResponse(_ resp: NIOVehicleResponse) throws -> NIOVehicleSnapshot {
@@ -1049,7 +1066,7 @@ enum NIOVehicleLib {
 
         // 2. 前机盖 / 机舱盖 (蔚来 ET5 等车型为机舱盖，官方仪表显示为前机盖)
         if let hood = doors["engine_hood_ajar_status"]?.intValue ?? doors["engine_hood_sts"]?.intValue ?? doors["hood"]?.intValue {
-            items.append(ParsedDoorItem(id: "hood", title: "前机盖", isClosed: hood == 1, customClosedLabel: "雪豹守好 🐆", customOpenLabel: "开启 ⚠️", icon: hood == 1 ? "car.side.front.open.fill" : "exclamationmark.triangle.fill"))
+            items.append(ParsedDoorItem(id: "hood", title: "前机盖", isClosed: hood == 1, customClosedLabel: "关好 🔒", customOpenLabel: "未关好 ⚠️", icon: hood == 1 ? "car.side.fill" : "car.side.front.open.fill"))
         }
 
         // 3. 右前门
@@ -1064,7 +1081,7 @@ enum NIOVehicleLib {
 
         // 5. 后尾门 / 后备箱
         if let trunk = doors["tailgate_ajar_status"]?.intValue ?? doors["tailgate_sts"]?.intValue ?? doors["trunk"]?.intValue {
-            items.append(ParsedDoorItem(id: "trunk", title: "后备箱", isClosed: trunk == 1, customClosedLabel: "雪豹守好 🐆", customOpenLabel: "开启 ⚠️", icon: trunk == 1 ? "car.side.rear.open.fill" : "exclamationmark.triangle.fill"))
+            items.append(ParsedDoorItem(id: "trunk", title: "后备箱", isClosed: trunk == 1, customClosedLabel: "关好 🔒", customOpenLabel: "未关好 ⚠️", icon: trunk == 1 ? "car.side.fill" : "car.side.rear.open.fill"))
         }
 
         // 6. 右后门
