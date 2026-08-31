@@ -2145,7 +2145,7 @@ private struct NIOAnimeLightsCard: View {
 
             NIOAnimeCardContainer(
                 title: "💡 车外灯光与照明系统",
-                icon: "headlight.daytime.running",
+                icon: "lightbulb.2.fill",
                 colors: colors,
                 jsonProvider: { nioToJSON(status?.lightStatus) },
                 onShowJSON: onShowJSON

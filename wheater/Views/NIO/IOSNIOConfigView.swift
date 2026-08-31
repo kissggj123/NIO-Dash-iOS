@@ -457,12 +457,14 @@ struct IOSNIOConfigView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Circle().fill(mintCyan).frame(width: 6, height: 6)
-                            Text("抓包服务已在 127.0.0.1:8998 监听中")
+                            Text("🟢 代理监听中 · 端口 8998")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(mintCyan)
                             Spacer()
                             Button(action: {
-                                UIPasteboard.general.string = "127.0.0.1:8998"
+                                // 复制本机 Wi-Fi IP 地址
+                                let ip = getWiFiIPAddress() ?? "127.0.0.1"
+                                UIPasteboard.general.string = "\(ip):8998"
                                 let impact = UIImpactFeedbackGenerator(style: .light)
                                 impact.impactOccurred()
                             }) {
@@ -476,7 +478,33 @@ struct IOSNIOConfigView: View {
                             }
                         }
 
-                        Text("💡 快速捕获指引：进入手机「设置 -> 无线局域网 -> ⓘ -> 配置代理 -> 手动」填入 127.0.0.1 端口 8998，打开蔚来 App 下拉刷新一次即可自动截获并回填！")
+                        // 连接统计（诊断用）
+                        let connCount = NIOMitmEngine.shared.connectionCount
+                        let sniffCount = NIOMitmEngine.shared.sniffCount
+                        HStack(spacing: 12) {
+                            Label("\(connCount) 个连接", systemImage: "arrow.left.arrow.right")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(connCount > 0 ? mintCyan : NIOThemePaint.text.opacity(0.4))
+                            Label("\(sniffCount) 条凭证", systemImage: "key.fill")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(sniffCount > 0 ? mintCyan : NIOThemePaint.text.opacity(0.4))
+                        }
+
+                        // 最近 3 条代理日志
+                        let logs = NIOMitmEngine.shared.recentSniffLogs.prefix(3)
+                        if !logs.isEmpty {
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(Array(logs.enumerated()), id: \.offset) { _, log in
+                                    Text(log)
+                                        .font(.system(size: 7.5, design: .monospaced))
+                                        .foregroundStyle(NIOThemePaint.text.opacity(0.65))
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+
+                        let localIP = getWiFiIPAddress() ?? "127.0.0.1"
+                        Text("💡 将手机 Wi-Fi 代理设为「\(localIP) : 8998」，然后打开蔚来 App 下拉刷新一次")
                             .font(.system(size: 9))
                             .foregroundStyle(NIOThemePaint.text.opacity(0.7))
                             .lineSpacing(1.5)
@@ -1221,4 +1249,32 @@ struct IOSNIOFetchLogView: View {
             }
         }
     }
+}
+
+// MARK: - Helper: 获取本机 Wi-Fi 局域网 IP
+
+import Darwin
+
+private func getWiFiIPAddress() -> String? {
+    var address: String?
+    var ifaddr: UnsafeMutablePointer<ifaddrs>?
+    guard getifaddrs(&ifaddr) == 0 else { return nil }
+    defer { freeifaddrs(ifaddr) }
+    var ptr = ifaddr
+    while let ifa = ptr {
+        let interface = ifa.pointee
+        let addrFamily = interface.ifa_addr.pointee.sa_family
+        if addrFamily == UInt8(AF_INET) {
+            let name = String(cString: interface.ifa_name)
+            if name == "en0" {
+                var addr = interface.ifa_addr.pointee
+                var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                getnameinfo(&addr, socklen_t(interface.ifa_addr.pointee.sa_len),
+                            &hostname, socklen_t(NI_MAXHOST), nil, 0, NI_NUMERICHOST)
+                address = String(cString: hostname)
+            }
+        }
+        ptr = ifa.pointee.ifa_next
+    }
+    return address
 }
