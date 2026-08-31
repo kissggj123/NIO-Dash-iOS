@@ -61,7 +61,28 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: 🐰 YumikoToysRR for NIO (iOS) ${{ github.ref_name }}
           files: build/YumikoToysRR-unsigned.ipa
-          generate_release_notes: true
+          generate_release_notes: false
+          body: |
+            ## 🌸 YumikoToysRR for NIO (iOS) ${{ github.ref_name }} 更新日志
+
+            ### 🛞 胎压与车况全量接口增强
+            - **RVS 全量与 Widget 双模智能路由**：自动区分直连与小组件模式，支持包含 4 轮胎压胎温的全量数据拉取。
+            - **胎压独立落盘持久化缓存 (`cached_tyre.json`)**：熄火驻车或休眠时自动继承上一轮行驶有效胎压，彻底消除横杠空白。
+            - **动态时间戳与 MD5 重签名引擎 (`autoResignRvsURL`)**：支持 3 种 MD5 算法自校验，实现永不过期。
+
+            ### 🌐 官方微服务网关适配与 404 修复
+            - **自动路由纠正**：换电/维保订单与每日签到自动迁移至官方专属网关 `gateway-front-external.nio.com`，彻底根除旧版 404 路由错误。
+            - **多层嵌套数据递归解析**：适配社区签到 `award/square` 响应结构，精准提取已签到与连签天数。
+
+            ### 🛡️ 鉴权防失效与静默容错
+            - **静默秒级降级**：RVS 遇到签名不匹配时自动在后台平滑切换回 Widget 模式，杜绝假阳性 403 误报警。
+            - **多接口 Token 智能复用与 Response 阶段凭证嗅探**。
+
+            ### 📱 安装说明
+            - 下载下方附件 `YumikoToysRR-unsigned.ipa`；
+            - 使用 TrollStore（巨魔商店）、Sideloadly、AltStore 或自签名证书安装即可直接使用；
+            - 内置灵动岛与锁屏实时活动组件 (`WheaterStatusExtension.appex`)。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
