@@ -733,8 +733,8 @@ private struct NIOAnimeBatteryCard: View {
             jsonProvider: { nioToJSON(status?.socStatus) },
             onShowJSON: onShowJSON
         ) {
-            if let soc = status?.socStatus {
-                let socVal = soc.soc ?? 0
+            let soc = status?.socStatus ?? NIOSocStatus(soc: 0, remainingRange: 0)
+            let socVal = soc.soc ?? 0
                 let socStr = (socVal.truncatingRemainder(dividingBy: 1) == 0) ? "\(Int(socVal))" : String(format: "%.1f", socVal)
                 let cltcKm = soc.remainingRange
                 let actKm = soc.remainingActualRange
@@ -908,9 +908,6 @@ private struct NIOAnimeBatteryCard: View {
                         }
                     }
                 }
-            } else {
-                Text("暂无电池数据").font(.footnote).foregroundStyle(NIOThemePaint.text.opacity(0.5))
-            }
         }
         .onAppear {
             guard !reducedFx else { return }

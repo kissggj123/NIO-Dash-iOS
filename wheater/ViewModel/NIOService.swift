@@ -522,7 +522,7 @@ final class NIOService: ObservableObject {
             base.data?.status?.maintainStatus = rMaint
         }
 
-        if let vid = widget?.vehicleId ?? rvs?.vehicleId ?? (base.data?.status?.vehicleId), !(vid ?? "").isEmpty {
+        if let vid = widget?.vehicleId ?? rvs?.vehicleId ?? base.data?.status?.vehicleId, !vid.isEmpty {
             base.data?.status?.vehicleId = vid
         }
 
@@ -555,7 +555,7 @@ final class NIOService: ObservableObject {
             if !candidates.contains(u) { candidates.append(u) }
         }
 
-        for (index, targetChangeURL) in candidates.enumerated() {
+        for targetChangeURL in candidates {
             guard let url = URL(string: targetChangeURL) else { continue }
             let isAppNio = targetChangeURL.contains("app.nio.com")
 
@@ -631,7 +631,7 @@ final class NIOService: ObservableObject {
             if !candidates.contains(u) { candidates.append(u) }
         }
 
-        for (index, targetCheckinURL) in candidates.enumerated() {
+        for targetCheckinURL in candidates {
             guard let url = URL(string: targetCheckinURL) else { continue }
             do {
                 var req = URLRequest(url: url)
