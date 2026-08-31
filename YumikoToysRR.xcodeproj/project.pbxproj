@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BB20000128D92100003FB942 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000228D92100003FB942 /* PacketTunnelProvider.swift */; };
+		BB20000228D92100003FB942 /* WheaterPacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB10000128D92100003FB942 /* WheaterPacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BB20000328D92100003FB942 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BB10000628D92100003FB942 /* NetworkExtension.framework */; };
 		2B2BB25428BFB36300A8B2A3 /* wheaterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */; };
 		2B2BB25628BFB36300A8B2A3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB25528BFB36300A8B2A3 /* ContentView.swift */; };
 		2B2BB25828BFB36600A8B2A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */; };
@@ -48,6 +51,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		BB50000128D92100003FB942 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2B2BB24828BFB36300A8B2A3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB60000128D92100003FB942;
+			remoteInfo = WheaterPacketTunnel;
+		};
 		2B2BB26128BFB36600A8B2A3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2B2BB24828BFB36300A8B2A3 /* Project object */;
@@ -78,12 +88,19 @@
 			dstSubfolder = PlugIns;
 			files = (
 				2B902BFB28D92003003FB942 /* WheaterStatusExtension.appex in Embed Foundation Extensions */,
+				BB20000228D92100003FB942 /* WheaterPacketTunnel.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		BB10000128D92100003FB942 /* WheaterPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WheaterPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB10000228D92100003FB942 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		BB10000328D92100003FB942 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB10000428D92100003FB942 /* WheaterPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WheaterPacketTunnel.entitlements; sourceTree = "<group>"; };
+		BB10000528D92100003FB942 /* wheater.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = wheater.entitlements; sourceTree = "<group>"; };
+		BB10000628D92100003FB942 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		2B2BB25028BFB36300A8B2A3 /* YumikoToysRR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YumikoToysRR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = wheaterApp.swift; sourceTree = "<group>"; };
 		2B2BB25528BFB36300A8B2A3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -123,6 +140,12 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		BB40000228D92100003FB942 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				BB20000328D92100003FB942 /* NetworkExtension.framework in Frameworks */,
+			);
+		};
 		2B2BB24D28BFB36300A8B2A3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -148,6 +171,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BB30000128D92100003FB942 /* WheaterPacketTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				BB10000228D92100003FB942 /* PacketTunnelProvider.swift */,
+				BB10000328D92100003FB942 /* Info.plist */,
+				BB10000428D92100003FB942 /* WheaterPacketTunnel.entitlements */,
+			);
+			path = WheaterPacketTunnel;
+			sourceTree = "<group>";
+		};
 		2B2BB24728BFB36300A8B2A3 = {
 			isa = PBXGroup;
 			children = (
@@ -155,6 +188,7 @@
 				2B2BB26328BFB36600A8B2A3 /* wheaterTests */,
 				2B2BB26D28BFB36600A8B2A3 /* wheaterUITests */,
 				2B902BF028D91FFF003FB942 /* WheaterStatus */,
+				BB30000128D92100003FB942 /* WheaterPacketTunnel */,
 				2B902BEB28D91FFF003FB942 /* Frameworks */,
 				2B2BB25128BFB36300A8B2A3 /* Products */,
 			);
@@ -167,6 +201,7 @@
 				2B2BB26028BFB36600A8B2A3 /* YumikoToysRRTests.xctest */,
 				2B2BB26A28BFB36600A8B2A3 /* YumikoToysRRUITests.xctest */,
 				2B902BEA28D91FFF003FB942 /* WheaterStatusExtension.appex */,
+				BB10000128D92100003FB942 /* WheaterPacketTunnel.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -175,6 +210,7 @@
 			isa = PBXGroup;
 			children = (
 				2B2BB27D28C0522400A8B2A3 /* Model */,
+				BB10000528D92100003FB942 /* wheater.entitlements */,
 				2B76323F28C447A400AE686C /* Views */,
 				2BE35B7D28C1978600133DFB /* ViewModel */,
 				AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */,
@@ -273,6 +309,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		BB60000128D92100003FB942 /* WheaterPacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB80000128D92100003FB942 /* Build configuration list for PBXNativeTarget "WheaterPacketTunnel" */;
+			buildPhases = (
+				BB40000128D92100003FB942 /* Sources */,
+				BB40000228D92100003FB942 /* Frameworks */,
+				BB40000328D92100003FB942 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WheaterPacketTunnel;
+			productName = WheaterPacketTunnel;
+			productReference = BB10000128D92100003FB942 /* WheaterPacketTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		2B2BB24F28BFB36300A8B2A3 /* YumikoToysRR */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2B2BB27428BFB36600A8B2A3 /* Build configuration list for PBXNativeTarget "YumikoToysRR" */;
@@ -286,6 +339,7 @@
 			);
 			dependencies = (
 				2B902BFA28D92003003FB942 /* PBXTargetDependency */,
+				BB50000228D92100003FB942 /* PBXTargetDependency */,
 			);
 			name = YumikoToysRR;
 			productName = wheater;
@@ -367,6 +421,9 @@
 					2B902BE928D91FFF003FB942 = {
 						CreatedOnToolsVersion = 14.1;
 					};
+					BB60000128D92100003FB942 = {
+						CreatedOnToolsVersion = 14.1;
+					};
 				};
 			};
 			buildConfigurationList = 2B2BB24B28BFB36300A8B2A3 /* Build configuration list for PBXProject "YumikoToysRR" */;
@@ -386,11 +443,17 @@
 				2B2BB25F28BFB36600A8B2A3 /* YumikoToysRRTests */,
 				2B2BB26928BFB36600A8B2A3 /* YumikoToysRRUITests */,
 				2B902BE928D91FFF003FB942 /* WheaterStatusExtension */,
+				BB60000128D92100003FB942 /* WheaterPacketTunnel */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		BB40000328D92100003FB942 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		2B2BB24E28BFB36300A8B2A3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -417,6 +480,12 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		BB40000128D92100003FB942 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				BB20000128D92100003FB942 /* PacketTunnelProvider.swift in Sources */,
+			);
+		};
 		2B2BB24C28BFB36300A8B2A3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -472,6 +541,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		BB50000228D92100003FB942 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB60000128D92100003FB942 /* WheaterPacketTunnel */;
+			targetProxy = BB50000128D92100003FB942 /* PBXContainerItemProxy */;
+		};
 		2B2BB26228BFB36600A8B2A3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 2B2BB24F28BFB36300A8B2A3 /* YumikoToysRR */;
@@ -490,6 +564,62 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		BB70000128D92100003FB942 /* Debug configuration for PBXNativeTarget "WheaterPacketTunnel" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_ENTITLEMENTS = WheaterPacketTunnel/WheaterPacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2700;
+				DEVELOPMENT_TEAM = E3AH4URHDH;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WheaterPacketTunnel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WheaterPacketTunnel;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 4.8.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.PacketTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BB70000228D92100003FB942 /* Release configuration for PBXNativeTarget "WheaterPacketTunnel" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_ENTITLEMENTS = WheaterPacketTunnel/WheaterPacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2700;
+				DEVELOPMENT_TEAM = E3AH4URHDH;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WheaterPacketTunnel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WheaterPacketTunnel;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 4.8.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.PacketTunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		2B2BB27228BFB36600A8B2A3 /* Debug configuration for PBXProject "YumikoToysRR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -618,6 +748,7 @@
 				DEVELOPMENT_TEAM = E3AH4URHDH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = wheater/wheater.entitlements;
 				INFOPLIST_FILE = wheater/Info.plist;
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We need your location";
 				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "We need your location";
@@ -653,6 +784,7 @@
 				DEVELOPMENT_TEAM = E3AH4URHDH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = wheater/wheater.entitlements;
 				INFOPLIST_FILE = wheater/Info.plist;
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We need your location";
 				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "We need your location";
@@ -813,6 +945,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		BB80000128D92100003FB942 /* Build configuration list for PBXNativeTarget "WheaterPacketTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB70000128D92100003FB942 /* Debug configuration for PBXNativeTarget "WheaterPacketTunnel" */,
+				BB70000228D92100003FB942 /* Release configuration for PBXNativeTarget "WheaterPacketTunnel" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		2B2BB24B28BFB36300A8B2A3 /* Build configuration list for PBXProject "YumikoToysRR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

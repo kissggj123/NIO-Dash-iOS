@@ -2175,7 +2175,7 @@ private struct NIOAnimeLightsCard: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(Color.black)
                         } else if position {
-                            Image(systemName: "headlight.daytime.running")
+                            Image(systemName: "lightbulb.2.fill")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(Color.white)
                             Text("示廓位置灯点亮中")
@@ -2240,7 +2240,7 @@ private struct NIOAnimeLightsCard: View {
                         )
                         lightTile(
                             name: "示廓位置灯",
-                            icon: "headlight.daytime.running",
+                            icon: "lightbulb.2.fill",
                             isOn: position,
                             activeColor: lavenderDream,
                             onLabel: "已开启 (示宽中)",
