@@ -47,7 +47,7 @@ const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n
     if (qp.sign)       store.sign          = qp.sign;
     if (qp.timestamp)  store.timestamp     = qp.timestamp;
 
-    const isRvs    = url.includes("icar.nio.com") && url.includes("/status");
+    const isRvs    = (url.includes("icar.nio.com") || url.includes("nio.com/api/2/rvs") || url.includes("nio.com/api/1/vehicle")) && url.includes("/status");
     const isWidget = url.includes("/widget/info");
 
     store.change_url  = DEFAULT_CHANGE_URL;
@@ -55,22 +55,30 @@ const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n
     if (token) { store.change_token = token; store.checkin_token = token; }
 
     if (isRvs) {
-        store.mode = "url"; store.vehicle_url = url; store.tyre_ready = true;
+        store.rvs_url = url;
+        store.vehicle_url = url;
+        store.mode = "url";
+        store.tyre_ready = true;
     } else if (isWidget) {
         store.widget_url = url;
-        if (!store.vehicle_url || store.mode === "widget") { store.vehicle_url = url; store.mode = "widget"; }
+        if (!store.vehicle_url || store.mode === "widget") {
+            store.vehicle_url = url;
+            store.mode = "widget";
+        }
     }
 
     $persistentStore.write(JSON.stringify(store, null, 2), STORE_KEY);
 
     // ── 直推到 YumikoToys App ──
     const payload = JSON.stringify({
-        vehicle_token: store.vehicle_token || "",
-        vehicle_id:    store.vehicle_id    || "",
-        device_id:     store.device_id     || "",
-        vehicle_url:   store.vehicle_url   || "",
-        sign:          store.sign          || "",
-        timestamp:     store.timestamp     || "",
+        vehicle_token: store.vehicle_token || token || "",
+        vehicle_id:    store.vehicle_id    || qp.vehicle_id || "",
+        device_id:     store.device_id     || qp.device_id || "",
+        vehicle_url:   store.rvs_url       || store.vehicle_url || url,
+        rvs_url:       store.rvs_url       || (isRvs ? url : ""),
+        widget_url:    store.widget_url    || (isWidget ? url : ""),
+        sign:          store.sign          || qp.sign || "",
+        timestamp:     store.timestamp     || qp.timestamp || "",
         source:        "shadowrocket_module"
     });
 
@@ -84,8 +92,8 @@ const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n
     // ── Shadowrocket 系统通知 ──
     try {
         if (typeof $notification !== "undefined") {
-            const title = isRvs ? "🎉 蔚来完整凭证已捕获！" : "🔑 Token 已捕获";
-            const body  = isRvs ? "含 4 轮胎压，App 自动回填中" : "请在蔚来 App 爱车页下拉刷新获取完整凭证";
+            const title = isRvs ? "🎉 蔚来完整遥测 (胎压/FOTA) 已捕获！" : "🔑 Token 已捕获";
+            const body  = isRvs ? "含 4 轮胎压与车机固件，App 自动回填中" : "请在蔚来 App 爱车页下拉刷新获取全量胎压与 FOTA";
             $notification.post(title, body, "");
         }
     } catch (_) {}

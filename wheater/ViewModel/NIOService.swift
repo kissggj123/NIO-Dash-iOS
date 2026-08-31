@@ -34,6 +34,12 @@ final class NIOService: ObservableObject {
     @Published var nioVehicleSignAlgo: String = UserDefaults.standard.string(forKey: "nio_vehicle_sign_algo") ?? "md5_append" {
         didSet { UserDefaults.standard.set(nioVehicleSignAlgo, forKey: "nio_vehicle_sign_algo") }
     }
+    @Published var nioVehicleApiSign: String = UserDefaults.standard.string(forKey: "nio_vehicle_sign") ?? "" {
+        didSet { UserDefaults.standard.set(nioVehicleApiSign, forKey: "nio_vehicle_sign") }
+    }
+    @Published var nioVehicleApiTimestamp: String = UserDefaults.standard.string(forKey: "nio_vehicle_timestamp") ?? "" {
+        didSet { UserDefaults.standard.set(nioVehicleApiTimestamp, forKey: "nio_vehicle_timestamp") }
+    }
     @Published var nioVehicleAccessToken: String = UserDefaults.standard.string(forKey: "nio_vehicle_token") ?? "" {
         didSet { UserDefaults.standard.set(nioVehicleAccessToken, forKey: "nio_vehicle_token") }
     }
@@ -118,17 +124,17 @@ final class NIOService: ObservableObject {
     private var checkinFile: URL { dataDirectory.appendingPathComponent("checkin.json") }
     private var logsFile: URL { dataDirectory.appendingPathComponent("logs.json") }
 
-    private var cachedTyreStatus: [String: NIOJSONValue]? = nil
-    private var cachedLvBattStatus: [String: NIOJSONValue]? = nil
-    private var cachedFotaStatus: NIOFotaStatus? = nil
-    private var cachedDoorStatus: [String: NIOJSONValue]? = nil
-    private var cachedKeyStatus: [String: NIOJSONValue]? = nil
-    private var cachedHeatingStatus: [String: NIOJSONValue]? = nil
-    private var cachedWindowStatus: [String: NIOJSONValue]? = nil
-    private var cachedFrdgStatus: [String: NIOJSONValue]? = nil
-    private var cachedBoxStatus: [String: NIOJSONValue]? = nil
-    private var cachedLightStatus: [String: NIOJSONValue]? = nil
-    private var cachedOffcarStatus: [String: NIOJSONValue]? = nil
+    var cachedTyreStatus: [String: NIOJSONValue]? = nil
+    var cachedLvBattStatus: [String: NIOJSONValue]? = nil
+    var cachedFotaStatus: NIOFotaStatus? = nil
+    var cachedDoorStatus: [String: NIOJSONValue]? = nil
+    var cachedKeyStatus: [String: NIOJSONValue]? = nil
+    var cachedHeatingStatus: [String: NIOJSONValue]? = nil
+    var cachedWindowStatus: [String: NIOJSONValue]? = nil
+    var cachedFrdgStatus: [String: NIOJSONValue]? = nil
+    var cachedBoxStatus: [String: NIOJSONValue]? = nil
+    var cachedLightStatus: [String: NIOJSONValue]? = nil
+    var cachedOffcarStatus: [String: NIOJSONValue]? = nil
     private var lastFetchTimestamp: Date? = nil
 
     private init() {
@@ -247,10 +253,14 @@ final class NIOService: ObservableObject {
             widgetStatus = await fetchWidgetData(url: widgetUrl, token: token)
         }
 
-        // 2. 获取 RVS 全量遥测状态 (低频全量)
+        // 2. 获取 RVS 全量遥测状态 (多链路尝试，解决胎压、FOTA 与车门非实时问题)
         var rvsStatus: NIOVehicleStatus? = nil
-        if let rvsUrl = buildRvsTargetURL() {
-            rvsStatus = await fetchRvsData(url: rvsUrl, token: token)
+        let rvsUrls = buildRvsTargetURLs()
+        for rvsUrl in rvsUrls {
+            if let st = await fetchRvsData(url: rvsUrl, token: token) {
+                rvsStatus = st
+                break
+            }
         }
 
         // 3. 智能融合两路 API 数据与持久化落盘缓存 (Smart Merge)
@@ -269,7 +279,7 @@ final class NIOService: ObservableObject {
             saveJSONAsync(merged, to: vehicleFile)
             appendSnapshot(merged)
         } else if self.vehicleData == nil {
-            self.lastError = "车辆数据拉取失败，请检查网络或重新抓包"
+            self.lastError = "车辆数据拉取失败，请在蔚来 App 爱车页下拉刷新后重新嗅探"
         }
     }
 
@@ -303,19 +313,59 @@ final class NIOService: ObservableObject {
         return nil
     }
 
-    private func buildRvsTargetURL() -> URL? {
-        if !nioVehicleApiURL.isEmpty {
+    private func buildRvsTargetURLs() -> [URL] {
+        var urls: [URL] = []
+        let vid = nioVehicleId.isEmpty ? (NIOVehicleLib.extractQueryParam(from: nioVehicleApiURL, key: "vehicle_id") ?? "") : nioVehicleId
+        let devId = nioDeviceId.isEmpty ? (NIOVehicleLib.extractQueryParam(from: nioVehicleApiURL, key: "device_id") ?? "iOS_Device_\(vid.prefix(6))") : nioDeviceId
+        let ts = String(Int(Date().timeIntervalSince1970))
+
+        // 1. 如果用户有直接抓到的 icar.nio.com 完整 URL，优先尝试
+        if !nioVehicleApiURL.isEmpty && nioVehicleApiURL.contains("icar.nio.com") {
             let trimmed = nioVehicleApiURL.trimmingCharacters(in: .whitespacesAndNewlines)
             var fullUrl = trimmed
             if !trimmed.lowercased().hasPrefix("http://") && !trimmed.lowercased().hasPrefix("https://") {
                 fullUrl = "https://\(trimmed)"
             }
-            if let resigned = NIOVehicleLib.autoResignRvsURL(fullUrl, secret: nioVehicleSignSecret, algo: nioVehicleSignAlgo) {
-                return URL(string: resigned)
+            if let resigned = NIOVehicleLib.autoResignRvsURL(fullUrl, secret: nioVehicleSignSecret, algo: nioVehicleSignAlgo),
+               let u = URL(string: resigned) {
+                urls.append(u)
             }
-            return URL(string: fullUrl)
+            if let u = URL(string: fullUrl), !urls.contains(u) {
+                urls.append(u)
+            }
         }
-        return nil
+
+        // 2. 基于 vehicleId 动态构建 RVS 遥测候选 URL
+        if !vid.isEmpty {
+            let baseCandidates = [
+                "https://icar.nio.com/api/2/rvs/vehicle/\(vid)/status",
+                "https://icar.nio.com/api/1/vehicle/\(vid)/status",
+                "https://gateway-front-external.nio.com/moat/1100367/api/v1/otd/car/ext/general/vehicle/\(vid)/status",
+                "https://app.nio.com/app/api/icar/v2/vehicle/\(vid)/status"
+            ]
+
+            for base in baseCandidates {
+                var params: [String: String] = [
+                    "region": "cn",
+                    "lang": "zh-CN",
+                    "app_ver": "6.5.3",
+                    "device_id": devId,
+                    "timestamp": ts
+                ]
+                if !nioVehicleSignSecret.isEmpty {
+                    params["sign"] = NIOVehicleLib.computeWidgetSign(params: params, secret: nioVehicleSignSecret, algo: nioVehicleSignAlgo)
+                } else if !nioVehicleApiSign.isEmpty {
+                    params["sign"] = nioVehicleApiSign
+                }
+                var comp = URLComponents(string: base)
+                comp?.queryItems = params.keys.sorted().map { URLQueryItem(name: $0, value: params[$0]) }
+                if let u = comp?.url, !urls.contains(u) {
+                    urls.append(u)
+                }
+            }
+        }
+
+        return urls
     }
 
     private func fetchWidgetData(url: URL, token: String) async -> NIOVehicleStatus? {
@@ -358,7 +408,7 @@ final class NIOService: ObservableObject {
     private func fetchRvsData(url: URL, token: String) async -> NIOVehicleStatus? {
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("application/json,text/json,text/plain", forHTTPHeaderField: "Accept")
+        req.setValue("application/json,text/json,text/plain,*/*", forHTTPHeaderField: "Accept")
         req.setValue("zh-CN,zh-Hans;q=0.9", forHTTPHeaderField: "Accept-Language")
         let appVer = NIOVehicleLib.extractQueryParam(from: url.absoluteString, key: "app_ver") ?? "6.5.3"
         req.setValue("NextevCar/\(appVer) (com.do1.WeiLaiApp; build:2586; iOS 26.2.1) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")

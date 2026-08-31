@@ -103,12 +103,15 @@ final class NIOCredentialReceiver: ObservableObject {
         let vehicleId  = json["vehicle_id"]    as? String ?? ""
         let deviceId   = json["device_id"]     as? String ?? ""
         let vehicleUrl = json["vehicle_url"]   as? String ?? ""
+        let rvsUrl     = json["rvs_url"]       as? String ?? ""
         let sign       = json["sign"]          as? String ?? ""
+        let timestamp  = json["timestamp"]     as? String ?? ""
 
         Task { @MainActor [weak self] in
             self?.applyCredentials(
                 token: token, vehicleId: vehicleId,
-                deviceId: deviceId, vehicleUrl: vehicleUrl, sign: sign
+                deviceId: deviceId, vehicleUrl: !rvsUrl.isEmpty ? rvsUrl : vehicleUrl,
+                sign: sign, timestamp: timestamp
             )
         }
     }
@@ -117,13 +120,16 @@ final class NIOCredentialReceiver: ObservableObject {
 
     @MainActor
     private func applyCredentials(token: String, vehicleId: String,
-                                  deviceId: String, vehicleUrl: String, sign: String) {
+                                  deviceId: String, vehicleUrl: String,
+                                  sign: String, timestamp: String = "") {
         let service = NIOService.shared
         var applied: [String] = []
 
         if !token.isEmpty     { service.nioVehicleAccessToken = token;  applied.append("Token") }
         if !vehicleId.isEmpty { service.nioVehicleId         = vehicleId; applied.append("VehicleID") }
         if !deviceId.isEmpty  { service.nioDeviceId          = deviceId;  applied.append("DeviceID") }
+        if !sign.isEmpty      { service.nioVehicleApiSign    = sign }
+        if !timestamp.isEmpty { service.nioVehicleApiTimestamp = timestamp }
         if !vehicleUrl.isEmpty, vehicleUrl.contains("nio.com") {
             service.nioVehicleApiURL = vehicleUrl
             applied.append("API URL")
