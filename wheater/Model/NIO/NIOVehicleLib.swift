@@ -833,27 +833,39 @@ enum NIOVehicleLib {
         var verNum = ""
         if raw.contains("*") {
             let parts = raw.components(separatedBy: "*")
-            if parts.count > 1, let match = parts.last?.range(of: #"\d+\.\d+(\.\d+)?"#, options: .regularExpression) {
+            if parts.count > 1, let match = parts.last?.range(of: #"\d+(\.\d+)+"#, options: .regularExpression) {
                 verNum = String(parts.last![match])
             }
         }
         if verNum.isEmpty {
-            let pattern = #"\b\d+\.\d+(\.\d+)?(\.\d+)?\b"#
+            let pattern = #"\d+(\.\d+)+"#
             if let match = raw.range(of: pattern, options: .regularExpression) {
                 verNum = String(raw[match])
             }
         }
         if verNum.isEmpty {
-            verNum = raw.isEmpty ? "智能系统" : raw
+            let intPattern = #"(?:v|ver|version|V)?\s*(\d{1,2})\b"#
+            if let match = raw.range(of: intPattern, options: .regularExpression) {
+                verNum = String(raw[match])
+            }
+        }
+        if verNum.isEmpty {
+            let cleaned = raw.replacingOccurrences(of: os, with: "")
+                .replacingOccurrences(of: "智能系统", with: "")
+                .replacingOccurrences(of: "系统", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleaned.isEmpty {
+                verNum = cleaned
+            }
         }
 
         let fullDisplay: String
-        if verNum == "智能系统" {
-            fullDisplay = os + " 智能系统"
-        } else if raw.hasPrefix(os) {
+        if !verNum.isEmpty {
             fullDisplay = "\(os) \(verNum)"
+        } else if !raw.isEmpty && raw != "智能系统" {
+            fullDisplay = raw
         } else {
-            fullDisplay = "\(os) \(verNum)"
+            fullDisplay = "\(os) 智能系统"
         }
 
         return FotaDisplayInfo(osName: os, shortVer: verNum, fullDisplay: fullDisplay, rawVersion: raw)

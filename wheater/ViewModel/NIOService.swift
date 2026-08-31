@@ -975,8 +975,8 @@ final class NIOService: ObservableObject {
 
         // 车机固件短版本号（取不到或仅有占位文案时不显示）
         let rawFotaVer = status.fotaStatus?.currentVersion ?? ""
-        let shortFotaVer = NIOVehicleLib.shortFotaVersion(rawFotaVer)
-        let vehicleVersion = (rawFotaVer.isEmpty || shortFotaVer == "智能系统") ? nil : shortFotaVer
+        let fotaInfo = NIOVehicleLib.parseFotaInfo(version: rawFotaVer)
+        let vehicleVersion = fotaInfo.shortVer.isEmpty ? nil : fotaInfo.fullDisplay
 
         // 充电目标（上限优先，锁电兜底）与充满 ETA
         let rawTarget = socStatus?.maxSoc ?? socStatus?.lockSoc ?? 0
