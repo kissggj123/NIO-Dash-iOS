@@ -40,6 +40,10 @@
 		AA2000072C3E846A00EED680 /* NIO/IOSNIODashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000072C3E846500EED680 /* NIO/IOSNIODashboardView.swift */; };
 		AA2000082C3E846A00EED680 /* NIO/IOSAboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000082C3E846500EED680 /* NIO/IOSAboutView.swift */; };
 		AA2000092C3E846A00EED680 /* NIO/NIOPixelLaunchSplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000092C3E846500EED680 /* NIO/NIOPixelLaunchSplashView.swift */; };
+		AA2000142C3E846A00EED680 /* NIO/NIOLaunchStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000142C3E846500EED680 /* NIO/NIOLaunchStyle.swift */; };
+		AA2000152C3E846A00EED680 /* NIO/NIOEnergyBootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000152C3E846500EED680 /* NIO/NIOEnergyBootView.swift */; };
+		AA2000162C3E846A00EED680 /* NIO/NIOMinimalBootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000162C3E846500EED680 /* NIO/NIOMinimalBootView.swift */; };
+		AA2000172C3E846A00EED680 /* NIO/NIODashboardCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000172C3E846500EED680 /* NIO/NIODashboardCards.swift */; };
 		AA2000102C3E846A00EED680 /* Services/VPN/NIOVPNCertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */; };
 		AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */; };
 		AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */; };
@@ -117,6 +121,10 @@
 		AA1000072C3E846500EED680 /* NIO/IOSNIODashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/IOSNIODashboardView.swift; sourceTree = "<group>"; };
 		AA1000082C3E846500EED680 /* NIO/IOSAboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/IOSAboutView.swift; sourceTree = "<group>"; };
 		AA1000092C3E846500EED680 /* NIO/NIOPixelLaunchSplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOPixelLaunchSplashView.swift; sourceTree = "<group>"; };
+		AA1000142C3E846500EED680 /* NIO/NIOLaunchStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOLaunchStyle.swift; sourceTree = "<group>"; };
+		AA1000152C3E846500EED680 /* NIO/NIOEnergyBootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOEnergyBootView.swift; sourceTree = "<group>"; };
+		AA1000162C3E846500EED680 /* NIO/NIOMinimalBootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOMinimalBootView.swift; sourceTree = "<group>"; };
+		AA1000172C3E846500EED680 /* NIO/NIODashboardCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODashboardCards.swift; sourceTree = "<group>"; };
 		AA1000102C3E846500EED680 /* Services/VPN/NIOVPNCertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOVPNCertManager.swift; sourceTree = "<group>"; };
 		AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOMitmEngine.swift; sourceTree = "<group>"; };
 		AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOVPNManager.swift; sourceTree = "<group>"; };
@@ -239,6 +247,10 @@
 				AA1000072C3E846500EED680 /* NIO/IOSNIODashboardView.swift */,
 				AA1000082C3E846500EED680 /* NIO/IOSAboutView.swift */,
 				AA1000092C3E846500EED680 /* NIO/NIOPixelLaunchSplashView.swift */,
+				AA1000142C3E846500EED680 /* NIO/NIOLaunchStyle.swift */,
+				AA1000152C3E846500EED680 /* NIO/NIOEnergyBootView.swift */,
+				AA1000162C3E846500EED680 /* NIO/NIOMinimalBootView.swift */,
+				AA1000172C3E846500EED680 /* NIO/NIODashboardCards.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -436,6 +448,10 @@
 				AA2000072C3E846A00EED680 /* NIO/IOSNIODashboardView.swift in Sources */,
 				AA2000082C3E846A00EED680 /* NIO/IOSAboutView.swift in Sources */,
 				AA2000092C3E846A00EED680 /* NIO/NIOPixelLaunchSplashView.swift in Sources */,
+				AA2000142C3E846A00EED680 /* NIO/NIOLaunchStyle.swift in Sources */,
+				AA2000152C3E846A00EED680 /* NIO/NIOEnergyBootView.swift in Sources */,
+				AA2000162C3E846A00EED680 /* NIO/NIOMinimalBootView.swift in Sources */,
+				AA2000172C3E846A00EED680 /* NIO/NIODashboardCards.swift in Sources */,
 				AA2000102C3E846A00EED680 /* Services/VPN/NIOVPNCertManager.swift in Sources */,
 				AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */,
 				AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */,
@@ -545,7 +561,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -600,7 +616,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
@@ -631,12 +647,12 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.8.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -666,12 +682,12 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.8.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -689,8 +705,8 @@
 				CURRENT_PROJECT_VERSION = 2700;
 				DEVELOPMENT_TEAM = 53329G7Z28;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 4.8.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -709,8 +725,8 @@
 				CURRENT_PROJECT_VERSION = 2700;
 				DEVELOPMENT_TEAM = 53329G7Z28;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 4.8.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -728,7 +744,7 @@
 				CURRENT_PROJECT_VERSION = 2700;
 				DEVELOPMENT_TEAM = 53329G7Z28;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 4.8.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -746,7 +762,7 @@
 				CURRENT_PROJECT_VERSION = 2700;
 				DEVELOPMENT_TEAM = 53329G7Z28;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 4.8.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -769,13 +785,13 @@
 				INFOPLIST_FILE = WheaterStatus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WheaterStatus;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 4.8.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.WheaterStatus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -798,13 +814,13 @@
 				INFOPLIST_FILE = WheaterStatus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WheaterStatus;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 4.8.0;
+				MARKETING_VERSION = 5.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.WheaterStatus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

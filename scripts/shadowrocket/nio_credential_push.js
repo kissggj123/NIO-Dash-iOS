@@ -31,8 +31,15 @@ const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n
     let token = headers["Authorization"] || headers["authorization"] || "";
     if (token.startsWith("Bearer ")) token = token.slice(7).trim();
 
+    // ── 防多端登录：同步捕获真实设备指纹 ──
+    // App 端回放时使用同一 User-Guid / User-Agent / app_ver，
+    // 服务器才不会把回放请求判定为多端登录而踢 token。
+    const userGuid  = headers["User-Guid"] || headers["user-guid"] || "";
+    const userAgent = headers["User-Agent"] || headers["user-agent"] || "";
+
     // ── 提取 URL 参数 ──
     const qp = parseQS(url);
+    const appVer = qp.app_ver || (url.match(/app_ver=([\d.]+)/) || [])[1] || "";
 
     // ── 无有效凭证则跳过 ──
     if (!token && !qp.vehicle_id) { $done({}); return; }
@@ -44,13 +51,16 @@ const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n
     if (token)         store.vehicle_token = token;
     if (qp.vehicle_id) store.vehicle_id    = qp.vehicle_id;
     if (qp.device_id)  store.device_id     = qp.device_id;
+    else if (!store.device_id && userGuid) store.device_id = userGuid; // 网关请求无 query device_id，请求头 User-Guid 兜底
     if (qp.sign)       store.sign          = qp.sign;
     if (qp.timestamp)  store.timestamp     = qp.timestamp;
+    if (appVer)        store.app_ver       = appVer;
+    if (userAgent)     store.user_agent    = userAgent;
 
     const isRvs    = (url.includes("icar.nio.com") || url.includes("nio.com/api/2/rvs") || url.includes("nio.com/api/1/vehicle")) && url.includes("/status");
     const isWidget = url.includes("/widget/info");
 
-    store.change_url  = DEFAULT_CHANGE_URL;
+    store.change_url  = appVer ? DEFAULT_CHANGE_URL.replace(/app_ver=[\d.]+/, "app_ver=" + appVer) : DEFAULT_CHANGE_URL;
     store.checkin_url = DEFAULT_CHECKIN_URL;
     if (token) { store.change_token = token; store.checkin_token = token; }
 
@@ -79,6 +89,8 @@ const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n
         widget_url:    store.widget_url    || (isWidget ? url : ""),
         sign:          store.sign          || qp.sign || "",
         timestamp:     store.timestamp     || qp.timestamp || "",
+        app_ver:       store.app_ver       || appVer || "",
+        user_agent:    store.user_agent    || userAgent || "",
         source:        "shadowrocket_module"
     });
 

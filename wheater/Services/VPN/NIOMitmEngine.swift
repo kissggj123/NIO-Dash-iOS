@@ -275,7 +275,7 @@ final class NIOMitmEngine: ObservableObject {
         // 广播刷新
         NotificationCenter.default.post(name: NSNotification.Name("NIO_SNIFF_SUCCESS"), object: nil)
         if !appliedFields.isEmpty {
-            service.refreshAll()
+            service.refreshAll(force: true)
         }
     }
 

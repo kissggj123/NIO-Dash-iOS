@@ -12,6 +12,7 @@ from mitmproxy import ctx, http
 import json
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -32,6 +33,9 @@ captured_data = {
     "sign_secret": os.environ.get("NIO_VEHICLE_SIGN_SECRET", ""),
     "sign_algo": "md5_append",
     "resign_verified": False,
+    "app_ver": "",
+    "user_guid": "",
+    "user_agent": "",
     "change_url": "",
     "change_token": "",
     "checkin_url": "",
@@ -144,9 +148,6 @@ def search_json_keys(obj, target_keys):
                 results.update(search_json_keys(item, target_keys))
     return results
 
-def persist_results():
-    """保存抓包配置到本地文件并同步到剪贴板"""
-    global has_notified_ready
 is_rvs_status_captured = False
 
 def persist_results(is_final_rvs: bool = False):
@@ -157,7 +158,7 @@ def persist_results(is_final_rvs: bool = False):
 
     with save_lock:
         token = captured_data["vehicle_token"] or captured_data["change_token"] or captured_data["checkin_token"]
-        
+
         # 若已截获 Token 但未单独进入换电/签到页，自动补全默认配置
         if token:
             if not captured_data["vehicle_token"]:
@@ -170,6 +171,14 @@ def persist_results(is_final_rvs: bool = False):
                 captured_data["change_url"] = DEFAULT_CHANGE_URL
             if not captured_data["checkin_url"]:
                 captured_data["checkin_url"] = DEFAULT_CHECKIN_URL
+
+        # 防多端登录：把捕获到的真实 app_ver 同步进 change/checkin URL，
+        # 避免「URL 用 6.5.3、UA 用真机 6.7.x」的版本错配被风控识别
+        app_ver = captured_data.get("app_ver", "")
+        if app_ver:
+            for key in ("change_url", "checkin_url"):
+                if captured_data.get(key):
+                    captured_data[key] = re.sub(r"app_ver=[\d.]+", f"app_ver={app_ver}", captured_data[key])
 
         # 尝试自校验重签名
         verify_and_test_resign()
@@ -185,6 +194,9 @@ def persist_results(is_final_rvs: bool = False):
             f.write(f'NIO_DEVICE_ID="{captured_data["device_id"]}"\n')
             f.write(f'NIO_VEHICLE_SIGN_SECRET="{captured_data["sign_secret"]}"\n')
             f.write(f'NIO_VEHICLE_SIGN_ALGO="{captured_data["sign_algo"]}"\n')
+            f.write(f'NIO_APP_VER="{captured_data["app_ver"]}"\n')
+            f.write(f'NIO_USER_GUID="{captured_data["user_guid"]}"\n')
+            f.write(f'NIO_USER_AGENT="{captured_data["user_agent"]}"\n')
             f.write(f'NIO_CHANGE_API_URL="{captured_data["change_url"]}"\n')
             f.write(f'NIO_CHANGE_ACCESS_TOKEN="{captured_data["change_token"]}"\n')
             f.write(f'NIO_CHECKIN_API_URL="{captured_data["checkin_url"]}"\n')
@@ -209,6 +221,10 @@ def persist_results(is_final_rvs: bool = False):
                 print(f"  • Vehicle ID  : {captured_data['vehicle_id']}")
             if captured_data["device_id"]:
                 print(f"  • Device ID   : {captured_data['device_id']}")
+            if captured_data["user_guid"]:
+                print(f"  • User-Guid   : {captured_data['user_guid'][:18]}... (防多端登录指纹)")
+            if captured_data["app_ver"]:
+                print(f"  • App 版本    : {captured_data['app_ver']} (已同步 change/checkin URL)")
             if captured_data["sign_secret"]:
                 print(f"  • Sign Secret : {captured_data['sign_secret'][:6]}****** (已捕获/配置)")
                 if captured_data["resign_verified"]:
@@ -242,9 +258,25 @@ def request(flow: http.HTTPFlow) -> None:
     parsed_url = urlparse(full_url)
     query_params = {k: v[0] for k, v in parse_qs(parsed_url.query).items()}
 
+    # 防多端登录：捕获真实设备指纹（User-Guid / User-Agent / app_ver）。
+    # App 端回放时使用同一指纹，服务器才不会把回放请求判定为多端登录而踢 token。
+    app_ver = query_params.get("app_ver", "")
+    if app_ver and app_ver != captured_data.get("app_ver"):
+        captured_data["app_ver"] = app_ver
+    req_ua = headers.get("User-Agent", "")
+    if req_ua and req_ua != captured_data.get("user_agent"):
+        captured_data["user_agent"] = req_ua
+    req_guid = headers.get("User-Guid", "") or headers.get("user-guid", "")
+    if req_guid:
+        captured_data["user_guid"] = req_guid
+        # 订单/签到网关等请求无 query device_id，用请求头 User-Guid 兜底
+        if not captured_data.get("device_id"):
+            captured_data["device_id"] = req_guid
+
     # 记录典型标头用于模拟原生请求
     captured_data["captured_headers"] = {
         "User-Agent": headers.get("User-Agent", ""),
+        "User-Guid": req_guid,
         "Host": headers.get("Host", ""),
         "Accept": headers.get("Accept", ""),
         "Accept-Language": headers.get("Accept-Language", "")

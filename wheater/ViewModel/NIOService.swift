@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import UIKit
 import ActivityKit
 
 @MainActor
@@ -66,6 +67,7 @@ final class NIOService: ObservableObject {
 
     @Published var vehicleData: NIOVehicleResponse?
     @Published var serviceSummary: NIOServiceSummary?
+    @Published var recentOrders: [NIOServiceOrder] = []
     @Published var checkinData: NIOCheckinData?
     @Published var history: [NIOVehicleSnapshot] = []
     @Published var dailyPaths: [NIODailyPath] = []
@@ -99,6 +101,37 @@ final class NIOService: ObservableObject {
         return URLSession(configuration: config)
     }()
 
+    // 节流时间戳：change / checkin 变化频率低，轮询时限制最小间隔，
+    // 避免高频请求触发风控导致 token 被判定异常而快速失效
+    private var lastChangeFetch: Date?
+    private var lastCheckinFetch: Date?
+
+    // MARK: - 统一设备指纹（防止服务器判定多端登录导致 token 过快失效）
+    //
+    // 服务器将 token 与登录设备指纹绑定；同一 token 出现多种 build/iOS 组合
+    // 的 User-Agent 交替会被判定为多端登录并踢下线。因此所有请求共享同一指纹：
+    //  · app_ver 取自抓包 URL（与签名请求同源），build 号与 app_ver 世代匹配，
+    //    避免「NextevCar/6.7.15 + build:2586」这类不存在的组合被识别为伪造客户端
+    //  · iOS 版本使用本机真实系统版本，与真机蔚来 App 指纹保持一致
+    //  · User-Guid 回放抓包的 device_id，与登录设备绑定同一标识
+
+    private func unifiedUserAgent(for url: URL?) -> String {
+        // 优先级：当前请求 URL > 直推捕获的 App 版本 > 抓包 URL > 兜底
+        let captured = url.flatMap { NIOVehicleLib.extractQueryParam(from: $0.absoluteString, key: "app_ver") }
+            ?? UserDefaults.standard.string(forKey: "nio_captured_app_ver").flatMap { $0.isEmpty ? nil : $0 }
+            ?? NIOVehicleLib.extractQueryParam(from: nioVehicleApiURL, key: "app_ver")
+        let version = captured ?? "6.7.15"
+        let build = version.compare("6.6.0", options: .numeric) == .orderedAscending ? 2586 : 2644
+        return "NextevCar/\(version) (com.do1.WeiLaiApp; build:\(build); iOS \(UIDevice.current.systemVersion)) Alamofire/5.9.1"
+    }
+
+    private func applyDeviceFingerprint(to req: inout URLRequest, url: URL?) {
+        req.setValue(unifiedUserAgent(for: url), forHTTPHeaderField: "User-Agent")
+        if !nioDeviceId.isEmpty {
+            req.setValue(nioDeviceId, forHTTPHeaderField: "User-Guid")
+        }
+    }
+
     private var dataDirectory: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let dir = docs.appendingPathComponent("NIO_Data", isDirectory: true)
@@ -123,6 +156,7 @@ final class NIOService: ObservableObject {
     private var historyFile: URL { dataDirectory.appendingPathComponent("history.json") }
     private var checkinFile: URL { dataDirectory.appendingPathComponent("checkin.json") }
     private var logsFile: URL { dataDirectory.appendingPathComponent("logs.json") }
+    private var ordersFile: URL { dataDirectory.appendingPathComponent("orders.json") }
 
     var cachedTyreStatus: [String: NIOJSONValue]? = nil
     var cachedLvBattStatus: [String: NIOJSONValue]? = nil
@@ -136,6 +170,11 @@ final class NIOService: ObservableObject {
     var cachedLightStatus: [String: NIOJSONValue]? = nil
     var cachedOffcarStatus: [String: NIOJSONValue]? = nil
     private var lastFetchTimestamp: Date? = nil
+    /// Widget is inexpensive and keeps the live activity fresh. Full RVS blocks
+    /// (tyre, FOTA, doors…) are only refreshed when stale, explicitly requested,
+    /// or still absent; this avoids repeatedly hitting the private telemetry API.
+    private var lastTelemetryFetch: Date? = nil
+    private let telemetryRefreshInterval: TimeInterval = 15 * 60
 
     private init() {
         loadPersistedData()
@@ -212,11 +251,12 @@ final class NIOService: ObservableObject {
 
     // MARK: - 刷新全部
 
-    func refreshAll() {
+    /// 全量刷新。轮询走默认 force=false（change/checkin 受节流），用户手动刷新传 force=true。
+    func refreshAll(force: Bool = false) {
         Task {
-            async let v: () = fetchVehicle(force: true)
-            async let c: () = fetchChange()
-            async let k: () = fetchCheckin()
+            async let v: () = fetchVehicle(force: force)
+            async let c: () = fetchChange(force: force)
+            async let k: () = fetchCheckin(force: force)
             _ = await (v, c, k)
             self.lastVehicleFetch = Date()
         }
@@ -253,14 +293,31 @@ final class NIOService: ObservableObject {
             widgetStatus = await fetchWidgetData(url: widgetUrl, token: token)
         }
 
-        // 2. 获取 RVS 全量遥测状态 (多链路尝试，解决胎压、FOTA 与车门非实时问题)
+        // 2. Full RVS telemetry is deliberately decoupled from the high-frequency
+        // Widget path. A user may paste several signed captures (one per line),
+        // e.g. a lightweight live-status request plus a full tyre/FOTA request.
+        // Each request is replayed unchanged because its `field` list is signed.
+        let hasMissingTelemetry = !NIOVehicleLib.extractTyreInfo(self.vehicleData?.data?.status?.tyreStatus).hasData
+            || (self.vehicleData?.data?.status?.fotaStatus?.currentVersion?.isEmpty != false)
+        let shouldRefreshTelemetry = force || hasMissingTelemetry
+            || lastTelemetryFetch.map { Date().timeIntervalSince($0) >= telemetryRefreshInterval } ?? true
         var rvsStatus: NIOVehicleStatus? = nil
-        let rvsUrls = buildRvsTargetURLs()
-        for rvsUrl in rvsUrls {
-            if let st = await fetchRvsData(url: rvsUrl, token: token) {
-                rvsStatus = st
-                break
+        if shouldRefreshTelemetry {
+            let rvsStatuses = await withTaskGroup(of: NIOVehicleStatus?.self) { group in
+                for rvsURL in buildRvsTargetURLs() {
+                    group.addTask { [weak self] in
+                        guard let self else { return nil }
+                        return await self.fetchRvsData(url: rvsURL, token: token)
+                    }
+                }
+                var values: [NIOVehicleStatus] = []
+                for await value in group {
+                    if let value { values.append(value) }
+                }
+                return values
             }
+            rvsStatus = mergeRVSStatuses(rvsStatuses)
+            if rvsStatus != nil { lastTelemetryFetch = Date() }
         }
 
         // 3. 智能融合两路 API 数据与持久化落盘缓存 (Smart Merge)
@@ -319,9 +376,15 @@ final class NIOService: ObservableObject {
         let devId = nioDeviceId.isEmpty ? (NIOVehicleLib.extractQueryParam(from: nioVehicleApiURL, key: "device_id") ?? "iOS_Device_\(vid.prefix(6))") : nioDeviceId
         let ts = String(Int(Date().timeIntervalSince1970))
 
-        // 1. 如果用户有直接抓到的 icar.nio.com 完整 URL，优先尝试
-        if !nioVehicleApiURL.isEmpty && nioVehicleApiURL.contains("icar.nio.com") {
-            let trimmed = nioVehicleApiURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 1. User-captured URLs are replayed verbatim. Multiple newline-separated
+        // captures are supported so narrow, signed requests can complement each
+        // other (for example `field=tyre` and `field=fota`).
+        let capturedURLs = nioVehicleApiURL
+            .split(whereSeparator: { $0.isNewline })
+            .map(String.init)
+            .filter { $0.contains("icar.nio.com") && $0.contains("/status") }
+        for captured in capturedURLs {
+            let trimmed = captured.trimmingCharacters(in: .whitespacesAndNewlines)
             var fullUrl = trimmed
             if !trimmed.lowercased().hasPrefix("http://") && !trimmed.lowercased().hasPrefix("https://") {
                 fullUrl = "https://\(trimmed)"
@@ -368,13 +431,27 @@ final class NIOService: ObservableObject {
         return urls
     }
 
+    /// Combines independently captured, signed RVS responses by status block.
+    /// Encoding back through the model keeps new/unknown blocks forward-compatible.
+    private func mergeRVSStatuses(_ statuses: [NIOVehicleStatus]) -> NIOVehicleStatus? {
+        guard !statuses.isEmpty else { return nil }
+        var merged: [String: Any] = [:]
+        for status in statuses {
+            guard let data = try? JSONEncoder().encode(status),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            for (key, value) in object where !(value is NSNull) { merged[key] = value }
+        }
+        guard !merged.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: merged) else { return statuses.first }
+        return try? JSONDecoder().decode(NIOVehicleStatus.self, from: data)
+    }
+
     private func fetchWidgetData(url: URL, token: String) async -> NIOVehicleStatus? {
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("zh-CN,zh-Hans;q=0.9", forHTTPHeaderField: "Accept-Language")
-        let appVer = NIOVehicleLib.extractQueryParam(from: url.absoluteString, key: "app_ver") ?? "6.7.15"
-        req.setValue("VehicleWidgetExtension/\(appVer) (com.do1.WeiLaiApp.NIOVehicleWidget; build:2644; iOS 27.0.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
+        applyDeviceFingerprint(to: &req, url: url)
         req.setValue(token, forHTTPHeaderField: "Authorization")
 
         let logEntry = NIOFetchLogEntry(
@@ -410,8 +487,7 @@ final class NIOService: ObservableObject {
         req.httpMethod = "GET"
         req.setValue("application/json,text/json,text/plain,*/*", forHTTPHeaderField: "Accept")
         req.setValue("zh-CN,zh-Hans;q=0.9", forHTTPHeaderField: "Accept-Language")
-        let appVer = NIOVehicleLib.extractQueryParam(from: url.absoluteString, key: "app_ver") ?? "6.5.3"
-        req.setValue("NextevCar/\(appVer) (com.do1.WeiLaiApp; build:2586; iOS 26.2.1) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
+        applyDeviceFingerprint(to: &req, url: url)
         if url.host?.lowercased().contains("icar.nio.com") == true {
             req.setValue("tsp.nio.com", forHTTPHeaderField: "Host")
         }
@@ -581,9 +657,13 @@ final class NIOService: ObservableObject {
 
     // MARK: - 换电服务拉取
 
-    func fetchChange() async {
+    /// 服务订单/换电拉取。轮询调用 force=false（10 分钟节流），手动刷新 force=true 直通。
+    /// 高频拉取会触发风控，导致 token 被判定异常设备而过快失效。
+    func fetchChange(force: Bool = false) async {
         guard isConfigured else { return }
         guard !isLoadingChange else { return }
+        if !force, let last = lastChangeFetch, Date().timeIntervalSince(last) < 600 { return }
+        lastChangeFetch = Date()
         isLoadingChange = true
         defer { isLoadingChange = false }
 
@@ -616,15 +696,18 @@ final class NIOService: ObservableObject {
                 req.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 req.setValue("zh-CN,zh-Hans;q=0.9", forHTTPHeaderField: "Accept-Language")
-                req.setValue("VehicleWidgetExtension/6.7.15 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2644; iOS 27.0.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
+                applyDeviceFingerprint(to: &req, url: url)
                 req.setValue(token, forHTTPHeaderField: "Authorization")
                 req.httpBody = try? JSONSerialization.data(withJSONObject: isAppNio ? ["page_num": 1, "page_size": 20] : ["offset": 0, "limit": 200])
 
                 let (data, response) = try await urlSession.data(for: req)
                 if let http = response as? HTTPURLResponse, http.statusCode == 200 {
                     if let decoded = try? JSONDecoder().decode(NIOChangeResponse.self, from: data) {
-                        let summary = NIOOrderLib.analyzeServiceOrders(decoded)
-                        self.serviceSummary = summary
+                        // 空响应保护：接口抖动返回空集时保留旧数据，避免看板突然空白
+                        if let newOrders = decoded.resultData?.data, !newOrders.isEmpty {
+                            self.serviceSummary = NIOOrderLib.analyzeServiceOrders(decoded)
+                            storeRecentOrders(newOrders)
+                        }
                         return
                     }
                 }
@@ -636,14 +719,16 @@ final class NIOService: ObservableObject {
                     var req = URLRequest(url: url)
                     req.httpMethod = "GET"
                     req.setValue("application/json", forHTTPHeaderField: "Accept")
-                    req.setValue("VehicleWidgetExtension/6.7.15 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2644; iOS 27.0.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
+                    applyDeviceFingerprint(to: &req, url: url)
                     req.setValue(token, forHTTPHeaderField: "Authorization")
 
                     let (data, response) = try await urlSession.data(for: req)
                     if let http = response as? HTTPURLResponse, http.statusCode == 200 {
                         if let decoded = try? JSONDecoder().decode(NIOChangeResponse.self, from: data) {
-                            let summary = NIOOrderLib.analyzeServiceOrders(decoded)
-                            self.serviceSummary = summary
+                            if let newOrders = decoded.resultData?.data, !newOrders.isEmpty {
+                                self.serviceSummary = NIOOrderLib.analyzeServiceOrders(decoded)
+                                storeRecentOrders(newOrders)
+                            }
                             return
                         }
                     }
@@ -654,9 +739,12 @@ final class NIOService: ObservableObject {
 
     // MARK: - 签到拉取
 
-    func fetchCheckin() async {
+    /// 签到状态拉取。轮询调用 force=false（30 分钟节流），手动刷新 force=true 直通。
+    func fetchCheckin(force: Bool = false) async {
         guard isConfigured else { return }
         guard !isLoadingCheckin else { return }
+        if !force, let last = lastCheckinFetch, Date().timeIntervalSince(last) < 1800 { return }
+        lastCheckinFetch = Date()
         isLoadingCheckin = true
         defer { isLoadingCheckin = false }
 
@@ -688,7 +776,7 @@ final class NIOService: ObservableObject {
                 req.httpMethod = "GET"
                 req.setValue("application/json", forHTTPHeaderField: "Accept")
                 req.setValue("zh-CN,zh-Hans;q=0.9", forHTTPHeaderField: "Accept-Language")
-                req.setValue("VehicleWidgetExtension/6.7.15 (com.do1.WeiLaiApp.NIOVehicleWidget; build:2644; iOS 27.0.0) Alamofire/5.9.1", forHTTPHeaderField: "User-Agent")
+                applyDeviceFingerprint(to: &req, url: url)
                 req.setValue(token, forHTTPHeaderField: "Authorization")
 
                 let (data, response) = try await urlSession.data(for: req)
@@ -796,6 +884,13 @@ final class NIOService: ObservableObject {
         }
     }
 
+    /// 存储最近服务订单（换电/维保等），供维保追踪卡使用；调用方已做空集过滤
+    private func storeRecentOrders(_ orders: [NIOServiceOrder]) {
+        guard !orders.isEmpty else { return }
+        self.recentOrders = orders
+        saveJSONAsync(orders, to: ordersFile)
+    }
+
     private func appendLog(_ entry: NIOFetchLogEntry) {
         var logs = fetchLogs
         logs.insert(entry, at: 0)
@@ -831,6 +926,7 @@ final class NIOService: ObservableObject {
         let hFile = historyFile
         let cFile = checkinFile
         let lFile = logsFile
+        let oFile = ordersFile
         Task.detached(priority: .userInitiated) { [weak self] in
             var fetchedAt: Date? = nil
             var vehicle: NIOVehicleResponse? = nil
@@ -923,6 +1019,10 @@ final class NIOService: ObservableObject {
             if let data = try? Data(contentsOf: lFile) {
                 logs = (try? JSONDecoder().decode([NIOFetchLogEntry].self, from: data)) ?? []
             }
+            var orders: [NIOServiceOrder] = []
+            if let data = try? Data(contentsOf: oFile) {
+                orders = (try? JSONDecoder().decode([NIOServiceOrder].self, from: data)) ?? []
+            }
 
             let finalVehicle = vehicle
             let finalCachedTyre = cachedTyre
@@ -940,6 +1040,7 @@ final class NIOService: ObservableObject {
             let finalHistory = history
             let finalCheckin = checkin
             let finalLogs = logs
+            let finalOrders = orders
 
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
@@ -964,6 +1065,7 @@ final class NIOService: ObservableObject {
                 }
                 if let c = finalCheckin { self.checkinData = c }
                 if !finalLogs.isEmpty { self.fetchLogs = finalLogs }
+                if !finalOrders.isEmpty { self.recentOrders = finalOrders }
             }
         }
     }
@@ -984,7 +1086,7 @@ final class NIOService: ObservableObject {
     private var lastActivityFingerprint: String?
 
     /// 依据满电 CLTC 续航推算电池包容量 (kWh)：75 度 <600 / 100 度 <850 / 150 度
-    private func estimateBatteryCapacityKwh(socStatus: NIOSocStatus?) -> Double {
+    func estimateBatteryCapacityKwh(socStatus: NIOSocStatus?) -> Double {
         guard let soc = socStatus?.soc, soc > 0, let cltc = socStatus?.remainingRange, cltc > 0 else { return 75.0 }
         let fullRange = cltc / soc * 100.0
         if fullRange >= 850 { return 150.0 }

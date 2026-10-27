@@ -20,6 +20,7 @@
 import sys
 import json
 import time
+import re
 import socket
 import select
 import threading
@@ -27,7 +28,7 @@ from urllib.parse import urlparse, parse_qs
 
 PORT = 8080
 DEFAULT_CHANGE_URL = "https://gateway-front-external.nio.com/moat/1100367/api/v1/otd/car/ext/general/serviceOrder/getTabOrder?offset=0&limit=200&orderTypes=pe_shaman,pe_shaman_change,service_pe_discharge,battery_flexible_upgrade,nsom_so_maintenance,nsom_so_chauffeur,chauffeur_vehicle_delivery,so_case_accident&hash_type=sha256&lang=zh&region=US&tz_offset=28800&app_ver=6.5.3"
-DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086//n/c/award/square?event=checkin&collection_id=1843940587332317185"
+DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n/c/award/square?event=checkin&collection_id=1843940587332317185"
 
 captured_data = {
     "mode": "url",
@@ -40,6 +41,8 @@ captured_data = {
     "timestamp": "",
     "sign_secret": "",
     "sign_algo": "md5_append",
+    "app_ver": "",
+    "user_agent": "",
     "change_url": DEFAULT_CHANGE_URL,
     "change_token": "",
     "checkin_url": DEFAULT_CHECKIN_URL,
@@ -95,9 +98,23 @@ def process_nio_request(req_line, headers):
 
     if query_params.get("vehicle_id"): captured_data["vehicle_id"] = query_params["vehicle_id"]
     if query_params.get("device_id"): captured_data["device_id"] = query_params["device_id"]
+    elif not captured_data["device_id"] and headers.get("user-guid"):
+        # 订单/签到网关请求无 query device_id，用请求头 User-Guid 兜底
+        # （防多端登录：App 端回放时绑定同一设备标识，token 不会被踢）
+        captured_data["device_id"] = headers["user-guid"]
     if query_params.get("sign"): captured_data["sign"] = query_params["sign"]
     if query_params.get("timestamp"): captured_data["timestamp"] = query_params["timestamp"]
     if query_params.get("sign_secret"): captured_data["sign_secret"] = query_params["sign_secret"]
+
+    # 防多端登录：同步捕获 app_ver 与 User-Agent 设备指纹
+    app_ver = query_params.get("app_ver") or ""
+    if not app_ver:
+        m = re.search(r"app_ver=([\d.]+)", full_url)
+        app_ver = m.group(1) if m else ""
+    if app_ver:
+        captured_data["app_ver"] = app_ver
+        captured_data["change_url"] = re.sub(r"app_ver=[\d.]+", f"app_ver={app_ver}", DEFAULT_CHANGE_URL)
+    if headers.get("user-agent"): captured_data["user_agent"] = headers["user-agent"]
 
     is_full_rvs = ("icar.nio.com" in host or "icar.nio.com" in path) and "/status" in path
     is_widget = "/widget/info" in path

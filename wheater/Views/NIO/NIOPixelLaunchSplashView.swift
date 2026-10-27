@@ -32,7 +32,7 @@ struct NIOPixelLaunchSplashView: View {
     private var isDark: Bool { token.isDark }
 
     private var appVersion: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "4.8.0"
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "5.0.0"
     }
 
     // 动画状态引擎
@@ -481,7 +481,10 @@ struct NIOPixelLaunchSplashView: View {
         return LinearGradient(colors: [accent, glow, gradientEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    // MARK: - 动画时序控制器（省电模式自动缩短）
+    // MARK: - 动画时序控制器（省电模式自动缩短 / 节奏跟随设置）
+
+    /// 节奏缩放（标准 / 疾速）
+    private var pace: NIOBootPace { NIOBootPace.current }
 
     private func runLaunchSequence() {
         // 省电动效模式：跳过逐像素流水，直接亮 Logo，快速进看板
@@ -512,7 +515,7 @@ struct NIOPixelLaunchSplashView: View {
         // 1. 流水律动点亮像素矩阵（分 10 组波次顺滑绽放，0.0s ~ 0.85s）
         let totalPixels = nioPixelCoords.count
         let waveCount = 10
-        let waveInterval = 0.82 / Double(waveCount)
+        let waveInterval = pace.t(0.82) / Double(waveCount)
 
         for w in 0..<waveCount {
             let targetIdx = min(totalPixels - 1, Int(Double(w + 1) * Double(totalPixels) / Double(waveCount)))
@@ -524,9 +527,8 @@ struct NIOPixelLaunchSplashView: View {
         }
 
         // 2. 像素聚合成高清 Logo 与双层脉冲光环爆炸 (约 0.9s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.90) {
-            let impact = UIImpactFeedbackGenerator(style: .medium)
-            impact.impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(0.90)) {
+            NIOBootHaptics.impact(.medium)
 
             withAnimation(.spring(response: 0.48, dampingFraction: 0.68)) {
                 showHDLogo = true
@@ -553,21 +555,21 @@ struct NIOPixelLaunchSplashView: View {
         }
 
         // 3. 标题浮现 (约 1.25s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.25) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(1.25)) {
             withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
                 showTitle = true
             }
         }
 
         // 4. 副标与连结提示浮现 (约 1.5s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.50) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(1.50)) {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
                 showSubtitle = true
             }
         }
 
         // 5. 动画静置停留与平滑过渡进入主看板 (约 2.9s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.9) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(2.9)) {
             withAnimation(.easeInOut(duration: 0.38)) {
                 isFinished = true
             }

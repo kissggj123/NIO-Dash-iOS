@@ -16,7 +16,7 @@
  */
 
 const DEFAULT_CHANGE_URL  = "https://gateway-front-external.nio.com/moat/1100367/api/v1/otd/car/ext/general/serviceOrder/getTabOrder?offset=0&limit=200&orderTypes=pe_shaman,pe_shaman_change,service_pe_discharge,battery_flexible_upgrade,nsom_so_maintenance,nsom_so_chauffeur,chauffeur_vehicle_delivery,so_case_accident&hash_type=sha256&lang=zh&region=US&tz_offset=28800&app_ver=6.5.3";
-const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086//n/c/award/square?event=checkin&collection_id=1843940587332317185";
+const DEFAULT_CHECKIN_URL = "https://gateway-front-external.nio.com/moat/10086/n/c/award/square?event=checkin&collection_id=1843940587332317185";
 
 // ── 本地直推端口（须与 App 内「接收服务器端口」一致）──
 const LOCAL_PUSH_URL = "http://127.0.0.1:8997/credentials";
@@ -47,9 +47,16 @@ const LOCAL_PUSH_URL = "http://127.0.0.1:8997/credentials";
     let token = headers["Authorization"] || headers["authorization"] || "";
     if (token.startsWith("Bearer ")) token = token.replace("Bearer ", "").trim();
 
+    // 防多端登录：同步捕获真实设备指纹。服务器把 token 与登录设备绑定，
+    // App 端回放时使用同一 User-Guid / User-Agent / app_ver，才不会被判定
+    // 为多端登录而快速踢下线。
+    const userGuid  = headers["User-Guid"] || headers["user-guid"] || "";
+    const userAgent = headers["User-Agent"] || headers["user-agent"] || "";
+
     const qp = parseQueryParams(url);
     const isFullRvs = url.includes("icar.nio.com") && url.includes("/status");
     const isWidget  = url.includes("/widget/info");
+    const appVer    = qp.app_ver || (url.match(/app_ver=([\d.]+)/) || [])[1] || "";
 
     // 读取已存数据
     let stored = {};
@@ -62,11 +69,14 @@ const LOCAL_PUSH_URL = "http://127.0.0.1:8997/credentials";
     if (token)          stored.vehicle_token = token;
     if (qp.vehicle_id)  stored.vehicle_id    = qp.vehicle_id;
     if (qp.device_id)   stored.device_id     = qp.device_id;
+    else if (!stored.device_id && userGuid) stored.device_id = userGuid; // 订单/签到网关请求无 query device_id，用请求头 User-Guid 兜底
     if (qp.sign)        stored.sign          = qp.sign;
     if (qp.timestamp)   stored.timestamp     = qp.timestamp;
     if (qp.sign_secret) stored.sign_secret   = qp.sign_secret;
+    if (appVer)         stored.app_ver       = appVer;
+    if (userAgent)      stored.user_agent    = userAgent;
 
-    stored.change_url  = DEFAULT_CHANGE_URL;
+    stored.change_url  = appVer ? DEFAULT_CHANGE_URL.replace(/app_ver=[\d.]+/, "app_ver=" + appVer) : DEFAULT_CHANGE_URL;
     stored.checkin_url = DEFAULT_CHECKIN_URL;
     if (token) { stored.change_token = token; stored.checkin_token = token; }
 
@@ -99,6 +109,8 @@ const LOCAL_PUSH_URL = "http://127.0.0.1:8997/credentials";
             vehicle_url:   stored.vehicle_url   || "",
             sign:          stored.sign          || "",
             timestamp:     stored.timestamp     || "",
+            app_ver:       stored.app_ver       || "",
+            user_agent:    stored.user_agent    || "",
             source:        "shadowrocket"
         });
 

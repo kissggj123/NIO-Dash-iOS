@@ -106,12 +106,17 @@ final class NIOCredentialReceiver: ObservableObject {
         let rvsUrl     = json["rvs_url"]       as? String ?? ""
         let sign       = json["sign"]          as? String ?? ""
         let timestamp  = json["timestamp"]     as? String ?? ""
+        // 防多端登录指纹字段（shadowrocket / mitmproxy 脚本同步推送）
+        let userGuid   = json["user_guid"]     as? String ?? ""
+        let appVer     = json["app_ver"]       as? String ?? ""
+        let userAgent  = json["user_agent"]    as? String ?? ""
 
         Task { @MainActor [weak self] in
             self?.applyCredentials(
                 token: token, vehicleId: vehicleId,
                 deviceId: deviceId, vehicleUrl: !rvsUrl.isEmpty ? rvsUrl : vehicleUrl,
-                sign: sign, timestamp: timestamp
+                sign: sign, timestamp: timestamp,
+                userGuid: userGuid, appVer: appVer, userAgent: userAgent
             )
         }
     }
@@ -121,18 +126,29 @@ final class NIOCredentialReceiver: ObservableObject {
     @MainActor
     private func applyCredentials(token: String, vehicleId: String,
                                   deviceId: String, vehicleUrl: String,
-                                  sign: String, timestamp: String = "") {
+                                  sign: String, timestamp: String = "",
+                                  userGuid: String = "", appVer: String = "", userAgent: String = "") {
         let service = NIOService.shared
         var applied: [String] = []
 
         if !token.isEmpty     { service.nioVehicleAccessToken = token;  applied.append("Token") }
         if !vehicleId.isEmpty { service.nioVehicleId         = vehicleId; applied.append("VehicleID") }
-        if !deviceId.isEmpty  { service.nioDeviceId          = deviceId;  applied.append("DeviceID") }
+        // 设备标识：device_id 优先，User-Guid 兜底（网关请求无 query device_id）
+        let effectiveDeviceId = deviceId.isEmpty ? userGuid : deviceId
+        if !effectiveDeviceId.isEmpty { service.nioDeviceId = effectiveDeviceId; applied.append("DeviceID") }
         if !sign.isEmpty      { service.nioVehicleApiSign    = sign }
         if !timestamp.isEmpty { service.nioVehicleApiTimestamp = timestamp }
         if !vehicleUrl.isEmpty, vehicleUrl.contains("nio.com") {
             service.nioVehicleApiURL = vehicleUrl
             applied.append("API URL")
+        }
+        // 防多端登录指纹：存 UserDefaults 供统一 UA 构造与诊断
+        if !appVer.isEmpty {
+            UserDefaults.standard.set(appVer, forKey: "nio_captured_app_ver")
+            applied.append("AppVer")
+        }
+        if !userAgent.isEmpty {
+            UserDefaults.standard.set(userAgent, forKey: "nio_captured_user_agent")
         }
 
         guard !applied.isEmpty else {
@@ -149,9 +165,11 @@ final class NIOCredentialReceiver: ObservableObject {
         var clipDict: [String: String] = [:]
         if !token.isEmpty     { clipDict["vehicle_token"] = token }
         if !vehicleId.isEmpty { clipDict["vehicle_id"]    = vehicleId }
-        if !deviceId.isEmpty  { clipDict["device_id"]     = deviceId }
+        if !effectiveDeviceId.isEmpty { clipDict["device_id"] = effectiveDeviceId }
         if !vehicleUrl.isEmpty { clipDict["vehicle_url"]  = vehicleUrl }
         if !sign.isEmpty      { clipDict["sign"]          = sign }
+        if !appVer.isEmpty    { clipDict["app_ver"]       = appVer }
+        if !userGuid.isEmpty  { clipDict["user_guid"]     = userGuid }
         if let clipData = try? JSONSerialization.data(withJSONObject: clipDict, options: [.prettyPrinted, .sortedKeys]),
            let clipStr = String(data: clipData, encoding: .utf8) {
             UIPasteboard.general.string = clipStr
@@ -172,6 +190,6 @@ final class NIOCredentialReceiver: ObservableObject {
 
         // 广播刷新
         NotificationCenter.default.post(name: NSNotification.Name("NIO_SNIFF_SUCCESS"), object: nil)
-        service.refreshAll()
+        service.refreshAll(force: true)
     }
 }

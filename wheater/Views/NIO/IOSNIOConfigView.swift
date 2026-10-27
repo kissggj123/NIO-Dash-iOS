@@ -19,6 +19,7 @@ struct IOSNIOConfigView: View {
     @State private var showLogsSheet = false
     @State private var showAboutSheet = false
     @State private var showReleaseNotesSheet = false
+    @State private var showLaunchPreview = false
     @AppStorage("nio_prefer_actual_range") private var preferActualRange = false
     @ObservedObject private var themeService = AnimeThemeService.shared
     @ObservedObject private var vpnManager = NIOVPNManager.shared
@@ -49,6 +50,9 @@ struct IOSNIOConfigView: View {
 
                         // 2. 🎨 动漫主题风格与粒子特效
                         themeSelectorCard
+
+                        // 2.5 🚀 启动动画风格与节奏
+                        launchAnimationCard
 
                         // 3. 🚘 爱车车型与车漆涂装定制
                         carModelSelectorCard
@@ -123,6 +127,9 @@ struct IOSNIOConfigView: View {
             }
             .sheet(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
+            }
+            .fullScreenCover(isPresented: $showLaunchPreview) {
+                NIOLaunchPreviewHost(isPresented: $showLaunchPreview)
             }
         }
     }
@@ -269,6 +276,158 @@ struct IOSNIOConfigView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(style.category.displayName)主题 \(style.displayName)")
+    }
+
+    // MARK: - 2.5 🚀 启动动画风格卡片（三风格 + 节奏 + 每日一次 + 触感 + 预览）
+
+    @AppStorage(NIOBootSettings.styleKey) private var bootStyleRaw = NIOBootStyle.energyCharge.rawValue
+    @AppStorage(NIOBootSettings.paceKey) private var bootPaceRaw = NIOBootPace.standard.rawValue
+    @AppStorage(NIOBootSettings.dailyOnceKey) private var bootDailyOnce = false
+    @AppStorage(NIOBootSettings.hapticsKey) private var bootHaptics = true
+
+    private var launchAnimationCard: some View {
+        cardContainer(title: "🚀 启动动画风格", icon: "rocket.launch.fill", accentColor: pastelYellow) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("三套开屏风格 · 省电动效模式下自动切换为极简快启：")
+                    .font(.system(size: 11))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+
+                // 风格三选
+                HStack(spacing: 8) {
+                    ForEach(NIOBootStyle.allCases) { style in
+                        bootStyleButton(style)
+                    }
+                }
+
+                // 节奏选择
+                HStack(spacing: 8) {
+                    Text("节奏")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Spacer()
+                    HStack(spacing: 6) {
+                        ForEach(NIOBootPace.allCases) { pace in
+                            Button {
+                                NIOBootHaptics.impact(.light)
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    bootPaceRaw = pace.rawValue
+                                }
+                            } label: {
+                                Text(pace.displayName)
+                                    .font(.system(size: 11, weight: bootPaceRaw == pace.rawValue ? .heavy : .semibold, design: .rounded))
+                                    .padding(.horizontal, 13)
+                                    .padding(.vertical, 5)
+                                    .background(bootPaceRaw == pace.rawValue ? pastelYellow.opacity(0.18) : NIOThemePaint.fill)
+                                    .foregroundStyle(bootPaceRaw == pace.rawValue ? pastelYellow : NIOThemePaint.text.opacity(0.6))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(bootPaceRaw == pace.rawValue ? pastelYellow.opacity(0.6) : NIOThemePaint.stroke, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // 每日一次开关
+                Toggle(isOn: $bootDailyOnce) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("🌅 每日仅首次展示")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(NIOThemePaint.text)
+                        Text("当天再次打开 App 时跳过动画，直达看板")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                    }
+                }
+                .tint(sakuraPink)
+
+                // 触感开关
+                Toggle(isOn: $bootHaptics) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("📳 开屏触感反馈")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(NIOThemePaint.text)
+                        Text("Logo 亮起瞬间的轻微振动提示")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                    }
+                }
+                .tint(sakuraPink)
+
+                // 预览按钮
+                Button {
+                    NIOBootHaptics.impact(.light)
+                    showLaunchPreview = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("预览启动动画")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+                    }
+                    .foregroundStyle(sakuraPink)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(sakuraPink.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// 单个启动风格选择按钮
+    private func bootStyleButton(_ style: NIOBootStyle) -> some View {
+        let isSelected = (bootStyleRaw == style.rawValue)
+
+        return Button {
+            NIOBootHaptics.impact(.light)
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                bootStyleRaw = style.rawValue
+            }
+        } label: {
+            VStack(spacing: 5) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(
+                            LinearGradient(
+                                colors: [sakuraPink.opacity(isSelected ? 0.22 : 0.08), lavenderDream.opacity(isSelected ? 0.16 : 0.05)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 36, height: 36)
+
+                    Image(systemName: style.icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(isSelected ? sakuraPink : NIOThemePaint.text.opacity(0.55))
+                }
+
+                Text(style.displayName)
+                    .font(.system(size: 10, weight: isSelected ? .heavy : .semibold, design: .rounded))
+                    .foregroundStyle(isSelected ? sakuraPink : NIOThemePaint.text.opacity(0.8))
+                    .lineLimit(1)
+
+                Text(style.styleDescription)
+                    .font(.system(size: 8))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .padding(.horizontal, 4)
+            .background(isSelected ? sakuraPink.opacity(0.1) : NIOThemePaint.fill)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? sakuraPink.opacity(0.7) : NIOThemePaint.stroke, lineWidth: isSelected ? 1.2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("启动动画风格 \(style.displayName)")
     }
 
     // MARK: - 3. 🚘 爱车车型与涂装配置卡片
@@ -772,7 +931,7 @@ struct IOSNIOConfigView: View {
                             Text("🔵 链路 2 (RVS 全量遥测):")
                                 .font(.system(size: 9.5, weight: .bold))
                                 .foregroundStyle(lavenderDream)
-                            Text("负责 4 轮胎压/胎温、车机 FOTA、12V 小电瓶、车门车窗全景与车载冰箱（自动落盘持久化，各卡片永不为空）")
+                            Text("负责 4 轮胎压/胎温、车机 FOTA、12V 小电瓶、车门车窗全景与车载冰箱（按需拉取并缓存；服务端未返回的字段会明确提示）")
                                 .font(.system(size: 9))
                                 .foregroundStyle(NIOThemePaint.text.opacity(0.7))
                         }
@@ -828,12 +987,13 @@ struct IOSNIOConfigView: View {
 
                 // 3. API URL (选填 / 抓包直填全量)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("API URL (完整 RVS 抓包链接，选填)")
+                    Text("API URL（完整 RVS 抓包链接，可多条）")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(lavenderDream)
 
-                    TextField("https://icar.nio.com/api/2/rvs/vehicle/.../status", text: $service.nioVehicleApiURL)
+                    TextField("每行一条完整 /status?... 抓包 URL", text: $service.nioVehicleApiURL, axis: .vertical)
                         .font(.system(size: 11, design: .monospaced))
+                        .lineLimit(3...6)
                         .padding(8)
                         .background(NIOThemePaint.well)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -841,6 +1001,10 @@ struct IOSNIOConfigView: View {
                         .foregroundStyle(NIOThemePaint.text)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+
+                    Text("可分别粘贴含 field=tyre、field=fota 的已签名请求。应用会保留每条 URL 原样，并按需合并不同数据块；不要编辑参数顺序或 sign。")
+                        .font(.system(size: 9))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.55))
                 }
 
                 // 4. Device ID (选填)
@@ -1360,4 +1524,33 @@ private func getWiFiIPAddress() -> String? {
         ptr = ifa.pointee.ifa_next
     }
     return address
+}
+
+// MARK: - 启动动画预览宿主（跳过每日一次闸门，播完自动返回）
+
+struct NIOLaunchPreviewHost: View {
+    @Binding var isPresented: Bool
+    @Environment(\.dismiss) private var dismiss
+    @State private var finished = false
+
+    var body: some View {
+        ZStack {
+            IOSNIODashboardView()
+
+            if !finished {
+                NIOLaunchSplashView(isFinished: $finished, bypassGate: true)
+                    .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                    .zIndex(1)
+            }
+        }
+        .animation(.easeInOut(duration: 0.32), value: finished)
+        .onChange(of: finished) { _, done in
+            if done {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    dismiss()
+                    isPresented = false
+                }
+            }
+        }
+    }
 }
