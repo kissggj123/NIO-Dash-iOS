@@ -796,8 +796,14 @@ final class NIOService: ObservableObject {
     // MARK: - 智能识别与一键填充
 
     func smartParseInput(_ input: String) -> Bool {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 清洗手工粘贴内容：markdown 反引号 / 包裹引号 / 空白（URL 常被 ``` 包裹）
+        var trimmed = input
+            .replacingOccurrences(of: "`", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
+        if trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") && trimmed.count >= 2 {
+            trimmed = String(trimmed.dropFirst().dropLast())
+        }
 
         let parsed = NIOVehicleLib.smartParseInput(trimmed)
         var updated = false
@@ -841,6 +847,18 @@ final class NIOService: ObservableObject {
         }
         if let kt = parsed.checkinToken, !kt.isEmpty {
             self.nioCheckinAccessToken = kt
+        }
+        // 设备指纹落库（防多端登录：统一 UA 构造与诊断用）
+        if let av = parsed.appVer, !av.isEmpty {
+            UserDefaults.standard.set(av, forKey: "nio_captured_app_ver")
+        }
+        if let ua = parsed.userAgent, !ua.isEmpty {
+            UserDefaults.standard.set(ua, forKey: "nio_captured_user_agent")
+        }
+        if let ug = parsed.userGuid, !ug.isEmpty {
+            UserDefaults.standard.set(ug, forKey: "nio_captured_user_guid")
+            // device_id 缺失时用 User-Guid 兜底
+            if self.nioDeviceId.isEmpty { self.nioDeviceId = ug }
         }
 
         if updated {

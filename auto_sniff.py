@@ -239,6 +239,50 @@ def persist_results(is_final_rvs: bool = False):
             print("  💡 按 Ctrl+C 可随时退出抓包助手。")
             print("═"*70 + "\n")
 
+# --- 局域网直推（对齐 Shadowrocket 体验）--------------------------
+# iPhone 通过 Wi-Fi 代理连到本脚本，flow 的 client IP 就是手机本身；
+# 抓到核心凭证后把与 Shadowrocket 相同 schema 的 JSON POST 回手机上
+# YumikoToys 的接收端口 8997，App 弹「已回填」即完成，无需手动复制。
+APP_PUSH_PORT = 8997
+
+def push_to_client_device(flow: http.HTTPFlow) -> None:
+    """把当前凭证直推回发起请求的 iPhone（凭证变化才推，避免刷屏）"""
+    token = captured_data.get("vehicle_token") or captured_data.get("change_token") or captured_data.get("checkin_token")
+    if not token or not captured_data.get("vehicle_id"):
+        return  # 核心凭证不完整，等 persist 好了再推
+    if token == captured_data.get("_pushed_token"):
+        return
+    try:
+        client_ip = flow.client_conn.peername[0] if flow.client_conn.peername else ""
+    except Exception:
+        client_ip = ""
+    if not client_ip or client_ip.startswith("127."):
+        return  # Mac 本机模式没有远端手机可推
+
+    import json as _json
+    import urllib.request
+    payload = _json.dumps({
+        "vehicle_token": token,
+        "vehicle_id":    captured_data.get("vehicle_id", ""),
+        "device_id":     captured_data.get("device_id", ""),
+        "vehicle_url":   captured_data.get("vehicle_url", ""),
+        "sign":          captured_data.get("sign", ""),
+        "timestamp":     captured_data.get("timestamp", ""),
+        "app_ver":       captured_data.get("app_ver", ""),
+        "user_agent":    captured_data.get("user_agent", ""),
+        "user_guid":     captured_data.get("user_guid", ""),
+        "source":        "mitmproxy"
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        f"http://{client_ip}:{APP_PUSH_PORT}/", data=payload,
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=3)
+        captured_data["_pushed_token"] = token
+        print(f"\n[📡] 凭证已直推到 iPhone ({client_ip}:{APP_PUSH_PORT})，App 弹『已回填』即成功！")
+    except Exception as e:
+        print(f"\n[ℹ️] 直推未送达 ({e.__class__.__name__})：请确认 iPhone 上 YumikoToys 正在运行且设置页开启了 TCP 转发。")
+
 def request(flow: http.HTTPFlow) -> None:
     """监听并捕获客户端发送的 HTTP 请求"""
     host = flow.request.pretty_host
@@ -264,7 +308,10 @@ def request(flow: http.HTTPFlow) -> None:
     if app_ver and app_ver != captured_data.get("app_ver"):
         captured_data["app_ver"] = app_ver
     req_ua = headers.get("User-Agent", "")
-    if req_ua and req_ua != captured_data.get("user_agent"):
+    # UA 策略：主 App 的 UA（NextevCar/WeiLaiApp，非 WidgetExtension）优先，
+    # 避免 Widget 的 UA 后到覆盖主 App 指纹
+    is_main_app_ua = ("WeiLaiApp" in req_ua or "NextevCar" in req_ua) and "WidgetExtension" not in req_ua
+    if req_ua and (is_main_app_ua or not captured_data.get("user_agent")):
         captured_data["user_agent"] = req_ua
     req_guid = headers.get("User-Guid", "") or headers.get("user-guid", "")
     if req_guid:
@@ -319,8 +366,9 @@ def request(flow: http.HTTPFlow) -> None:
 
         curl_headers = " ".join([f"-H '{k}: {v}'" for k, v in headers.items() if k.lower() in ["authorization", "user-agent", "accept"]])
         captured_data["curl_command"] = f"curl '{captured_data['vehicle_url']}' {curl_headers}"
-        
+
         persist_results(is_final_rvs=True)
+        push_to_client_device(flow)
 
     elif is_widget_info:
         captured_data["widget_url"] = full_url
@@ -336,6 +384,7 @@ def request(flow: http.HTTPFlow) -> None:
         if ts: captured_data["timestamp"] = ts
 
         persist_results(is_final_rvs=False)
+        push_to_client_device(flow)
         if not is_rvs_status_captured:
             print("\n  [ℹ️] 已截获小组件凭证，请继续在蔚来 App【爱车 / 车辆】主页【下拉刷新一次】以抓取 4 轮胎压...")
 
@@ -346,6 +395,7 @@ def request(flow: http.HTTPFlow) -> None:
             captured_data["change_token"] = auth_token
         print(f"\n[+] 成功捕获真实换电/服务订单接口: {full_url[:65]}...")
         persist_results()
+        push_to_client_device(flow)
 
     # 3. 识别每日签到接口
     elif ("checkin" in path or "sign_in" in path or "/users/checkin" in path or "community/checkin" in path):
@@ -354,6 +404,7 @@ def request(flow: http.HTTPFlow) -> None:
             captured_data["checkin_token"] = auth_token
         print(f"\n[+] 成功捕获真实每日签到接口: {full_url[:65]}...")
         persist_results()
+        push_to_client_device(flow)
 
     # 4. 其他任何携带有效 Token 的蔚来请求
     elif auth_token:
@@ -400,7 +451,9 @@ def response(flow: http.HTTPFlow) -> None:
 
     if "access_token" in found or "token" in found:
         new_tk = found.get("access_token") or found.get("token")
-        if new_tk and len(new_tk) > 20 and new_tk != captured_data.get("vehicle_token"):
+        # 防御：接口可能返回路径白名单数组等伪 token（如 ["/app/web/..."]），一律忽略
+        if (new_tk and len(new_tk) > 20 and not new_tk.startswith("[")
+                and not new_tk.startswith("/") and new_tk != captured_data.get("vehicle_token")):
             captured_data["vehicle_token"] = new_tk
             captured_data["change_token"] = new_tk
             captured_data["checkin_token"] = new_tk

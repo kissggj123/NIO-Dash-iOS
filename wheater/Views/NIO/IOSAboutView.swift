@@ -71,6 +71,9 @@ struct IOSAboutView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 36)
+                    // 全屏呈现时限宽居中
+                    .frame(maxWidth: 720)
+                    .frame(maxWidth: .infinity)
                 }
             }
             .navigationTitle("关于 YumikoToysRR")
@@ -576,11 +579,42 @@ struct IOSReleaseNotesView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        // v5.1.0
+                        versionSection(
+                            version: "v5.1.0 (Build 2701)",
+                            date: "2026-10",
+                            isLatest: true,
+                            items: [
+                                ("🪞 灵动岛适配（Duo / 全机型）", [
+                                    "🔋 紧凑区重构：左图标 + 右 SOC 数字，告别挖孔裁切（旧版「2 / 11…」）",
+                                    "⚡️ 充电闪电 / 低电橙 / 主题色电量图形，未锁车橙色警示点",
+                                    "📖 续航与充满倒计时保留在长按展开态"
+                                ]),
+                                ("📱 Duo 折叠屏与 iPad 全面适配", [
+                                    "🧭 特斯拉式侧边栏：8 大功能分类 + hero 车图常驻主区",
+                                    "🌗 折叠↔展开形态自适应：≥780pt 自动双列（看板与设置）",
+                                    "🖥️ 设置页大屏全屏呈现：个性化左列 / 连接配置右列",
+                                    "🎨 自定义折叠按钮与淡色标题条，替换系统玻璃钮",
+                                    "📐 侧栏图标统一宽度间距，multicolor 红车图标归入主题色"
+                                ]),
+                                ("🛠 修复与优化", [
+                                    "🧩 特殊模式识别修复：宠物 / 露营 / 不下电键名对齐真实 RVS 字段",
+                                    "🧊 智能外设卡语义化开关解析，不再显示原始遥测键名",
+                                    "📍 车辆位置卡文字叠印修复",
+                                    "🖼️ 主页车型标题跟随设置（特别版名称映射）+ Vision 抠图车图展台光",
+                                    "⌨️ 设置页首页名称输入框溢出修复",
+                                    "🔑 统一设备指纹（User-Guid / app_ver / UA），防服务器多端误判踢线",
+                                    "🛰 抓包脚本与 App 解析全链路同步新指纹字段"
+                                ])
+                            ]
+                        )
+                        .transition(.opacity)
+
                         // v5.0.0
                         versionSection(
                             version: "v5.0.0 (Build 2700)",
                             date: "2026-10",
-                            isLatest: true,
+                            isLatest: false,
                             items: [
                                 ("🚀 启动动画系统 · 多风格可选", [
                                     "⚡️ 能量充能（默认）：电池环 0→100% 充能 + 电弧凝聚高清 Logo",
@@ -681,6 +715,9 @@ struct IOSReleaseNotesView: View {
                         )
                     }
                     .padding(16)
+                    // 全屏呈现时限宽居中
+                    .frame(maxWidth: 720)
+                    .frame(maxWidth: .infinity)
                 }
             }
             .navigationTitle("版本更新日志")

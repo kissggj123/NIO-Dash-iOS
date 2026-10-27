@@ -200,49 +200,34 @@ struct WheaterStatus: Widget {
                     .padding(.top, 2)
                 }
             } compactLeading: {
-                // 紧凑左侧：电量状态胶囊（充电绿 / 低电橙 / 常规主题渐变）
+                // 紧凑左侧：纯图标（灵动岛紧凑区极窄，文字会被挖孔裁切）
+                // 充电绿闪电 / 低电橙 / 常规主题色电量图形
+                Image(systemName: state.isCharging ? "bolt.fill" : compactBatteryIcon(state.soc))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(compactSocStyle(state, theme))
+                    .frame(width: 14, height: 14)
+            } compactTrailing: {
+                // 紧凑右侧：SOC 数字为主体（续航/ETA 空间放不下，留给展开态）
+                // 未锁车时前置橙色警示点
                 HStack(spacing: 2) {
-                    Image(systemName: state.isCharging ? "bolt.fill" : compactBatteryIcon(state.soc))
-                        .font(.system(size: 11))
-                        .foregroundStyle(compactSocStyle(state, theme))
-                    Text(state.socDisplay)
+                    if !state.isLocked {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 4, height: 4)
+                    }
+                    Text(verbatim: "\(Int(state.soc))%")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(compactSocStyle(state, theme))
-                }
-            } compactTrailing: {
-                // 紧凑右侧：充电时显示充满剩余分钟；未锁时橙色提醒；常规显示续航
-                if state.isCharging, let mins = state.chargeEtaMinutes, mins > 0 {
-                    HStack(spacing: 1) {
-                        Image(systemName: "bolt.fill")
-                            .font(.system(size: 9))
-                        Text(verbatim: "\(mins)分")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                    }
-                    .foregroundStyle(.green)
-                } else {
-                    HStack(spacing: 2) {
-                        if !state.isLocked {
-                            Image(systemName: "lock.open.fill")
-                                .font(.system(size: 8))
-                                .foregroundStyle(.orange)
-                        }
-                        Text(state.rangeDisplay)
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                    }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                        .fixedSize()
                 }
             } minimal: {
-                // 极简状态：主题化状态色电量 + 充电闪电
-                HStack(spacing: 1) {
-                    if state.isCharging {
-                        Image(systemName: "bolt.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.green)
-                    }
-                    Text("\(Int(state.soc))%")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(compactSocStyle(state, theme))
-                }
+                // 极简挖孔区：空间更小，只留单图标（色彩即信息）
+                Image(systemName: state.isCharging ? "bolt.fill" : compactBatteryIcon(state.soc))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(compactSocStyle(state, theme))
+                    .frame(width: 12, height: 12)
             }
         }
     }

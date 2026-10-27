@@ -20,6 +20,9 @@ final class NIOCredentialReceiver: ObservableObject {
     @Published var lastReceivedAt: Date?
     @Published var receiveCount: Int = 0
     @Published var statusMessage: String = "未启动"
+    /// 上次成功应用的完整凭证指纹（token+vehicleId+deviceId），用于去重：
+    /// 相同凭证重复推送时静默忽略，不再震动/覆盖剪贴板/弹提示
+    private var lastAppliedFingerprint: String = ""
 
     private let port: UInt16 = 8997
     private var listener: NWListener?
@@ -88,6 +91,19 @@ final class NIOCredentialReceiver: ObservableObject {
 
     // MARK: - 解析 HTTP 请求并提取 JSON body
 
+    /// 清洗手工粘贴/脚本推送字段的常见杂质：markdown 反引号、包裹引号、首尾空白；
+    /// 数组形态（如 ["/app/web/..."] 伪 token）视为无效
+    nonisolated static func clean(_ raw: String) -> String {
+        var v = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if v.count >= 2, (v.hasPrefix("`") && v.hasSuffix("`"))
+            || (v.hasPrefix("\"") && v.hasSuffix("\"")) {
+            v = String(v.dropFirst().dropLast())
+        }
+        v = v.trimmingCharacters(in: .whitespacesAndNewlines)
+        if v.hasPrefix("[") { return "" }
+        return v
+    }
+
     nonisolated private func parseHTTPAndApply(_ raw: String) {
         // 分离 HTTP header 和 body（\r\n\r\n 分隔）
         let separator = "\r\n\r\n"
@@ -99,17 +115,17 @@ final class NIOCredentialReceiver: ObservableObject {
               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
         else { return }
 
-        let token      = json["vehicle_token"] as? String ?? json["token"] as? String ?? ""
-        let vehicleId  = json["vehicle_id"]    as? String ?? ""
-        let deviceId   = json["device_id"]     as? String ?? ""
-        let vehicleUrl = json["vehicle_url"]   as? String ?? ""
-        let rvsUrl     = json["rvs_url"]       as? String ?? ""
-        let sign       = json["sign"]          as? String ?? ""
-        let timestamp  = json["timestamp"]     as? String ?? ""
+        let token      = Self.clean(json["vehicle_token"] as? String ?? json["token"] as? String ?? "")
+        let vehicleId  = Self.clean(json["vehicle_id"]    as? String ?? "")
+        let deviceId   = Self.clean(json["device_id"]     as? String ?? "")
+        let vehicleUrl = Self.clean(json["vehicle_url"]   as? String ?? "")
+        let rvsUrl     = Self.clean(json["rvs_url"]       as? String ?? "")
+        let sign       = Self.clean(json["sign"]          as? String ?? "")
+        let timestamp  = Self.clean(json["timestamp"]     as? String ?? "")
         // 防多端登录指纹字段（shadowrocket / mitmproxy 脚本同步推送）
-        let userGuid   = json["user_guid"]     as? String ?? ""
-        let appVer     = json["app_ver"]       as? String ?? ""
-        let userAgent  = json["user_agent"]    as? String ?? ""
+        let userGuid   = Self.clean(json["user_guid"]     as? String ?? "")
+        let appVer     = Self.clean(json["app_ver"]       as? String ?? "")
+        let userAgent  = Self.clean(json["user_agent"]    as? String ?? "")
 
         Task { @MainActor [weak self] in
             self?.applyCredentials(
@@ -130,11 +146,20 @@ final class NIOCredentialReceiver: ObservableObject {
                                   userGuid: String = "", appVer: String = "", userAgent: String = "") {
         let service = NIOService.shared
         var applied: [String] = []
+        // 设备标识：device_id 优先，User-Guid 兜底（网关请求无 query device_id）
+        let effectiveDeviceId = deviceId.isEmpty ? userGuid : deviceId
+
+        // 去重：核心三要素（token+vehicleId+deviceId）与上次完全相同 → 静默忽略。
+        // 重复推送不再震动、不覆盖剪贴板、不弹横幅，只轻量记录时间。
+        let fingerprint = "\(token)|\(vehicleId)|\(effectiveDeviceId)"
+        if fingerprint == lastAppliedFingerprint {
+            lastReceivedAt = Date()
+            statusMessage = "🔁 重复推送已忽略（凭证未变化）"
+            return
+        }
 
         if !token.isEmpty     { service.nioVehicleAccessToken = token;  applied.append("Token") }
         if !vehicleId.isEmpty { service.nioVehicleId         = vehicleId; applied.append("VehicleID") }
-        // 设备标识：device_id 优先，User-Guid 兜底（网关请求无 query device_id）
-        let effectiveDeviceId = deviceId.isEmpty ? userGuid : deviceId
         if !effectiveDeviceId.isEmpty { service.nioDeviceId = effectiveDeviceId; applied.append("DeviceID") }
         if !sign.isEmpty      { service.nioVehicleApiSign    = sign }
         if !timestamp.isEmpty { service.nioVehicleApiTimestamp = timestamp }
@@ -157,6 +182,7 @@ final class NIOCredentialReceiver: ObservableObject {
         }
 
         receiveCount += 1
+        lastAppliedFingerprint = fingerprint
         lastReceivedAt = Date()
         let summary = applied.joined(separator: " · ")
         statusMessage = "✅ 已回填: \(summary)"

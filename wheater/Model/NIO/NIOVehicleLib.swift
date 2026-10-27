@@ -49,6 +49,10 @@ struct NIOSmartParseResult {
     var changeToken: String?
     var checkinURL: String?
     var checkinToken: String?
+    // 防多端登录设备指纹（sniff.sh / Shadowrocket 抓包捕获）
+    var appVer: String?
+    var userAgent: String?
+    var userGuid: String?
     var notes: [String] = []
 }
 
@@ -173,6 +177,10 @@ enum NIOVehicleLib {
                 if let kTok = json["checkin_token"] as? String, !kTok.isEmpty {
                     res.checkinToken = kTok.replacingOccurrences(of: "Bearer ", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
                 }
+                // 设备指纹三件套（数组伪 token 走 as? String 自然失败，天然免疫）
+                if let av = json["app_ver"] as? String, !av.isEmpty { res.appVer = av }
+                if let ua = json["user_agent"] as? String, !ua.isEmpty { res.userAgent = ua }
+                if let ug = json["user_guid"] as? String, !ug.isEmpty { res.userGuid = ug }
             }
         }
 

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 @MainActor
 struct IOSNIOConfigView: View {
@@ -27,6 +28,11 @@ struct IOSNIOConfigView: View {
     @ObservedObject private var receiver = NIOCredentialReceiver.shared
     @AppStorage("nio_vehicle_selected_model") private var selectedModelSlug = "et5_special"
     @AppStorage("nio_vehicle_selected_color") private var selectedColorSlug = "nature_wonder"
+    // 首页名称与车型图片（v5.1）
+    @AppStorage("nio_home_title") private var homeTitle = "NIO"
+    @AppStorage("nio_hero_photo_mode") private var heroPhotoModeRaw = NIOHeroPhotoMode.gradient.rawValue
+    @State private var heroPhotoItem: PhotosPickerItem?
+    @State private var heroPhotoHint: String?
 
     // 二次元萌系主题色（跟随全局主题实时刷新）
     private var sakuraPink: Color { themeService.accentColor() }
@@ -43,48 +49,82 @@ struct IOSNIOConfigView: View {
                 animeBackground
                     .ignoresSafeArea()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        // 1. 顶部 Header
-                        configHeaderView
+                GeometryReader { geo in
+                    // Duo 展开态 / iPad 宽屏：设置双列（视觉设置左，连接与 API 右）；窄屏单列
+                    let twoColumns = geo.size.width >= 780
 
-                        // 2. 🎨 动漫主题风格与粒子特效
-                        themeSelectorCard
+                    ScrollView(showsIndicators: false) {
+                        Group {
+                            if twoColumns {
+                                HStack(alignment: .top, spacing: 16) {
+                                    VStack(spacing: 16) {
+                                        configHeaderView
+                                        themeSelectorCard
+                                        launchAnimationCard
+                                        carModelSelectorCard
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .top)
 
-                        // 2.5 🚀 启动动画风格与节奏
-                        launchAnimationCard
+                                    VStack(spacing: 16) {
+                                        shadowrocketPushCard
+                                        inAppVpnSnifferCard
+                                        smartParseCard
+                                        vehicleApiCard
+                                        extraServicesCard
+                                        scheduleAndTestCard
+                                        sniffGuideCard
+                                        aboutAndLogsSection
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .top)
+                                }
+                            } else {
+                                VStack(spacing: 16) {
+                                    // 1. 顶部 Header
+                                    configHeaderView
 
-                        // 3. 🚘 爱车车型与车漆涂装定制
-                        carModelSelectorCard
+                                    // 2. 🎨 动漫主题风格与粒子特效
+                                    themeSelectorCard
 
-                        // 3.5 🚀 Shadowrocket 直推（推荐方案）
-                        shadowrocketPushCard
+                                    // 2.5 🚀 启动动画风格与节奏
+                                    launchAnimationCard
 
-                        // 3.6 🔌 内置 TCP 转发（兜底）
-                        inAppVpnSnifferCard
+                                    // 3. 🚘 爱车车型与车漆涂装定制
+                                    carModelSelectorCard
 
-                        // 4. ⚡️ 智能识别与一键填充
-                        smartParseCard
+                                    // 3.5 🚀 Shadowrocket 直推（推荐方案）
+                                    shadowrocketPushCard
 
-                        // 5. 🚗 核心车辆 API (必填)
-                        vehicleApiCard
+                                    // 3.6 🔌 内置 TCP 转发（兜底）
+                                    inAppVpnSnifferCard
 
-                        // 6. 📑 扩展服务 (换电 & 签到)
-                        extraServicesCard
+                                    // 4. ⚡️ 智能识别与一键填充
+                                    smartParseCard
 
-                        // 7. ⏱️ 调度与连通性测试
-                        scheduleAndTestCard
+                                    // 5. 🚗 核心车辆 API (必填)
+                                    vehicleApiCard
 
-                        // 8. 📱 抓取指引
-                        sniffGuideCard
+                                    // 6. 📑 扩展服务 (换电 & 签到)
+                                    extraServicesCard
 
-                        // 9. 🌸 软件关于与诊断
-                        aboutAndLogsSection
+                                    // 7. ⏱️ 调度与连通性测试
+                                    scheduleAndTestCard
 
-                        Spacer(minLength: 24)
+                                    // 8. 📱 抓取指引
+                                    sniffGuideCard
+
+                                    // 9. 🌸 软件关于与诊断
+                                    aboutAndLogsSection
+
+                                    Spacer(minLength: 24)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        // 大屏双列放宽限宽；窄屏保持紧凑单列
+                        .frame(maxWidth: twoColumns ? 1100 : 640)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
                 }
             }
             .navigationTitle("蔚来看板设置")
@@ -119,17 +159,35 @@ struct IOSNIOConfigView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showLogsSheet) {
+            .adaptivePresentation(isPresented: $showLogsSheet) {
                 IOSNIOFetchLogView()
             }
-            .sheet(isPresented: $showAboutSheet) {
+            .adaptivePresentation(isPresented: $showAboutSheet) {
                 IOSAboutView()
             }
-            .sheet(isPresented: $showReleaseNotesSheet) {
+            .adaptivePresentation(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
             }
             .fullScreenCover(isPresented: $showLaunchPreview) {
                 NIOLaunchPreviewHost(isPresented: $showLaunchPreview)
+            }
+            .onChange(of: heroPhotoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        // 压缩存储，控制沙盒体积
+                        if let jpeg = image.jpegData(compressionQuality: 0.85) {
+                            try? NIOHeroPhotoStore.save(data: jpeg)
+                            heroPhotoHint = "✅ 已导入，主页将显示自定义车型图"
+                        } else {
+                            heroPhotoHint = "⚠️ 图片格式无法识别"
+                        }
+                    } else {
+                        heroPhotoHint = "⚠️ 图片读取失败，请重试"
+                    }
+                    heroPhotoItem = nil
+                }
             }
         }
     }
@@ -190,8 +248,8 @@ struct IOSNIOConfigView: View {
                                 .frame(height: 0.8)
                         }
 
-                        // 主题色板网格
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        // 主题色板网格（自适应列数：窄 2 列 / 宽 3 列）
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
                             ForEach(styles) { style in
                                 themeSwatchButton(style)
                             }
@@ -435,6 +493,103 @@ struct IOSNIOConfigView: View {
     private var carModelSelectorCard: some View {
         cardContainer(title: "🚘 爱车车型与涂装车漆", icon: "car.side.fill", accentColor: pastelYellow) {
             VStack(alignment: .leading, spacing: 12) {
+                // 首页名称自定义
+                HStack(spacing: 10) {
+                    Text("首页名称")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Spacer(minLength: 12)
+                    TextField("NIO", text: $homeTitle, prompt: Text("NIO").foregroundStyle(NIOThemePaint.text.opacity(0.35)))
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(pastelYellow)
+                        .tint(pastelYellow)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1)
+                        .frame(width: 120)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(NIOThemePaint.fill)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(NIOThemePaint.stroke, lineWidth: 1))
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("看板首页左上角标题")
+
+                // 车型图片来源
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("主页车型图片")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(NIOThemePaint.text)
+
+                    HStack(spacing: 6) {
+                        ForEach(NIOHeroPhotoMode.allCases) { mode in
+                            let isSelected = (heroPhotoModeRaw == mode.rawValue)
+                            Button {
+                                NIOBootHaptics.impact(.light)
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    heroPhotoModeRaw = mode.rawValue
+                                }
+                            } label: {
+                                Text(mode.displayName)
+                                    .font(.system(size: 11, weight: isSelected ? .heavy : .semibold, design: .rounded))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(isSelected ? pastelYellow.opacity(0.18) : NIOThemePaint.fill)
+                                    .foregroundStyle(isSelected ? pastelYellow : NIOThemePaint.text.opacity(0.6))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(isSelected ? pastelYellow.opacity(0.6) : NIOThemePaint.stroke, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if heroPhotoModeRaw == NIOHeroPhotoMode.custom.rawValue {
+                        HStack(spacing: 10) {
+                            PhotosPicker(selection: $heroPhotoItem, matching: .images) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "photo.badge.plus")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text(NIOHeroPhotoStore.hasCustomPhoto ? "重新导入图片" : "从相册导入")
+                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing))
+                                .clipShape(Capsule())
+                            }
+
+                            if NIOHeroPhotoStore.hasCustomPhoto {
+                                Button {
+                                    NIOHeroPhotoStore.clear()
+                                    heroPhotoHint = "已清除导入图片，将回退为渐变背景"
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                                        .padding(8)
+                                        .background(NIOThemePaint.fill)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        if let hint = heroPhotoHint {
+                            Text(hint)
+                                .font(.system(size: 9))
+                                .foregroundStyle(mintCyan)
+                        } else {
+                            Text("导入后保存在本机沙盒，主页 Hero 卡以渐变压暗显示，保证文字可读")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                        }
+                    }
+                }
+
+                Divider().background(NIOThemePaint.stroke)
+
                 // 特别版切换开关 / 默认
                 Button(action: {
                     let impact = UIImpactFeedbackGenerator(style: .light)
@@ -501,7 +656,7 @@ struct IOSNIOConfigView: View {
                         .foregroundStyle(mintCyan)
                         .padding(.top, 4)
 
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], spacing: 8) {
                         ForEach(currentModel.colors) { color in
                             let isColorSelected = (selectedColorSlug == color.slug)
                             Button(action: {
@@ -1416,6 +1571,29 @@ struct IOSNIOConfigView: View {
     }
 }
 
+// MARK: - 自适应呈现（大屏全屏 / 窄屏 sheet，供设置页子页面统一使用）
+
+private struct AdaptivePresentationModifier<V: View>: ViewModifier {
+    let isPresented: Binding<Bool>
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    let destination: () -> V
+
+    func body(content: Content) -> some View {
+        if sizeClass == .regular {
+            content.fullScreenCover(isPresented: isPresented, content: destination)
+        } else {
+            content.sheet(isPresented: isPresented, content: destination)
+        }
+    }
+}
+
+extension View {
+    /// Duo/iPad 大屏用 fullScreenCover（page sheet 宽度固定 ~640，双列布局触发不了）；iPhone 保持 sheet
+    func adaptivePresentation<V: View>(isPresented: Binding<Bool>, @ViewBuilder destination: @escaping () -> V) -> some View {
+        modifier(AdaptivePresentationModifier(isPresented: isPresented, destination: destination))
+    }
+}
+
 // MARK: - 诊断日志视图 (美化版)
 
 struct IOSNIOFetchLogView: View {
@@ -1481,6 +1659,9 @@ struct IOSNIOFetchLogView: View {
                             }
                         }
                         .padding(16)
+                        // 全屏呈现时限宽居中，日志行不至于拉满超宽屏
+                        .frame(maxWidth: 760)
+                        .frame(maxWidth: .infinity)
                     }
                 }
             }

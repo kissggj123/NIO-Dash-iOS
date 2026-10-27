@@ -52,9 +52,12 @@ struct NIOModesCard: View {
 
     private var items: [ModeItem] {
         let defender = NIOVehicleLib.defenderModeActive(offcar)
-        let pet = NIOVehicleLib.modeActive(offcar?["pet_mode_status"])
-        let camping = NIOVehicleLib.modeActive(offcar?["camping_mode_status"] ?? offcar?["camp_mode_status"])
-        let powerHold = NIOVehicleLib.modeActive(offcar?["power_hold_mode_status"] ?? offcar?["offcar_power_hold"])
+        // 键名对齐 NIO-Dash 实测 RVS 字段（offcar_mode_status 块内无 _status 后缀）
+        let pet = NIOVehicleLib.modeActive(offcar?["pet_mode"] ?? offcar?["pet_mode_status"])
+        let camping = NIOVehicleLib.modeActive(offcar?["camping_mode"] ?? offcar?["camp_mode_status"])
+        let powerHold = NIOVehicleLib.modeActive(offcar?["power_hold_mode"] ?? offcar?["power_hold_mode_status"])
+        let remoteVideo = NIOVehicleLib.modeActive(offcar?["remote_video"])
+        let cpd = NIOVehicleLib.modeActive(offcar?["cpd_mode"])
         let v2l = (v2lStatus ?? 0) >= 1
 
         return [
@@ -67,7 +70,11 @@ struct NIOModesCard: View {
             ModeItem(name: "不下电保持", icon: "engine.combustion.fill", isActive: powerHold,
                      detail: powerHold ? "离车供电保持中" : "未启用"),
             ModeItem(name: "V2L 对外放电", icon: "powerplug.fill", isActive: v2l,
-                     detail: v2l ? "正在对外供电" : "未启用")
+                     detail: v2l ? "正在对外供电" : "未启用"),
+            ModeItem(name: "远程查看", icon: "video.fill", isActive: remoteVideo,
+                     detail: remoteVideo ? "车外摄像头直播中" : "未启用"),
+            ModeItem(name: "儿童遗留检测", icon: "figure.and.child.holdinghands", isActive: cpd,
+                     detail: cpd ? "座舱内智能监测中" : "未启用")
         ]
     }
 
@@ -133,24 +140,52 @@ struct NIOAccessoriesCard: View {
         return parts.joined(separator: " · ")
     }
 
-    /// 人工可读遍历：键名蛇形转空格，值取原始展示（用于键名未知的加热 / 灯光块）
-    private func readableEntries(_ dict: [String: NIOJSONValue]?, limit: Int = 3) -> [(label: String, value: String)] {
-        guard let dict, !dict.isEmpty else { return [] }
-        return dict
-            .sorted { $0.key < $1.key }
-            .prefix(limit)
-            .map { key, value in
-                let label = key.replacingOccurrences(of: "_", with: " ").capitalized
-                let text = value.stringValue ?? value.doubleValue.map { String(format: "%.1f", $0) } ?? "—"
-                return (label, text)
-            }
+    /// 语义化解析加热/灯光块：只识别已知开关字段（键名子串匹配），忽略 sample_time 等元数据。
+    /// 返回开启项列表；字段存在但全部关闭返回「全部关闭」；无已知字段返回 nil（隐藏该行）。
+    private func switchSummary(_ dict: [String: NIOJSONValue]?, candidates: [(needle: String, label: String)]) -> String? {
+        guard let dict, !dict.isEmpty else { return nil }
+        var active: [String] = []
+        var sawKnownKey = false
+        for (key, value) in dict {
+            guard let match = candidates.first(where: { key.lowercased().contains($0.needle) }) else { continue }
+            sawKnownKey = true
+            let on = (value.intValue ?? value.doubleValue.map { Int($0) } ?? 0) >= 1
+                || value.stringValue.map { ["1", "on", "true", "open", "active"].contains($0.lowercased()) } == true
+            if on { active.append(match.label) }
+        }
+        if active.isEmpty { return sawKnownKey ? "全部关闭" : nil }
+        return active.joined(separator: " · ")
+    }
+
+    /// 加热块：电池预热 / 高压预热 / 方向盘与座椅加热 / 除霜
+    private var heatingText: String? {
+        switchSummary(heating, candidates: [
+            ("warm_up", "电池预热"),
+            ("pre_sts", "高压预热"),
+            ("steering", "方向盘加热"),
+            ("seat_heat", "座椅加热"),
+            ("defrost", "除霜")
+        ])
+    }
+
+    /// 灯光块：大灯 / 日行灯 / 驻车灯 / 转向灯 / 雾灯 / 尾灯
+    private var lightText: String? {
+        switchSummary(light, candidates: [
+            ("head", "大灯"),
+            ("day_ti_runng", "日行灯"),
+            ("dayti", "日行灯"),
+            ("parking", "驻车灯"),
+            ("turn", "转向灯"),
+            ("fog", "雾灯"),
+            ("tail", "尾灯")
+        ])
     }
 
     var body: some View {
         let lvText = lvBattText
         let fridgeText = frdgText
-        let heatEntries = readableEntries(heating)
-        let lightEntries = readableEntries(light)
+        let heatText = heatingText
+        let lightValueText = lightText
 
         return NIODashCardShell(title: "智能外设", subtitle: "低压电瓶 · 冰箱 · 加热 · 灯光") {
             VStack(spacing: 0) {
@@ -162,15 +197,15 @@ struct NIOAccessoriesCard: View {
                     row(icon: "refrigerator", label: "车载冰箱", value: fridgeText, tint: .cyan)
                     Divider()
                 }
-                if !heatEntries.isEmpty {
-                    row(icon: "flame.fill", label: "座舱加热", value: heatEntries.map { "\($0.label) \($0.value)" }.joined(separator: " · "), tint: .orange)
+                if let heatText {
+                    row(icon: "flame.fill", label: "座舱加热", value: heatText, tint: .orange)
                     Divider()
                 }
-                if !lightEntries.isEmpty {
-                    row(icon: "lightbulb.max.fill", label: "车灯照明", value: lightEntries.map { "\($0.label) \($0.value)" }.joined(separator: " · "), tint: .yellow)
+                if let lightValueText {
+                    row(icon: "lightbulb.max.fill", label: "车灯照明", value: lightValueText, tint: .yellow)
                     Divider()
                 }
-                if lvText == nil && fridgeText == nil && heatEntries.isEmpty && lightEntries.isEmpty {
+                if lvText == nil && fridgeText == nil && heatText == nil && lightValueText == nil {
                     Text("暂无外设遥测数据（RVS 未返回对应字段）")
                         .font(.caption)
                         .foregroundStyle(.secondary)

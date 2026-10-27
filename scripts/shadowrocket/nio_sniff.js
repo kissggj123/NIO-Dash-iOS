@@ -58,6 +58,10 @@ const LOCAL_PUSH_URL = "http://127.0.0.1:8997/credentials";
     const isWidget  = url.includes("/widget/info");
     const appVer    = qp.app_ver || (url.match(/app_ver=([\d.]+)/) || [])[1] || "";
 
+    // UA 策略：主 App 的 UA（NextevCar/WeiLaiApp，非 Widget）优先——
+    // 回放五类请求应以「主 App 指纹」为准，Widget UA 只是兜底
+    const isMainAppUA = userAgent.includes("WeiLaiApp") && !userAgent.includes("WidgetExtension");
+
     // 读取已存数据
     let stored = {};
     try {
@@ -74,7 +78,8 @@ const LOCAL_PUSH_URL = "http://127.0.0.1:8997/credentials";
     if (qp.timestamp)   stored.timestamp     = qp.timestamp;
     if (qp.sign_secret) stored.sign_secret   = qp.sign_secret;
     if (appVer)         stored.app_ver       = appVer;
-    if (userAgent)      stored.user_agent    = userAgent;
+    if (userAgent && (isMainAppUA || !stored.user_agent)) stored.user_agent = userAgent;
+    if (userGuid)       stored.user_guid     = userGuid;
 
     stored.change_url  = appVer ? DEFAULT_CHANGE_URL.replace(/app_ver=[\d.]+/, "app_ver=" + appVer) : DEFAULT_CHANGE_URL;
     stored.checkin_url = DEFAULT_CHECKIN_URL;
@@ -111,6 +116,7 @@ const LOCAL_PUSH_URL = "http://127.0.0.1:8997/credentials";
             timestamp:     stored.timestamp     || "",
             app_ver:       stored.app_ver       || "",
             user_agent:    stored.user_agent    || "",
+            user_guid:     stored.user_guid     || "",
             source:        "shadowrocket"
         });
 

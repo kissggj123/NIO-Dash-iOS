@@ -44,10 +44,45 @@ struct NIOEnergyBootView: View {
     @State private var arcScale2: CGFloat = 1.2
     @State private var arcOpacity2: Double = 0.0
 
+    // 华丽特效层状态（v5.1）
+    @State private var orbitSpinning = false          // 轨道电子旋转
+    @State private var dustDrift = false              // 背景星尘漂浮
+    @State private var shockwaveScale1: CGFloat = 0.5 // 冲击波 1
+    @State private var shockwaveOpacity1: Double = 0.0
+    @State private var shockwaveScale2: CGFloat = 0.5 // 冲击波 2
+    @State private var shockwaveOpacity2: Double = 0.0
+    @State private var flashOpacity: Double = 0.0     // 全屏辉光脉冲
+    @State private var shinePhase = false             // Logo 光泽扫过
+
+    /// 背景星尘粒子（确定性伪随机分布，避免每次启动闪变）
+    private let dustParticles: [(x: Double, y: Double, size: Double, delay: Double)] = (0..<14).map { i in
+        let f = sin(Double(i) * 12.9898) * 43758.5453
+        let g = sin(Double(i) * 78.233) * 12345.6789
+        return (abs(f - f.rounded()) , abs(g - g.rounded()), 1.5 + abs(f - f.rounded()) * 2.2, Double(i) * 0.18)
+    }
+
     var body: some View {
         ZStack {
             splashBackground
                 .ignoresSafeArea()
+
+            // 背景星尘：缓慢上浮 + 闪烁
+            dustLayer
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+
+            // 充能完成全屏辉光脉冲
+            if flashOpacity > 0.001 {
+                RadialGradient(
+                    colors: [Color.white.opacity(0.5), accent.opacity(0.18), Color.clear],
+                    center: .center,
+                    startRadius: 20,
+                    endRadius: 420
+                )
+                .ignoresSafeArea()
+                .opacity(flashOpacity)
+                .allowsHitTesting(false)
+            }
 
             NIOBootSkipOverlay(isFinished: $isFinished, visible: showLogo)
                 .zIndex(10)
@@ -69,6 +104,26 @@ struct NIOEnergyBootView: View {
                         )
                         .frame(width: 210, height: 210)
                         .scaleEffect(logoPulse ? 1.1 : 0.95)
+
+                    // 充能完成冲击波：两道扩散环
+                    shockwaveRing(scale: shockwaveScale1, opacity: shockwaveOpacity1, width: 2.2, color: glow)
+                    shockwaveRing(scale: shockwaveScale2, opacity: shockwaveOpacity2, width: 1.4, color: warm)
+
+                    // 轨道电子：3 颗光点沿环旋转（充能期），完成时随轨道隐去
+                    if !showLogo {
+                        ForEach(0..<3, id: \.self) { idx in
+                            Circle()
+                                .fill(Color.white.opacity(0.85))
+                                .frame(width: 5, height: 5)
+                                .shadow(color: glow.opacity(0.9), radius: 4)
+                                .offset(x: 0, y: -80)
+                                .rotationEffect(.degrees(orbitSpinning ? 360 + Double(idx) * 120 : Double(idx) * 120))
+                                .animation(
+                                    .linear(duration: 2.4).repeatForever(autoreverses: false).delay(Double(idx) * -0.8),
+                                    value: orbitSpinning
+                                )
+                        }
+                    }
 
                     // 向心凝聚电弧（充能完成瞬间收拢）
                     Circle()
@@ -240,7 +295,57 @@ struct NIOEnergyBootView: View {
                 .frame(width: 62, height: 62)
                 .clipShape(Circle())
                 .shadow(color: .black.opacity(isDark ? 0.4 : 0.15), radius: 4)
+                .overlay(
+                    // 光泽扫过：斜向高光条掠过 Logo
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.clear, Color.white.opacity(0.55), Color.clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: 26, height: 96)
+                        .rotationEffect(.degrees(18))
+                        .offset(x: shinePhase ? 70 : -70)
+                        .blendMode(.screen)
+                        .clipped()
+                )
         }
+    }
+
+    // MARK: - 华丽特效层
+
+    /// 背景星尘：确定性分布的小光点，缓慢上浮 + 呼吸闪烁
+    private var dustLayer: some View {
+        ZStack {
+            ForEach(0..<dustParticles.count, id: \.self) { idx in
+                let p = dustParticles[idx]
+                Circle()
+                    .fill(glow.opacity(0.55))
+                    .frame(width: p.size, height: p.size)
+                    .blur(radius: 0.6)
+                    .offset(
+                        x: (p.x - 0.5) * UIScreen.main.bounds.width,
+                        y: (p.y - 0.5) * UIScreen.main.bounds.height + (dustDrift ? -26 : 26)
+                    )
+                    .opacity(dustDrift ? 0.75 : 0.2)
+                    .animation(
+                        .easeInOut(duration: 2.8 + p.delay).repeatForever(autoreverses: true).delay(p.delay),
+                        value: dustDrift
+                    )
+            }
+        }
+    }
+
+    /// 冲击波扩散环
+    private func shockwaveRing(scale: CGFloat, opacity: Double, width: CGFloat, color: Color) -> some View {
+        Circle()
+            .stroke(color.opacity(0.85), style: StrokeStyle(lineWidth: width, lineCap: .round))
+            .frame(width: 150, height: 150)
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .shadow(color: color.opacity(0.5), radius: 6)
     }
 
     // MARK: - 主题化背景
@@ -270,6 +375,10 @@ struct NIOEnergyBootView: View {
     private func runChargeSequence() {
         let chargeDuration = pace.t(1.5)
 
+        // 0. 氛围层：星尘漂浮 + 轨道电子开转
+        dustDrift = true
+        orbitSpinning = true
+
         // 1. 电池环充能 0→100%（数字同步滚动）
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             chargeStarted = true
@@ -279,13 +388,38 @@ struct NIOEnergyBootView: View {
             }
         }
 
-        // 2. 充能完成：电弧向心凝聚 + Logo 亮起
+        // 2. 充能完成：全屏辉光 + 冲击波 + 电弧向心凝聚 + Logo 亮起 + 光泽扫过
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + chargeDuration + 0.05) {
             NIOBootHaptics.impact(.medium)
+
+            // 全屏辉光脉冲（快闪快消）
+            withAnimation(.easeOut(duration: 0.18)) { flashOpacity = 0.85 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation(.easeOut(duration: 0.5)) { flashOpacity = 0.0 }
+            }
+
+            // 双冲击波扩散
+            withAnimation(.easeOut(duration: 0.85)) {
+                shockwaveScale1 = 2.3
+                shockwaveOpacity1 = 0.8
+            }
+            withAnimation(.easeOut(duration: 1.05).delay(0.08)) {
+                shockwaveScale2 = 2.1
+                shockwaveOpacity2 = 0.65
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) {
+                withAnimation(.easeIn(duration: 0.3)) { shockwaveOpacity1 = 0.0 }
+                withAnimation(.easeIn(duration: 0.35)) { shockwaveOpacity2 = 0.0 }
+            }
 
             withAnimation(.spring(response: 0.46, dampingFraction: 0.68)) {
                 showLogo = true
                 logoPulse = true
+            }
+
+            // Logo 光泽扫过（右入左出一次）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                withAnimation(.easeInOut(duration: 0.7)) { shinePhase = true }
             }
 
             withAnimation(.easeOut(duration: 0.32)) {

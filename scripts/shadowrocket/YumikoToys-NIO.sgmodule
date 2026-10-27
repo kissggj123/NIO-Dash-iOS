@@ -1,6 +1,8 @@
 #!name=🐰 YumikoToys NIO-Dash 凭证直推
-#!desc=自动拦截蔚来 App 请求，提取 Token / VehicleID / User-Guid / app_ver 设备指纹并直推到 YumikoToys App（127.0.0.1:8997），防多端登录踢 Token，全程无需手动复制。
+#!desc=自动拦截蔚来 App 请求，提取 Token / VehicleID / User-Guid / app_ver 设备指纹并直推到 YumikoToys App（127.0.0.1:8997），防多端登录踢 Token，全程无需手动复制。同凭证重复推送会被 App 静默忽略，不会反复震动。
 #!author=YumikoToys
+#!version=v2.3.0 (2026-10-27 指纹直推版)
+#!date=2026-10-27 22:00:00
 #!homepage=https://github.com/kissggj123/NIO-Dash-iOS
 #!icon=https://raw.githubusercontent.com/kissggj123/NIO-Dash-iOS/main/wheater/Assets.xcassets/AppIcon.appiconset/icon_60%402x.png
 #!category=车联网
