@@ -35,6 +35,7 @@ struct IOSAboutView: View {
     @State private var tapCount = 0
     @State private var easterEggText: String?
     @State private var isIconBouncing = false
+    @State private var bounceWork = NIOScheduledWork()
     @State private var expandedCredit: String?
     @State private var showReleaseNotesSheet = false
 
@@ -132,7 +133,8 @@ struct IOSAboutView: View {
                 generator.impactOccurred()
                 tapCount += 1
                 isIconBouncing = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                // 连点时重置上一轮定时器，避免抖动提前复位
+                bounceWork.scheduleReplacing(after: 0.25) {
                     isIconBouncing = false
                 }
 

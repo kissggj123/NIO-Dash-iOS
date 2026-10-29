@@ -36,6 +36,7 @@ struct NIOEnergyBootView: View {
     // 动画状态
     @State private var chargeProgress: Double = 0.0
     @State private var chargeStarted = false
+    @State private var scheduledWork = NIOScheduledWork()
     @State private var showLogo = false
     @State private var showTitle = false
     @State private var showSubtitle = false
@@ -265,6 +266,7 @@ struct NIOEnergyBootView: View {
             }
         }
         .onAppear { runChargeSequence() }
+        .onDisappear { scheduledWork.cancelAll() }
     }
 
     // MARK: - 充能核心（数字 + 闪电）
@@ -583,7 +585,7 @@ struct NIOEnergyBootView: View {
         orbitSpinning = true
 
         // 1. 电池环充能 0→100%（数字同步滚动）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        scheduledWork.schedule(after: 0.15) {
             chargeStarted = true
             boltPulse = true
             withAnimation(.easeInOut(duration: chargeDuration)) {
@@ -592,13 +594,13 @@ struct NIOEnergyBootView: View {
         }
 
         // 2. 充能完成：全屏辉光 + 粒子爆发 + 三重冲击波 + 电弧向心凝聚 + Logo 亮起 + 光泽扫过
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + chargeDuration + 0.05) {
+        scheduledWork.schedule(after: 0.15 + chargeDuration + 0.05) {
             NIOBootHaptics.impact(.medium)
             chargeDoneAt = Date()
 
             // 全屏辉光脉冲（快闪快消）
             withAnimation(.easeOut(duration: 0.18)) { flashOpacity = 0.85 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            scheduledWork.schedule(after: 0.2) {
                 withAnimation(.easeOut(duration: 0.5)) { flashOpacity = 0.0 }
             }
 
@@ -615,7 +617,7 @@ struct NIOEnergyBootView: View {
                 shockwaveScale3 = 2.5
                 shockwaveOpacity3 = 0.5
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) {
+            scheduledWork.schedule(after: 0.95) {
                 withAnimation(.easeIn(duration: 0.3)) { shockwaveOpacity1 = 0.0 }
                 withAnimation(.easeIn(duration: 0.35)) { shockwaveOpacity2 = 0.0 }
                 withAnimation(.easeIn(duration: 0.4)) { shockwaveOpacity3 = 0.0 }
@@ -627,7 +629,7 @@ struct NIOEnergyBootView: View {
             }
 
             // Logo 光泽扫过（右入左出一次）
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            scheduledWork.schedule(after: 0.12) {
                 withAnimation(.easeInOut(duration: 0.7)) { shinePhase = true }
             }
 
@@ -639,7 +641,7 @@ struct NIOEnergyBootView: View {
                 arcScale2 = 0.96
                 arcOpacity2 = 0.7
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            scheduledWork.schedule(after: 0.55) {
                 withAnimation(.easeOut(duration: 0.6)) {
                     arcOpacity1 = 0.0
                 }
@@ -650,21 +652,21 @@ struct NIOEnergyBootView: View {
         }
 
         // 3. 标题逐字浮现
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(2.0)) {
+        scheduledWork.schedule(after: pace.t(2.0)) {
             withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
                 showTitle = true
             }
         }
 
         // 4. 副标浮现
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(2.25)) {
+        scheduledWork.schedule(after: pace.t(2.25)) {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
                 showSubtitle = true
             }
         }
 
         // 5. 静置停留后进入看板
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(3.1)) {
+        scheduledWork.schedule(after: pace.t(3.1)) {
             withAnimation(.easeInOut(duration: 0.38)) {
                 isFinished = true
             }

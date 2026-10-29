@@ -1158,43 +1158,39 @@ private struct NIOParkingLocationCard: View {
     private func reverseGeocode() {
         guard !isLoadingPlacemark else { return }
         isLoadingPlacemark = true
-        let geocoder = CLGeocoder()
-        let location = CLLocation(latitude: latitude, longitude: longitude)
-        geocoder.reverseGeocodeLocation(location) { placemarks, error in
-            Task { @MainActor in
-                isLoadingPlacemark = false
-                guard let pm = placemarks?.first, error == nil else {
+        Task { @MainActor in
+            defer { isLoadingPlacemark = false }
+            do {
+                // iOS 26 MapKit 逆地理（CLGeocoder 已弃用）；mapItems 回调标注为 UI Actor，天然主线程
+                guard let request = MKReverseGeocodingRequest(location: CLLocation(latitude: latitude, longitude: longitude)) else {
                     placemarkText = nil
                     return
                 }
-                placemarkText = formatPlacemark(pm)
+                let items = try await request.mapItems
+                guard let item = items.first else {
+                    placemarkText = nil
+                    return
+                }
+                placemarkText = Self.formatAddress(from: item)
+            } catch {
+                placemarkText = nil
             }
         }
     }
 
-    private func formatPlacemark(_ pm: CLPlacemark) -> String {
-        var parts: [String] = []
-        // 优先道路名
-        if let street = pm.thoroughfare, !street.isEmpty {
-            parts.append(street)
+    /// iOS 26 逆地理已无街道级分字段（placemark 一并弃用）：
+    /// 短地址 → 完整地址 → 城市名 逐级兜底拼接"停放于…附近"
+    private static func formatAddress(from item: MKMapItem) -> String {
+        if let short = item.address?.shortAddress, !short.isEmpty {
+            return "停放于\(short)附近"
         }
-        // 子地标（店铺 / 小区）
-        if let sub = pm.subThoroughfare, !sub.isEmpty {
-            parts.append(sub + "号")
+        if let full = item.address?.fullAddress, !full.isEmpty {
+            return "停放于\(full)附近"
         }
-        // 名称（POI / 店铺）
-        if let name = pm.name, !name.isEmpty, name != pm.thoroughfare {
-            parts.append(name)
+        if let city = item.addressRepresentations?.cityName, !city.isEmpty {
+            return "停放于\(city)附近"
         }
-        // 行政区
-        if let area = pm.subLocality, !area.isEmpty, !parts.contains(area) {
-            parts.append(area)
-        }
-        if parts.isEmpty {
-            if let loc = pm.locality, !loc.isEmpty { return "停放于\(loc)附近" }
-            return "停放位置"
-        }
-        return "停放于" + parts.joined(separator: " · ") + "附近"
+        return "停放位置"
     }
 }
 

@@ -28,6 +28,7 @@ struct NIOMinimalBootView: View {
     @State private var showLogo = false
     @State private var showName = false
     @State private var lineProgress: Double = 0.0
+    @State private var scheduledWork = NIOScheduledWork()
 
     var body: some View {
         ZStack {
@@ -83,13 +84,14 @@ struct NIOMinimalBootView: View {
             }
         }
         .onAppear { runMinimalSequence() }
+        .onDisappear { scheduledWork.cancelAll() }
     }
 
     // MARK: - 时序控制器
 
     private func runMinimalSequence() {
         // 1. Logo 淡入
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+        scheduledWork.schedule(after: 0.08) {
             withAnimation(.easeOut(duration: 0.32)) {
                 showLogo = true
                 showName = true
@@ -97,14 +99,14 @@ struct NIOMinimalBootView: View {
         }
 
         // 2. 进度线快速充满
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+        scheduledWork.schedule(after: 0.22) {
             withAnimation(.easeInOut(duration: pace.t(0.55))) {
                 lineProgress = 1.0
             }
         }
 
         // 3. 直达看板（全程 ≤1.1s）
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(0.95)) {
+        scheduledWork.schedule(after: pace.t(0.95)) {
             withAnimation(.easeInOut(duration: 0.25)) {
                 isFinished = true
             }

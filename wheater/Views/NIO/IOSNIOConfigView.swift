@@ -15,6 +15,7 @@ struct IOSNIOConfigView: View {
 
     @State private var smartInput = ""
     @State private var showSuccessBanner = false
+    @State private var bannerWork = NIOScheduledWork()
     @State private var testStatusText: String?
     @State private var isTesting = false
     @State private var showLogsSheet = false
@@ -1509,7 +1510,8 @@ struct IOSNIOConfigView: View {
     private func applySmartParse() {
         if service.smartParseInput(smartInput) {
             withAnimation { showSuccessBanner = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            // 连点时重置上一轮定时器，避免横幅提前消失或定时器堆叠
+            bannerWork.scheduleReplacing(after: 3) {
                 withAnimation { showSuccessBanner = false }
             }
         }

@@ -244,3 +244,34 @@ struct NIOLaunchSplashView: View {
         }
     }
 }
+
+// MARK: - 可取消的延时任务集合
+
+/// 启动动画序列的延时调度助手：所有 `DispatchQueue.main.asyncAfter` 统一经此排队，
+/// 视图消失（用户跳过开屏 / 预览结束）时整体 cancel，避免向已脱离层级的 @State 脏写
+final class NIOScheduledWork: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [DispatchWorkItem] = []
+
+    func schedule(after seconds: TimeInterval, _ body: @escaping () -> Void) {
+        let work = DispatchWorkItem(block: body)
+        lock.lock()
+        items.append(work)
+        lock.unlock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    /// 取消此前所有未触发任务后再调度（防连点堆叠定时器）
+    func scheduleReplacing(after seconds: TimeInterval, _ body: @escaping () -> Void) {
+        cancelAll()
+        schedule(after: seconds, body)
+    }
+
+    func cancelAll() {
+        lock.lock()
+        let all = items
+        items.removeAll()
+        lock.unlock()
+        all.forEach { $0.cancel() }
+    }
+}

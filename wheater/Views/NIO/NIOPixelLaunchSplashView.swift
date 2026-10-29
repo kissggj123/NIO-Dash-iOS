@@ -48,6 +48,7 @@ struct NIOPixelLaunchSplashView: View {
     @State private var auraRotation: Double = 0.0
     @State private var badgeFlash: Double = 0.0  // 徽章点亮闪光 0→1→0
     @State private var pulseDots = false
+    @State private var scheduledWork = NIOScheduledWork()
 
     // 15x15 矩阵中代表蔚来 Logo 的像素坐标 (row, col)
     // 蔚来标志由两部分组成：上方穹顶圆弧 (Top Arc) + 下方延伸之路 (Bottom Chevron)
@@ -242,6 +243,7 @@ struct NIOPixelLaunchSplashView: View {
         .onAppear {
             runLaunchSequence()
         }
+        .onDisappear { scheduledWork.cancelAll() }
     }
 
     // MARK: - 主题人设（每个主题一套开屏个性）
@@ -492,7 +494,7 @@ struct NIOPixelLaunchSplashView: View {
             withAnimation(.easeOut(duration: 0.2)) {
                 activePixelIndex = nioPixelCoords.count - 1
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            scheduledWork.schedule(after: 0.25) {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
                     showHDLogo = true
                     showTitle = true
@@ -500,11 +502,11 @@ struct NIOPixelLaunchSplashView: View {
                     pulseDots = true
                 }
                 withAnimation(.easeOut(duration: 0.15)) { badgeFlash = 1.0 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                scheduledWork.schedule(after: 0.4) {
                     withAnimation(.easeOut(duration: 0.4)) { badgeFlash = 0.0 }
                 }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            scheduledWork.schedule(after: 1.4) {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isFinished = true
                 }
@@ -519,7 +521,7 @@ struct NIOPixelLaunchSplashView: View {
 
         for w in 0..<waveCount {
             let targetIdx = min(totalPixels - 1, Int(Double(w + 1) * Double(totalPixels) / Double(waveCount)))
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(w) * waveInterval) {
+            scheduledWork.schedule(after: Double(w) * waveInterval) {
                 withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                     activePixelIndex = targetIdx
                 }
@@ -527,7 +529,7 @@ struct NIOPixelLaunchSplashView: View {
         }
 
         // 2. 像素聚合成高清 Logo 与双层脉冲光环爆炸 (约 0.9s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(0.90)) {
+        scheduledWork.schedule(after: pace.t(0.90)) {
             NIOBootHaptics.impact(.medium)
 
             withAnimation(.spring(response: 0.48, dampingFraction: 0.68)) {
@@ -542,7 +544,7 @@ struct NIOPixelLaunchSplashView: View {
 
             // 徽章点亮闪光（点亮瞬间放大 + 辉光，随后回落）
             withAnimation(.easeOut(duration: 0.18)) { badgeFlash = 1.0 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            scheduledWork.schedule(after: 0.5) {
                 withAnimation(.easeOut(duration: 0.5)) { badgeFlash = 0.0 }
             }
 
@@ -555,21 +557,21 @@ struct NIOPixelLaunchSplashView: View {
         }
 
         // 3. 标题浮现 (约 1.25s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(1.25)) {
+        scheduledWork.schedule(after: pace.t(1.25)) {
             withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
                 showTitle = true
             }
         }
 
         // 4. 副标与连结提示浮现 (约 1.5s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(1.50)) {
+        scheduledWork.schedule(after: pace.t(1.50)) {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
                 showSubtitle = true
             }
         }
 
         // 5. 动画静置停留与平滑过渡进入主看板 (约 2.9s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + pace.t(2.9)) {
+        scheduledWork.schedule(after: pace.t(2.9)) {
             withAnimation(.easeInOut(duration: 0.38)) {
                 isFinished = true
             }
