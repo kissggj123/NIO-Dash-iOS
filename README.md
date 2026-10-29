@@ -88,6 +88,16 @@
 - **大屏全屏呈现**：设置 / 关于 / 更新日志 / 诊断日志在 regular 宽度用全屏页替代 640pt 死宽 sheet；
 - **自定义折叠按钮**：主题色小圆钮 + 淡色标题条，替换系统玻璃大按钮；iPhone 14 Pro 等小屏完全不受影响。
 
+<p align="center">
+  <img src="docs/screenshots/duo_sidebar.jpg" alt="Duo 展开态 · 特斯拉式侧边栏分栏" width="49%" style="border-radius: 12px;">
+  <img src="docs/screenshots/duo_collapsed.jpg" alt="Duo 展开态 · 侧栏折叠单列" width="49%" style="border-radius: 12px;">
+  <br>
+  <img src="docs/screenshots/duo_island_minimal.jpg" alt="Duo 灵动岛最小化电量胶囊" width="110" style="border-radius: 10px;">
+  <img src="docs/screenshots/duo_island_expanded.jpg" alt="Duo 灵动岛展开实时车况" width="230" style="border-radius: 12px;">
+  <br>
+  <sub>▲ iPhone Duo 实机：侧边栏分栏 / 折叠单列 / 灵动岛实时车况</sub>
+</p>
+
 ### 15. 🌸 三风格启动动画与主页车图（v5.0.0+）
 - **能量充能**（默认）：电池环 0→100% 充能 + 数字滚动 + 电弧凝聚 Logo + 星尘上浮 / 轨道电子 / 冲击波 / Logo 光泽扫过，全套主题联动；
 - **像素重制**：15×15 像素点阵波次点亮 → 高清 Logo；**极简快启**：≤1.1s 淡入，省电动效下自动强制；
