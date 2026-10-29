@@ -497,9 +497,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = wheater/Info.plist;
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We need your location";
-				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "We need your location";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "在后台保持车况刷新连接（保活用）。App 不使用、不存储你的位置信息。";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "在后台保持车况刷新连接（保活用）。App 不使用、不存储你的位置信息。";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "在后台保持车况刷新连接（保活用）。App 不使用、不存储你的位置信息。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -533,9 +533,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = wheater/Info.plist;
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We need your location";
-				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "We need your location";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "在后台保持车况刷新连接（保活用）。App 不使用、不存储你的位置信息。";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "在后台保持车况刷新连接（保活用）。App 不使用、不存储你的位置信息。";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "在后台保持车况刷新连接（保活用）。App 不使用、不存储你的位置信息。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

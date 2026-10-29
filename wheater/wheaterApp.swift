@@ -32,6 +32,8 @@ struct wheaterApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .active:
+                        // 后台定位保活：已配置凭证且授权后，轮询 Timer 在后台继续跑
+                        NIOLocationKeepAlive.shared.requestAndStart()
                         // 控制胶囊上岛接力：App 激活时消费 Widget 扩展写入的快速上岛请求
                         NIOService.shared.checkPendingIslandRaise()
                     case .background:

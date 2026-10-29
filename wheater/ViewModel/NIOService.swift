@@ -12,6 +12,7 @@ import UIKit
 import ActivityKit
 import BackgroundTasks
 import WidgetKit
+import CoreLocation
 
 @MainActor
 final class NIOService: ObservableObject {
@@ -228,7 +229,9 @@ final class NIOService: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            // 进入后台暂停轮询定时器，彻底杜绝后台无效网络唤醒与并发冲突
+            // 后台定位保活激活时，轮询定时器继续在后台跑（车况准实时）；
+            // 未开保活则暂停轮询，杜绝后台无效网络唤醒与并发冲突
+            guard !NIOLocationKeepAlive.shared.isKeepingAlive else { return }
             MainActor.assumeIsolated {
                 self?.vehicleTimer?.invalidate()
                 self?.vehicleTimer = nil
@@ -1568,4 +1571,78 @@ private final class BGTaskCompletionGuard: @unchecked Sendable {
             task.setTaskCompleted(success: success)
         }
     }
+}
+
+// MARK: - 后台定位保活（自用方案）
+
+/// 持续低精度定位让进程在后台存活，前台轮询 Timer 因此在后台继续跑（车况准实时刷新）。
+/// 纯自用保活方案：数据本身不使用、不存储；若上架 App Store 需移除
+/// （指南 2.5.4 要求后台定位与用户可见的核心功能直接相关）。
+@MainActor
+final class NIOLocationKeepAlive: NSObject, ObservableObject {
+    static let shared = NIOLocationKeepAlive()
+
+    @Published private(set) var isKeepingAlive = false
+
+    private let manager = CLLocationManager()
+    /// 总开关（UserDefaults，默认开）：需要关闭时 `defaults write nio_location_keepalive 0`
+    private static let toggleKey = "nio_location_keepalive"
+
+    private var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: Self.toggleKey) as? Bool ?? true
+    }
+
+    private override init() {
+        super.init()
+        manager.delegate = self
+        // 保活用：不追求精度，尽量少唤醒 GPS 硬件
+        manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        manager.distanceFilter = CLLocationDistanceMax
+        manager.activityType = .other
+        // 关键：不允许系统自动暂停定位服务，否则后台仍会被挂起
+        manager.pausesLocationUpdatesAutomatically = false
+        // 后台持续收回调 = 进程不被挂起（需 Info.plist UIBackgroundModes 含 location）
+        manager.allowsBackgroundLocationUpdates = true
+    }
+
+    /// 幂等启动：已配置凭证才需要保活；权限未决时先发起系统授权请求
+    func requestAndStart() {
+        guard isEnabled, NIOService.shared.isConfigured else { return }
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            start()
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        default:
+            break // 用户已拒绝：静默放弃，不影响任何前台功能
+        }
+    }
+
+    func stop() {
+        manager.stopUpdatingLocation()
+        isKeepingAlive = false
+    }
+
+    private func start() {
+        guard !isKeepingAlive else { return }
+        manager.startUpdatingLocation()
+        isKeepingAlive = true
+    }
+}
+
+extension NIOLocationKeepAlive: CLLocationManagerDelegate {
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor in
+            guard NIOLocationKeepAlive.shared.isEnabled, NIOService.shared.isConfigured else { return }
+            if status == .authorizedWhenInUse || status == .authorizedAlways {
+                NIOLocationKeepAlive.shared.start()
+            }
+        }
+    }
+
+    /// 定位数据仅为保活信号：不使用、不记录
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {}
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 }
