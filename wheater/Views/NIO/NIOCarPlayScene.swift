@@ -60,9 +60,9 @@ final class NIOCarPlaySceneDelegate: NSObject, CPTemplateApplicationSceneDelegat
         let status = NIOService.shared.vehicleData?.data?.status
         let socStatus = status?.socStatus
 
-        let socInt = Int((socStatus?.soc ?? 0).rounded())
-        let rangeKm = Int((socStatus?.remainingRange ?? 0).rounded())
-        let actKm = socStatus?.remainingActualRange.map { Int($0.rounded()) }
+        let socInt = ((socStatus?.soc ?? 0).rounded()).safeInt ?? 0
+        let rangeKm = ((socStatus?.remainingRange ?? 0).rounded()).safeInt ?? 0
+        let actKm = socStatus?.remainingActualRange.flatMap { $0.rounded().safeInt }
         let charging = NIOVehicleLib.isRealCharging(socStatus: socStatus, offcarStatus: status?.offcarModeStatus)
         let chargeText = NIOVehicleLib.smartChargeStateDescription(socStatus: socStatus, offcarStatus: status?.offcarModeStatus)
         let powerText = socStatus?.chargingPower.map { String(format: "%.1f kW", $0 / 1000.0) }
@@ -78,21 +78,27 @@ final class NIOCarPlaySceneDelegate: NSObject, CPTemplateApplicationSceneDelegat
         )
         overviewItem.accessoryType = .disclosureIndicator
         overviewItem.handler = { [weak self] _, completion in
-            Task { @MainActor in self?.showDetail(completion: completion) }
+            Task { @MainActor in
+                guard let self = self else { completion(); return }
+                self.showDetail(completion: completion)
+            }
         }
 
         // 环境与里程
         var envParts: [String] = []
         if let t = status?.hvacStatus?.temperature { envParts.append(String(format: "车内 %.0f℃", t)) }
         if let t = status?.hvacStatus?.outsideTemperature { envParts.append(String(format: "车外 %.0f℃", t)) }
-        if let m = status?.exteriorStatus?.mileage { envParts.append("总里程 \(Int(m.rounded())) km") }
+        if let m = status?.exteriorStatus?.mileage { envParts.append("总里程 \(m.rounded().safeInt ?? 0) km") }
         let envItem = CPListItem(
             text: envParts.isEmpty ? "暂无环境数据" : envParts.joined(separator: " · "),
             detailText: actKm.map { "实估续航 \($0) km" } ?? "车内/车外温度与总里程"
         )
         envItem.accessoryType = .disclosureIndicator
         envItem.handler = { [weak self] _, completion in
-            Task { @MainActor in self?.showDetail(completion: completion) }
+            Task { @MainActor in
+                guard let self = self else { completion(); return }
+                self.showDetail(completion: completion)
+            }
         }
 
         // 刷新
@@ -127,10 +133,10 @@ final class NIOCarPlaySceneDelegate: NSObject, CPTemplateApplicationSceneDelegat
             items.append(item("电量", String(format: "%.0f%%", soc)))
         }
         if let r = socStatus?.remainingRange {
-            items.append(item("标称续航", "\(Int(r.rounded())) km"))
+            items.append(item("标称续航", "\(r.rounded().safeInt ?? 0) km"))
         }
         if let a = socStatus?.remainingActualRange, a > 0 {
-            items.append(item("实估续航", "\(Int(a.rounded())) km"))
+            items.append(item("实估续航", "\(a.rounded().safeInt ?? 0) km"))
         }
         items.append(item("充电状态", NIOVehicleLib.smartChargeStateDescription(socStatus: socStatus, offcarStatus: status?.offcarModeStatus)))
         if let p = socStatus?.chargingPower, p > 0 {
@@ -151,7 +157,7 @@ final class NIOCarPlaySceneDelegate: NSObject, CPTemplateApplicationSceneDelegat
             items.append(item("车外温度", String(format: "%.0f℃", t)))
         }
         if let m = status?.exteriorStatus?.mileage {
-            items.append(item("总里程", "\(Int(m.rounded())) km"))
+            items.append(item("总里程", "\(m.rounded().safeInt ?? 0) km"))
         }
         let tyre = NIOVehicleLib.extractTyreInfo(from: status)
         if tyre.hasData {
@@ -170,11 +176,14 @@ final class NIOCarPlaySceneDelegate: NSObject, CPTemplateApplicationSceneDelegat
 
     // MARK: - CPListTemplateDelegate（item.handler 为主通道，此处兜底）
 
-    func listTemplate(_ listTemplate: CPListTemplate, didSelect item: CPListItem, completionHandler: @escaping () -> Void) {
-        if let handler = item.handler {
-            handler(item, completionHandler)
-        } else {
-            completionHandler()
+    nonisolated func listTemplate(_ listTemplate: CPListTemplate, didSelect item: CPListItem, completionHandler: @escaping () -> Void) {
+        // CarPlay 回调线程无主线程保证：跳回主隔离再分发，避免与 MainActor 状态竞态
+        Task { @MainActor in
+            if let handler = item.handler {
+                handler(item, completionHandler)
+            } else {
+                completionHandler()
+            }
         }
     }
 }

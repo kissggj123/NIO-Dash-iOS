@@ -69,9 +69,17 @@ final class NIOVPNManager: ObservableObject {
                     newMgr.protocolConfiguration = proto
                     newMgr.localizedDescription = "YumikoToys NIO 自动抓包"
                     newMgr.isEnabled = true
-                    newMgr.saveToPreferences { saveErr in
-                        if saveErr == nil {
-                            self.tunnelManager = newMgr
+                    newMgr.saveToPreferences { [weak self] saveErr in
+                        // 回调由 NetworkExtension 派发、无主线程保证：
+                        // 写 @MainActor 状态必须跳回主隔离
+                        Task { @MainActor [weak self] in
+                            guard let self = self else { return }
+                            if saveErr == nil {
+                                self.tunnelManager = newMgr
+                            }
+                            // 新建分支补挂状态监听（否则此时 tunnelManager 仍为 nil，
+                            // observeVPNStatus 直接 return，NEVPNStatusDidChange 永不生效）
+                            self.observeVPNStatus()
                         }
                     }
                 }

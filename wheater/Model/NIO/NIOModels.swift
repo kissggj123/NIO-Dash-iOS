@@ -95,7 +95,7 @@ struct NIOCheckedIn: Codable {
         if let i = try? c.decodeIfPresent(Int.self, forKey: .days) {
             days = i
         } else if let d = try? c.decodeIfPresent(Double.self, forKey: .days) {
-            days = Int(d)
+            days = d.safeInt
         }
     }
 
@@ -325,7 +325,7 @@ struct NIOHvacStatus: Codable {
         if let i = try? c.decodeIfPresent(Int.self, forKey: .sampleTime) {
             sampleTime = i
         } else if let d = try? c.decodeIfPresent(Double.self, forKey: .sampleTime) {
-            sampleTime = Int(d)
+            sampleTime = d.safeInt
         }
         cbnHiTDrySts = (try? c.decodeIfPresent(Int.self, forKey: .cbnHiTDrySts)) ?? (try? c.decodeIfPresent(String.self, forKey: .cbnHiTDrySts)).flatMap { Int($0) }
         ccuMaxDefrstSts = (try? c.decodeIfPresent(Int.self, forKey: .ccuMaxDefrstSts)) ?? (try? c.decodeIfPresent(String.self, forKey: .ccuMaxDefrstSts)).flatMap { Int($0) }
@@ -388,7 +388,7 @@ struct NIOPositionStatus: Codable {
         if let i = try? c.decodeIfPresent(Int.self, forKey: .sampleTime) {
             sampleTime = i
         } else if let d = try? c.decodeIfPresent(Double.self, forKey: .sampleTime) {
-            sampleTime = Int(d)
+            sampleTime = d.safeInt
         }
     }
 
@@ -428,7 +428,7 @@ struct NIOConnectionStatus: Codable {
         if let i = try? c.decodeIfPresent(Int.self, forKey: .updateTime) {
             updateTime = i
         } else if let d = try? c.decodeIfPresent(Double.self, forKey: .updateTime) {
-            updateTime = Int(d)
+            updateTime = d.safeInt
         }
     }
 
@@ -514,7 +514,7 @@ struct NIOExteriorStatus: Codable {
         if let i = try? c.decodeIfPresent(Int.self, forKey: .sampleTime) {
             sampleTime = i
         } else if let d = try? c.decodeIfPresent(Double.self, forKey: .sampleTime) {
-            sampleTime = Int(d)
+            sampleTime = d.safeInt
         }
         if let i = try? c.decodeIfPresent(Int.self, forKey: .vehlMode) {
             vehlMode = i
@@ -614,14 +614,14 @@ struct NIOSocStatus: Codable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         func getDouble(_ key: CodingKeys) -> Double? {
-            if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return d }
+            if let d = try? c.decodeIfPresent(Double.self, forKey: key), d.isFinite { return d }
             if let i = try? c.decodeIfPresent(Int.self, forKey: key) { return Double(i) }
-            if let s = try? c.decodeIfPresent(String.self, forKey: key) { return Double(s) }
+            if let s = try? c.decodeIfPresent(String.self, forKey: key), let v = Double(s), v.isFinite { return v }
             return nil
         }
         func getInt(_ key: CodingKeys) -> Int? {
             if let i = try? c.decodeIfPresent(Int.self, forKey: key) { return i }
-            if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return Int(d) }
+            if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return d.safeInt }
             if let s = try? c.decodeIfPresent(String.self, forKey: key) { return Int(s) }
             return nil
         }
@@ -687,7 +687,7 @@ enum NIOJSONValue: Codable, Hashable {
 
     var intValue: Int? {
         switch self {
-        case .number(let n): return Int(n)
+        case .number(let n): return n.safeInt
         case .string(let s): return Int(s)
         case .bool(let b): return b ? 1 : 0
         default: return nil
@@ -773,7 +773,7 @@ struct NIOVehicleSnapshot: Codable, Hashable {
     var insideTemp: Double
     var outsideTemp: Double
 
-    var snapshotKey: String { "\(ts):\(Int(lat * 10000)):\(Int(lng * 10000))" }
+    var snapshotKey: String { "\(ts):\((lat * 10000).safeInt ?? 0):\((lng * 10000).safeInt ?? 0)" }
 
     var isValidGPS: Bool {
         NIOVehicleLib.isValidGPS(lat: lat, lng: lng)

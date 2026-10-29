@@ -21,6 +21,35 @@ public struct NIOSniffedCredentials: Sendable {
     public var timestamp: Date = Date()
 }
 
+/// 活跃连接登记表：代理队列与主线程并发登记/注销（锁保护），
+/// stopProxy 时统一 cancel，避免静默 TCP 连接永久滞留
+private final class MITMConnectionRegistry: @unchecked Sendable {
+    private let lock = NSLock()
+    private var connections: [ObjectIdentifier: NWConnection] = [:]
+
+    func track(_ conn: NWConnection) {
+        lock.lock()
+        connections[ObjectIdentifier(conn)] = conn
+        lock.unlock()
+    }
+
+    func untrack(_ conn: NWConnection) {
+        lock.lock()
+        connections.removeValue(forKey: ObjectIdentifier(conn))
+        lock.unlock()
+    }
+
+    /// 关停全部登记中的连接，返回数量（诊断用）
+    func cancelAll() -> Int {
+        lock.lock()
+        let all = Array(connections.values)
+        connections.removeAll()
+        lock.unlock()
+        all.forEach { $0.cancel() }
+        return all.count
+    }
+}
+
 @MainActor
 final class NIOMitmEngine: ObservableObject {
     static let shared = NIOMitmEngine()
@@ -34,6 +63,8 @@ final class NIOMitmEngine: ObservableObject {
 
     private var listener: NWListener?
     private let proxyQueue = DispatchQueue(label: "com.yumikotoys.mitmproxy", qos: .userInitiated, attributes: .concurrent)
+    /// 活跃连接登记：stopProxy 时统一关停，防止中继中的连接泄漏
+    private let connectionRegistry = MITMConnectionRegistry()
 
     private init() {}
 
@@ -83,7 +114,9 @@ final class NIOMitmEngine: ObservableObject {
         listener?.cancel()
         listener = nil
         isRunning = false
-        addLog("⚪️ 抓包代理已关闭")
+        // 关停所有仍在中继的连接（原实现只关 listener，已建立的连接会继续收发流量）
+        let closed = connectionRegistry.cancelAll()
+        addLog(closed > 0 ? "⚪️ 抓包代理已关闭（断开 \(closed) 条连接）" : "⚪️ 抓包代理已关闭")
     }
 
     // MARK: - 处理客户端代理连接
@@ -96,13 +129,28 @@ final class NIOMitmEngine: ObservableObject {
         }
 
         clientConn.start(queue: proxyQueue)
-        clientConn.receive(minimumIncompleteLength: 1, maximumLength: 16384) { [weak self] data, _, _, error in
-            guard let self = self, let rawData = data, !rawData.isEmpty, error == nil else {
-                clientConn.cancel()
+        connectionRegistry.track(clientConn)
+        // 累积读取直到 HTTP 头结束（\r\n\r\n）：单次 16KB receive 会截断大请求/分包请求
+        accumulateClientRequest(clientConn, buffer: Data())
+    }
+
+    /// 累积读取客户端请求，头部收全后按 CONNECT / 明文 HTTP 分发；
+    /// 头部之后同段到达的 body 随首包转发，余量由双向中继继续读取
+    nonisolated private func accumulateClientRequest(_ clientConn: NWConnection, buffer: Data) {
+        clientConn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self, let chunk = data, !chunk.isEmpty, error == nil else {
+                self?.teardown(clientConn)
                 return
             }
+            var accumulated = buffer
+            accumulated.append(chunk)
+            let requestStr = String(decoding: accumulated, as: UTF8.self)
 
-            let requestStr = String(decoding: rawData, as: UTF8.self)
+            // 头未收全且连接仍在：继续累积（上限 512KB 防异常膨胀）
+            if !requestStr.contains("\r\n\r\n"), !isComplete, accumulated.count < 512 * 1024 {
+                self.accumulateClientRequest(clientConn, buffer: accumulated)
+                return
+            }
 
             // 记录请求首行（诊断用）
             let firstLine = requestStr.components(separatedBy: "\r\n").first ?? requestStr.prefix(80).description
@@ -122,8 +170,20 @@ final class NIOMitmEngine: ObservableObject {
             }
 
             // 普通 HTTP 请求
-            self.handlePlainHttpRelay(clientConn, initialData: rawData, requestStr: requestStr)
+            self.handlePlainHttpRelay(clientConn, initialData: accumulated, requestStr: requestStr)
         }
+    }
+
+    // MARK: - 连接关停与登记清理
+
+    nonisolated private func teardown(_ conn: NWConnection) {
+        connectionRegistry.untrack(conn)
+        conn.cancel()
+    }
+
+    nonisolated private func teardownPair(_ a: NWConnection, _ b: NWConnection) {
+        teardown(a)
+        teardown(b)
     }
 
     // MARK: - 流量特征嗅探与凭证自动提取（宽松模式）
@@ -146,7 +206,8 @@ final class NIOMitmEngine: ObservableObject {
         let textLower = text
         for prefix in ["Authorization: Bearer ", "authorization: bearer "] {
             if let tokenRange = textLower.range(of: prefix, options: .caseInsensitive) {
-                let sub = text[tokenRange.upperBound...]
+                // 与 range 同源字符串取子串，避免 String index 错位
+                let sub = textLower[tokenRange.upperBound...]
                 if let end = sub.firstIndex(of: "\r") ?? sub.firstIndex(of: "\n") {
                     let token = String(sub[..<end]).trimmingCharacters(in: .whitespaces)
                     if !token.isEmpty && token.count > 10 {
@@ -307,14 +368,14 @@ final class NIOMitmEngine: ObservableObject {
             using: .tcp
         )
         serverConn.start(queue: proxyQueue)
+        connectionRegistry.track(serverConn)
 
         let okResp = "HTTP/1.1 200 Connection Established\r\n\r\n".data(using: .utf8) ?? Data()
         clientConn.send(content: okResp, completion: .contentProcessed({ [weak self] err in
             if err == nil {
                 self?.bridgeConnections(client: clientConn, server: serverConn)
             } else {
-                clientConn.cancel()
-                serverConn.cancel()
+                self?.teardownPair(clientConn, serverConn)
             }
         }))
     }
@@ -340,12 +401,12 @@ final class NIOMitmEngine: ObservableObject {
             using: .tcp
         )
         serverConn.start(queue: proxyQueue)
+        connectionRegistry.track(serverConn)
         serverConn.send(content: initialData, completion: .contentProcessed({ [weak self] err in
             if err == nil {
                 self?.bridgeConnections(client: clientConn, server: serverConn)
             } else {
-                clientConn.cancel()
-                serverConn.cancel()
+                self?.teardownPair(clientConn, serverConn)
             }
         }))
     }
@@ -360,8 +421,8 @@ final class NIOMitmEngine: ObservableObject {
     nonisolated private func relayLoop(from source: NWConnection, to destination: NWConnection, isFromClient: Bool) {
         source.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self = self, let chunk = data, !chunk.isEmpty, error == nil else {
-                source.cancel()
-                destination.cancel()
+                // weak self 已释放也必须关停两端，否则连接在无主状态泄漏
+                self?.teardownPair(source, destination)
                 return
             }
 
@@ -370,12 +431,11 @@ final class NIOMitmEngine: ObservableObject {
                 self.inspectAndSniffTraffic(str)
             }
 
-            destination.send(content: chunk, completion: .contentProcessed({ sendErr in
+            destination.send(content: chunk, completion: .contentProcessed({ [weak self] sendErr in
                 if sendErr == nil && !isComplete {
-                    self.relayLoop(from: source, to: destination, isFromClient: isFromClient)
+                    self?.relayLoop(from: source, to: destination, isFromClient: isFromClient)
                 } else {
-                    source.cancel()
-                    destination.cancel()
+                    self?.teardownPair(source, destination)
                 }
             }))
         }

@@ -914,21 +914,21 @@ enum NIOVehicleLib {
     }
 
     static func fullChargeRangeKm(remainingRange: Double, soc: Double) -> Int? {
-        guard soc > 0 else { return nil }
-        return Int((remainingRange / soc * 100).rounded())
+        guard soc > 0, soc.isFinite, remainingRange.isFinite else { return nil }
+        return (remainingRange / soc * 100).rounded().safeInt
     }
 
     /// 将 CLTC 工况续航估算为实际可用续航（实估）
     /// 蔚来实测换算系数约 0.795（740km CLTC ≈ 588km 实估）
     /// 若 API 直接返回 remaining_actual_range，优先使用真实值；本函数用于无实估数据时的推算
     static func cltcToEstimatedRange(_ cltcKm: Double, factor: Double = 0.795) -> Int {
-        return Int((cltcKm * factor).rounded())
+        return (cltcKm * factor).rounded().safeInt ?? 0
     }
 
     /// 获取最佳可用续航：优先实估，无实估则用 CLTC 推算
     static func bestRange(cltcKm: Double?, actualKm: Double?) -> (km: Int, isEstimated: Bool)? {
-        if let act = actualKm, act > 0 {
-            return (Int(act.rounded()), false)
+        if let act = actualKm, act > 0, let km = act.rounded().safeInt {
+            return (km, false)
         }
         if let cltc = cltcKm, cltc > 0 {
             return (cltcToEstimatedRange(cltc), true)

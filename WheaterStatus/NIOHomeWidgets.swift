@@ -187,7 +187,7 @@ struct NIOVehicleSmallView: View {
                     Capsule().fill(theme.text.opacity(0.12))
                     Capsule()
                         .fill(LinearGradient(colors: theme.socGradient, startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(6, geo.size.width * snap.soc / 100))
+                        .frame(width: max(6, geo.size.width * CGFloat(min(1.0, max(0.0, snap.soc.isFinite ? snap.soc / 100.0 : 0.0)))))
                     // 充电目标刻度
                     if snap.isCharging, let target = snap.chargingTargetSoc, target > 1, target < 100 {
                         RoundedRectangle(cornerRadius: 1)
@@ -228,7 +228,11 @@ struct NIOVehicleSmallView: View {
     }
 
     private var socText: String {
-        snap.soc == snap.soc.rounded() ? "\(Int(snap.soc))%" : String(format: "%.1f%%", snap.soc)
+        guard snap.soc.isFinite else { return "--" }
+        if let whole = snap.soc.safeInt, snap.soc == snap.soc.rounded() {
+            return "\(whole)%"
+        }
+        return String(format: "%.1f%%", snap.soc)
     }
 
     private var stateText: String {
@@ -310,7 +314,7 @@ struct NIOVehicleMediumView: View {
 
                 Spacer(minLength: 0)
 
-                Text("\(Int(snap.soc))%")
+                Text("\(snap.soc.safeInt ?? 0)%")
                     .font(.system(size: 38, weight: .bold, design: .rounded))
                     .foregroundStyle(theme.text)
                     .minimumScaleFactor(0.7)
@@ -335,7 +339,7 @@ struct NIOVehicleMediumView: View {
                         Capsule().fill(theme.text.opacity(0.12))
                         Capsule()
                             .fill(LinearGradient(colors: theme.socGradient, startPoint: .leading, endPoint: .trailing))
-                            .frame(width: max(6, geo.size.width * snap.soc / 100))
+                            .frame(width: max(6, geo.size.width * CGFloat(min(1.0, max(0.0, snap.soc.isFinite ? snap.soc / 100.0 : 0.0)))))
                         if snap.isCharging, let target = snap.chargingTargetSoc, target > 1, target < 100 {
                             RoundedRectangle(cornerRadius: 1)
                                 .fill(theme.text.opacity(0.6))

@@ -223,7 +223,7 @@ struct WheaterStatusLiveActivityWidget: Widget {
                             .fill(.orange)
                             .frame(width: 4, height: 4)
                     }
-                    Text(verbatim: "\(Int(state.soc))%")
+                    Text(verbatim: "\(state.soc.safeInt ?? 0)%")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(compactSocStyle(state, theme))
                         .lineLimit(1)

@@ -80,13 +80,47 @@ final class NIOCredentialReceiver: ObservableObject {
 
     nonisolated private func handleConnection(_ conn: NWConnection) {
         conn.start(queue: queue)
-        // 最多读取 64KB
-        conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, _ in
-            defer { conn.cancel() }
-            guard let self, let data, !data.isEmpty else { return }
-            let raw = String(decoding: data, as: UTF8.self)
+        // 累积读取直到 HTTP 头 + Content-Length 声明的 body 收全：
+        // 单次 64KB receive 在 body 分包到达时会静默丢数据，导致推送"成功"却无反应
+        accumulateRequest(conn, buffer: Data())
+    }
+
+    nonisolated private func accumulateRequest(_ conn: NWConnection, buffer: Data) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self, let chunk = data, !chunk.isEmpty, error == nil else {
+                conn.cancel()
+                return
+            }
+            var accumulated = buffer
+            accumulated.append(chunk)
+            let raw = String(decoding: accumulated, as: UTF8.self)
+
+            // 1) 头未收全 → 继续读（上限 1MB 防异常膨胀）
+            guard let headerEnd = raw.range(of: "\r\n\r\n").map({ raw.distance(from: raw.startIndex, to: $0.upperBound) }) else {
+                if isComplete || accumulated.count > 1024 * 1024 {
+                    conn.cancel()
+                    return
+                }
+                self.accumulateRequest(conn, buffer: accumulated)
+                return
+            }
+            // 2) 头已收全：若声明 Content-Length 且 body 未收全 → 继续读
+            if let expected = Self.contentLength(of: raw),
+               accumulated.count < headerEnd + expected,
+               accumulated.count <= 1024 * 1024, !isComplete {
+                self.accumulateRequest(conn, buffer: accumulated)
+                return
+            }
+            // 3) 收全（或无 Content-Length 的短推送）→ 解析应用
+            conn.cancel()
             self.parseHTTPAndApply(raw)
         }
+    }
+
+    nonisolated private static func contentLength(of raw: String) -> Int? {
+        guard let line = raw.components(separatedBy: "\r\n")
+            .first(where: { $0.lowercased().hasPrefix("content-length:") }) else { return nil }
+        return Int(line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces))
     }
 
     // MARK: - 解析 HTTP 请求并提取 JSON body

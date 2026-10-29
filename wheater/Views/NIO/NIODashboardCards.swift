@@ -349,18 +349,17 @@ struct NIOHistoryTrendCard: View {
     private var accent: Color { NIOThemePaint.accent }
     private var glow: Color { NIOThemePaint.glow }
 
-    /// 最近 7 天有 SOC 采样的点
+    /// 最近 7 天有 SOC 采样的点（同秒重复采样仅保留最后一条，避免 Chart identity 冲突）
     private var socPoints: [(date: Date, soc: Double)] {
         let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
-        return snapshots
-            .filter { $0.soc > 0 && $0.ts > 0 }
-            .compactMap { snap -> (Date, Double)? in
-                let sec = snap.ts > 1_000_000_000_000 ? TimeInterval(snap.ts) / 1000 : TimeInterval(snap.ts)
-                let date = Date(timeIntervalSince1970: sec)
-                guard date >= cutoff else { return nil }
-                return (date, snap.soc)
-            }
-            .sorted { $0.0 < $1.0 }
+        var latestByDate: [Date: Double] = [:]
+        for snap in snapshots where snap.soc > 0 && snap.ts > 0 {
+            let sec = snap.ts > 1_000_000_000_000 ? TimeInterval(snap.ts) / 1000 : TimeInterval(snap.ts)
+            let date = Date(timeIntervalSince1970: sec)
+            guard date >= cutoff else { continue }
+            latestByDate[date] = snap.soc
+        }
+        return latestByDate.map { (date: $0.key, soc: $0.value) }.sorted { $0.date < $1.date }
     }
 
     /// 最近 7 天每日里程

@@ -64,11 +64,11 @@ struct WheaterAttributes: ActivityAttributes {
 
         // 辅助格式化
         var socDisplay: String {
-            if soc == soc.rounded() {
-                return "\(Int(soc))%"
-            } else {
-                return "\(String(format: "%.1f", soc))%"
+            guard soc.isFinite else { return "--" }
+            if let whole = soc.safeInt, soc == soc.rounded() {
+                return "\(whole)%"
             }
+            return "\(String(format: "%.1f", soc))%"
         }
 
         var rangeDisplay: String {
@@ -89,12 +89,12 @@ struct WheaterAttributes: ActivityAttributes {
 
         /// 充满剩余分钟数（依据功率与电池容量推算）
         var chargeEtaMinutes: Int? {
-            guard isCharging, let p = chargingPowerKw, p > 0.3 else { return nil }
+            guard isCharging, let p = chargingPowerKw, p > 0.3, p.isFinite else { return nil }
             let capacity = batteryCapacityKwh ?? 75.0
             let target = min(100.0, chargingTargetSoc ?? 100.0)
             let remainKwh = max(0.0, (target - soc) / 100.0 * capacity)
-            guard remainKwh > 0.2 else { return 0 }
-            return Int(ceil(remainKwh / p * 60.0))
+            guard remainKwh.isFinite, remainKwh > 0.2 else { return 0 }
+            return (remainKwh / p * 60.0).rounded(.up).safeInt
         }
 
         /// 用于去重的"显著变化"指纹（忽略时间戳与主题等非关键差异）
@@ -350,6 +350,15 @@ public struct WheaterThemeColors: Sendable {
 
     /// 电量进度条用渐变
     public var socGradient: [Color] { [gradientStart, gradientEnd] }
+}
+
+public extension Double {
+    /// NaN / Infinity / 越界安全转 Int：脏数据返回 nil 而非直接 trap
+    /// （`Int(Double)` 对非有限值会崩溃；服务端脏字段（"nan"/"1e400"）经此防护）
+    var safeInt: Int? {
+        guard isFinite, self >= Double(Int.min), self <= Double(Int.max) else { return nil }
+        return Int(self)
+    }
 }
 
 public extension Color {

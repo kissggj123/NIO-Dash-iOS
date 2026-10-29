@@ -399,7 +399,7 @@ struct IOSNIODashboardView: View {
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
                 .foregroundStyle(NIOThemePaint.text)
             Spacer()
-            Text("\(NIOSidebarSection.allCases.firstIndex(of: section)! + 1)/\(NIOSidebarSection.allCases.count)")
+            Text("\((NIOSidebarSection.allCases.firstIndex(of: section) ?? 0) + 1)/\(NIOSidebarSection.allCases.count)")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(NIOThemePaint.textSoft.opacity(0.55))
         }
@@ -1046,8 +1046,8 @@ private struct NIOParkingLocationCard: View {
         )
     }
 
-    private var appleMapsURL: URL {
-        URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)&q=车辆停放位置")!
+    private var appleMapsURL: URL? {
+        URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)&q=车辆停放位置")
     }
 
     private var amapURL: URL? {
@@ -1113,8 +1113,10 @@ private struct NIOParkingLocationCard: View {
 
             // 外部地图跳转按钮
             HStack(spacing: 10) {
-                Link(destination: appleMapsURL) {
-                    mapButton(icon: "map.fill", label: "苹果地图", tint: .blue)
+                if let appleMapsURL {
+                    Link(destination: appleMapsURL) {
+                        mapButton(icon: "map.fill", label: "苹果地图", tint: .blue)
+                    }
                 }
                 if let amapURL, UIApplication.shared.canOpenURL(amapURL) {
                     Link(destination: amapURL) {

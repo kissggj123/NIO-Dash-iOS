@@ -97,7 +97,7 @@ enum NIOOrderLib {
             guard case .object(let itemDict) = item else { return nil }
             let name = itemDict["payment_name"]?.stringValue ?? ""
             let amount = itemDict["amount"]?.numberValue
-            let type = itemDict["type"]?.numberValue.map { Int($0) }
+            let type = itemDict["type"]?.numberValue.flatMap { $0.safeInt }
             return PaymentInfoItem(name: name, amount: amount, type: type)
         }
     }
@@ -200,7 +200,8 @@ enum NIOOrderLib {
             prev.spent += Double(order.priceCash ?? "0") ?? 0
             stationMap[name] = prev
         }
-        let topStations = stationMap.values.sorted { $0.count > $1.count || $0.spent > $1.spent }.prefix(5)
+        // 严格弱序比较器：count 优先、spent 决胜，避免等值元素比较结果自相矛盾导致顺序不稳定
+        let topStations = stationMap.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.spent > $1.spent }.prefix(5)
 
         let monthlyStats = computeMonthlyStats(orders)
 

@@ -147,7 +147,9 @@ final class NIOService: ObservableObject {
     }
 
     private var dataDirectory: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        // 文档目录理论上恒存在；不用强制解包，兜底沙盒临时目录
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         let dir = docs.appendingPathComponent("NIO_Data", isDirectory: true)
         if !FileManager.default.fileExists(atPath: dir.path) {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -782,7 +784,9 @@ final class NIOService: ObservableObject {
                         noteAuthFailure(http.statusCode)
                     }
                 }
-            } catch { }
+            } catch {
+                print("[NIOService] fetchChange POST 失败: \(error.localizedDescription)")
+            }
 
             // 若 POST 404/405 则尝试 GET 请求
             if isAppNio {
@@ -807,7 +811,9 @@ final class NIOService: ObservableObject {
                             noteAuthFailure(http.statusCode)
                         }
                     }
-                } catch { }
+                } catch {
+                    print("[NIOService] fetchChange GET 兜底失败: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -868,7 +874,9 @@ final class NIOService: ObservableObject {
                         noteAuthFailure(http.statusCode)
                     }
                 }
-            } catch { }
+            } catch {
+                print("[NIOService] fetchCheckin 失败: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -1141,31 +1149,33 @@ final class NIOService: ObservableObject {
 
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
-                self.cachedTyreStatus = finalCachedTyre
-                self.cachedLvBattStatus = finalCachedLv
-                self.cachedFotaStatus = finalCachedFota
-                self.cachedDoorStatus = finalCachedDoor
-                self.cachedKeyStatus = finalCachedKey
-                self.cachedHeatingStatus = finalCachedHt
-                self.cachedWindowStatus = finalCachedWin
-                self.cachedFrdgStatus = finalCachedFrdg
-                self.cachedBoxStatus = finalCachedBox
-                self.cachedLightStatus = finalCachedLt
-                self.cachedOffcarStatus = finalCachedOff
-                if let v = finalVehicle {
+                // 冷启动竞态保护：网络刷新若已先一步写入（对应状态非空），
+                // 磁盘快照不再覆盖，避免慢盘读到的旧数据覆盖刚拉取的新数据
+                if self.cachedTyreStatus == nil { self.cachedTyreStatus = finalCachedTyre }
+                if self.cachedLvBattStatus == nil { self.cachedLvBattStatus = finalCachedLv }
+                if self.cachedFotaStatus == nil { self.cachedFotaStatus = finalCachedFota }
+                if self.cachedDoorStatus == nil { self.cachedDoorStatus = finalCachedDoor }
+                if self.cachedKeyStatus == nil { self.cachedKeyStatus = finalCachedKey }
+                if self.cachedHeatingStatus == nil { self.cachedHeatingStatus = finalCachedHt }
+                if self.cachedWindowStatus == nil { self.cachedWindowStatus = finalCachedWin }
+                if self.cachedFrdgStatus == nil { self.cachedFrdgStatus = finalCachedFrdg }
+                if self.cachedBoxStatus == nil { self.cachedBoxStatus = finalCachedBox }
+                if self.cachedLightStatus == nil { self.cachedLightStatus = finalCachedLt }
+                if self.cachedOffcarStatus == nil { self.cachedOffcarStatus = finalCachedOff }
+                if let v = finalVehicle, self.vehicleData == nil {
                     self.vehicleData = v
                     self.lastVehicleFetch = finalFetchedAt
                     // 冷启动兜底：即使网络拉取失败（如 Token 失效），桌面 Widget 也能立即
                     // 显示最近缓存车况，不再停留在"打开 App 同步车况"空状态
                     self.updateLiveActivity()
                 }
-                if !finalHistory.isEmpty {
+                if !finalHistory.isEmpty, self.history.isEmpty {
                     self.history = finalHistory
                     self.updateDerivedMetrics(from: finalHistory)
                 }
-                if let c = finalCheckin { self.checkinData = c }
-                if !finalLogs.isEmpty { self.fetchLogs = finalLogs }
-                if !finalOrders.isEmpty { self.recentOrders = finalOrders }
+                if let c = finalCheckin, self.checkinData == nil { self.checkinData = c }
+                if !finalLogs.isEmpty, self.fetchLogs.isEmpty { self.fetchLogs = finalLogs }
+                if !finalOrders.isEmpty, self.recentOrders.isEmpty { self.recentOrders = finalOrders }
             }
         }
     }
@@ -1213,17 +1223,17 @@ final class NIOService: ObservableObject {
         let cltcKm = socStatus?.remainingRange
         let actKm = socStatus?.remainingActualRange
         let hasAct = (actKm ?? 0) > 0
-        let stdRange = Int(round(cltcKm ?? 0))
+        let stdRange = (cltcKm ?? 0).rounded().safeInt ?? 0
         let preferActual = UserDefaults.standard.bool(forKey: "nio_prefer_actual_range")
 
         // bestRange: 有实估用实估，没有则 CLTC × 0.795 推算
         let best = NIOVehicleLib.bestRange(cltcKm: cltcKm, actualKm: actKm)
-        let mainRange = (preferActual && hasAct) ? Int(round(actKm!)) : (hasAct ? stdRange : (best?.km ?? stdRange))
+        let mainRange = (preferActual && hasAct) ? (actKm ?? 0).rounded().safeInt ?? 0 : (hasAct ? stdRange : (best?.km ?? stdRange))
         let subRange: Int? = {
             // 实估优先时主续航已是实估，副续航不下发 CLTC（置 nil 确保各端不显示，
             // 避免"CLTC 被误标为实估"的语义混乱）；非实估优先时副续航为真实实估值
             if preferActual && hasAct { return nil }
-            if hasAct { return Int(round(actKm!)) }
+            if hasAct { return (actKm ?? 0).rounded().safeInt }
             if let b = best, b.isEstimated { return b.km }
             return nil
         }()
@@ -1237,7 +1247,7 @@ final class NIOService: ObservableObject {
         let lockSts = doors["vehicle_lock_status"]?.intValue ?? 1
         let isLocked = lockSts == 1
         let isDriving = (status.exteriorStatus?.vehicleState == 1)
-        let mileage = status.exteriorStatus?.mileage.map { Int(round($0)) }
+        let mileage = status.exteriorStatus?.mileage.flatMap { $0.rounded().safeInt }
         let win = status.windowStatus ?? [:]
         let winOpen = (win["win_posn_fl"]?.intValue ?? 0) > 0 || (win["win_posn_fr"]?.intValue ?? 0) > 0 || (win["win_posn_rl"]?.intValue ?? 0) > 0 || (win["win_posn_rr"]?.intValue ?? 0) > 0 || (win["sun_roof_posn"]?.intValue ?? 0) > 0
         let anyDoorOpen = (doors["door_ajar_front_left_status"]?.intValue ?? 1) == 0 || (doors["door_ajar_front_right_status"]?.intValue ?? 1) == 0 || (doors["door_ajar_rear_left_status"]?.intValue ?? 1) == 0 || (doors["door_ajar_rear_right_status"]?.intValue ?? 1) == 0
@@ -1520,18 +1530,42 @@ final class NIOService: ObservableObject {
         // 先预约下一次，保证后台刷新链条不断
         scheduleBackgroundRefresh()
 
+        // setTaskCompleted 只允许调用一次：过期回调与正常完成路径谁先到谁生效，
+        // 二次调用会触发系统异常
+        let completionGuard = BGTaskCompletionGuard()
+
         let work = Task { @MainActor in
             let service = NIOService.shared
             guard service.isConfigured else {
-                task.setTaskCompleted(success: false)
+                completionGuard.finish(task, success: false)
                 return
             }
             await service.fetchVehicle(force: false) // 成功后内部自动 updateLiveActivity
             await service.fetchChange(force: false)
-            task.setTaskCompleted(success: true)
+            completionGuard.finish(task, success: true)
         }
         task.expirationHandler = {
             work.cancel()
+            // Apple 要求过期时必须上报完成；缺失会导致 watchdog 直接杀进程（0x8badf00d），
+            // 后台刷新链条就此中断
+            completionGuard.finish(task, success: false)
+        }
+    }
+}
+
+/// BGTask 完成防重入闸门：expirationHandler（任意线程）与正常完成路径（主线程）
+/// 只允许第一次调用生效
+private final class BGTaskCompletionGuard: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+
+    func finish(_ task: BGAppRefreshTask, success: Bool) {
+        lock.lock()
+        let shouldFinish = !finished
+        finished = true
+        lock.unlock()
+        if shouldFinish {
+            task.setTaskCompleted(success: success)
         }
     }
 }

@@ -1691,18 +1691,21 @@ private func getWiFiIPAddress() -> String? {
     var ptr = ifaddr
     while let ifa = ptr {
         let interface = ifa.pointee
-        let addrFamily = interface.ifa_addr.pointee.sa_family
+        ptr = ifa.pointee.ifa_next
+        // ifa_addr 允许为 NULL（getifaddrs(3) 文档；utun 等虚拟接口常见），
+        // 开抓包 VPN 后此函数必然遍历到 utun —— 不判空直接解引用会 EXC_BAD_ACCESS
+        guard let addrPtr = interface.ifa_addr else { continue }
+        let addrFamily = addrPtr.pointee.sa_family
         if addrFamily == UInt8(AF_INET) {
             let name = String(cString: interface.ifa_name)
             if name == "en0" {
-                var addr = interface.ifa_addr.pointee
+                var addr = addrPtr.pointee
                 var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                getnameinfo(&addr, socklen_t(interface.ifa_addr.pointee.sa_len),
+                getnameinfo(&addr, socklen_t(addrPtr.pointee.sa_len),
                             &hostname, socklen_t(NI_MAXHOST), nil, 0, NI_NUMERICHOST)
                 address = String(cString: hostname)
             }
         }
-        ptr = ifa.pointee.ifa_next
     }
     return address
 }
