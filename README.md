@@ -228,8 +228,11 @@
 
 ```text
 YumikoToysRR-Weather/
-├── WheaterStatus/                      # 灵动岛 (Dynamic Island) 与锁屏实时活动 Widget 扩展
+├── WheaterStatus/                      # 灵动岛 / 锁屏 / 桌面小组件 / 控制中心 Widget 扩展
 │   ├── WheaterStatus.swift             # 实时活动 UI 渲染（紧凑岛、展开岛、锁屏大卡片）
+│   ├── NIOHomeWidgets.swift            # 桌面系统小组件（小 / 中 / 大尺寸）
+│   ├── IslandControlWidget.swift       # 控制中心控件（一键上岛胶囊）
+│   ├── NIOVehicleSnapshot.swift        # App ↔ Widget 跨进程车况快照（App Group）
 │   ├── WheaterStatus.intentdefinition  # WidgetKit 意图配置
 │   ├── Info.plist                      # Widget 扩展权限配置
 │   └── Assets.xcassets                 # 小组件专属素材与颜色令牌
@@ -241,30 +244,38 @@ YumikoToysRR-Weather/
 │   │   │   ├── NIOOrderLib.swift       # 换电/维保订单账单与常用换电站排行解析库
 │   │   │   └── NIOCheckinLib.swift     # 车主每日签到与积分统计
 │   │   └── WheaterAttributes.swift     # 跨进程 Live Activity 数据通信契约与指纹去重
-│   ├── ViewModel/                      # 业务逻辑与网络服务
+│   ├── ViewModel/
 │   │   └── NIOService.swift            # 蔚来双引擎通信协议、7大状态块持久化继承、后台轮询、灵动岛生命周期
+│   ├── Services/VPN/                   # 抓包凭证链路（三链路方案）
+│   │   ├── NIOVPNManager.swift         # Packet Tunnel 抓包 VPN 生命周期管理
+│   │   ├── NIOMitmEngine.swift         # 本地 MITM 代理引擎（指纹嗅探与流量中继）
+│   │   ├── NIOVPNCertManager.swift     # CA 证书本地分发服务
+│   │   └── NIOCredentialReceiver.swift # 局域网凭证直推接收器
 │   ├── Views/                          # SwiftUI 视图组件层
 │   │   ├── NIO/
 │   │   │   ├── IOSNIODashboardView.swift    # 蔚来 27 大全景车况主看板（iPhone 分段器 / iPad·Duo 侧栏双列自适应）
 │   │   │   ├── NIODashboardCards.swift      # 六张新卡：特殊模式 / 智能外设 / 能耗评分 / 历史趋势 / 维保追踪 / 行驶轨迹
 │   │   │   ├── IOSNIOConfigView.swift       # 车机凭证配置、智能填充、抓包日志、TCP 转发、车型涂装与连通性测试
 │   │   │   ├── IOSAboutView.swift           # 关于兔可可、功能矩阵与版本更新日志
-│   │   │   └── Launch/                      # 三风格启动动画
-│   │   │       ├── NIOLaunchStyle.swift     # 风格枚举 / 节奏 / 触感 / 每日一次闸门 / 主题人设与路由器
-│   │   │       ├── NIOEnergyBootView.swift  # 能量充能动画（电池环 + 电弧凝聚 + 星尘冲击波）
-│   │   │       ├── NIOMinimalBootView.swift # 极简快启动画
-│   │   │       └── NIOPixelLaunchSplashView.swift # 像素重制动画
+│   │   │   ├── NIOCarPlayScene.swift        # CarPlay 场景与车况列表模板
+│   │   │   ├── NIOLaunchStyle.swift         # 启动风格枚举 / 节奏 / 触感 / 每日一次闸门 / 主题人设与路由器
+│   │   │   ├── NIOEnergyBootView.swift      # 能量充能动画（电池环 + 电弧凝聚 + 星尘冲击波）
+│   │   │   ├── NIOMinimalBootView.swift     # 极简快启动画
+│   │   │   └── NIOPixelLaunchSplashView.swift # 像素重制动画
 │   │   └── ContentView.swift           # App 根路由与全局主题渲染上下文
 │   ├── Resources/                      # 静态资源库
 │   │   ├── Brand/                      # 蔚来品牌 Logo 与矢量图标
 │   │   └── Cars/                       # 10 款全系蔚来车型高清 3D 渲染图与车身色库
-│   └── wheaterApp.swift                # iOS 应用程序主入口
+│   ├── wheaterApp.swift                # iOS 应用程序主入口
+│   └── wheater.entitlements            # App Group 与后台刷新权限声明
+├── docs/screenshots/                   # README 展示截图（灵动岛 / 锁屏 / 小组件 / 看板 / Duo）
 ├── auto_sniff.py                       # mitmproxy 抓包脚本（指纹捕获 + 局域网直推回 iPhone）
 ├── sniff.sh                            # Mac 一键抓包启动器（Mac 本机 / 局域网 iPhone / 全能双模）
 ├── scripts/
 │   ├── shadowrocket/                   # Shadowrocket 模块与脚本（sgmodule 带 #!version 版本注释）
+│   ├── boxjs/                          # BoxJS 抓包配置脚本
 │   └── ish/                            # iSH 环境抓包脚本
-└── YumikoToysRR.xcodeproj              # Xcode 完整工程配置与多 Target 架构
+└── YumikoToysRR.xcodeproj              # Xcode 完整工程配置与多 Target 架构（App + Widget 扩展）
 ```
 
 ---
