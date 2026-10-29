@@ -1583,6 +1583,8 @@ final class NIOLocationKeepAlive: NSObject, ObservableObject {
     static let shared = NIOLocationKeepAlive()
 
     @Published private(set) var isKeepingAlive = false
+    /// 当前定位授权状态（设置页据此展示"主动触发授权 / 跳系统设置"入口）
+    @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
 
     private let manager = CLLocationManager()
     /// 总开关（UserDefaults，默认开）：需要关闭时 `defaults write nio_location_keepalive 0`
@@ -1595,6 +1597,7 @@ final class NIOLocationKeepAlive: NSObject, ObservableObject {
     private override init() {
         super.init()
         manager.delegate = self
+        authorizationStatus = manager.authorizationStatus
         // 保活用：不追求精度，尽量少唤醒 GPS 硬件
         manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
         manager.distanceFilter = CLLocationDistanceMax
@@ -1634,6 +1637,7 @@ extension NIOLocationKeepAlive: CLLocationManagerDelegate {
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         Task { @MainActor in
+            NIOLocationKeepAlive.shared.authorizationStatus = status
             guard NIOLocationKeepAlive.shared.isEnabled, NIOService.shared.isConfigured else { return }
             if status == .authorizedWhenInUse || status == .authorizedAlways {
                 NIOLocationKeepAlive.shared.start()

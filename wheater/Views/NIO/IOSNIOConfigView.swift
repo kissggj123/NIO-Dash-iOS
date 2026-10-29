@@ -16,6 +16,9 @@ struct IOSNIOConfigView: View {
     @State private var smartInput = ""
     @State private var showSuccessBanner = false
     @State private var bannerWork = NIOScheduledWork()
+    // 后台定位保活：状态观察 + 开关（默认开）
+    @ObservedObject private var keepAlive = NIOLocationKeepAlive.shared
+    @AppStorage("nio_location_keepalive") private var keepAliveEnabled = true
     @State private var testStatusText: String?
     @State private var isTesting = false
     @State private var showLogsSheet = false
@@ -1318,6 +1321,67 @@ struct IOSNIOConfigView: View {
 
                 Divider().background(NIOThemePaint.stroke)
 
+                // 后台定位保活（自用）：进程不被挂起 → 轮询 Timer 后台照常跑
+                Toggle(isOn: $keepAliveEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("📍 后台定位保活")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(NIOThemePaint.text)
+                        Text("持续低精度定位让进程在后台存活，车况后台准实时刷新；不使用、不存储位置信息")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                    }
+                }
+                .tint(sakuraPink)
+                .onChange(of: keepAliveEnabled) { _, on in
+                    if on {
+                        NIOLocationKeepAlive.shared.requestAndStart()
+                    } else {
+                        NIOLocationKeepAlive.shared.stop()
+                    }
+                }
+
+                // 授权状态行 + 主动触发授权 / 跳系统设置
+                HStack(spacing: 8) {
+                    Image(systemName: keepAliveStatus.icon)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(keepAliveStatus.tint)
+                    Text(keepAliveStatus.text)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.75))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Spacer()
+                    if keepAliveEnabled, let action = keepAliveStatus.actionLabel {
+                        Button {
+                            if keepAlive.authorizationStatus == .denied || keepAlive.authorizationStatus == .restricted {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            } else {
+                                // notDetermined：主动发起系统授权弹窗
+                                NIOLocationKeepAlive.shared.requestAndStart()
+                            }
+                        } label: {
+                            Text(action)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(mintCyan)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(NIOThemePaint.fill)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(NIOThemePaint.stroke, lineWidth: 0.8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 7)
+                .background(NIOThemePaint.fill)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Divider().background(NIOThemePaint.stroke)
+
                 // 电量里程首选实估
                 Toggle(isOn: $preferActualRange) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -1547,6 +1611,24 @@ struct IOSNIOConfigView: View {
         case 300: return "5 分钟 (推荐)"
         case 600: return "10 分钟"
         default: return "\(sec / 60) 分钟"
+        }
+    }
+
+    /// 后台保活区块的授权状态展示（图标 / 文案 / 颜色 / 可选操作按钮）
+    private var keepAliveStatus: (icon: String, text: String, tint: Color, actionLabel: String?) {
+        switch keepAlive.authorizationStatus {
+        case .notDetermined:
+            return ("location.slash", "定位未授权 · 可主动发起授权弹窗", NIOThemePaint.textSoft.opacity(0.7), "发起授权")
+        case .denied, .restricted:
+            return ("location.slash", "定位被拒绝 · 请到系统设置开启", Color.orange, "前往设置")
+        default:
+            if keepAlive.isKeepingAlive {
+                return ("location.fill", "保活中 · 车况后台准实时刷新", .green, nil)
+            }
+            if keepAliveEnabled {
+                return ("location", "已授权 · 稍后自动启动", mintCyan, nil)
+            }
+            return ("location", "已授权 · 开关未开启", NIOThemePaint.textSoft.opacity(0.7), nil)
         }
     }
 
