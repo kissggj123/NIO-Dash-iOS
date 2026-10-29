@@ -482,8 +482,10 @@ enum NIOVehicleLib {
     }
 
     static func isRealCharging(socStatus: NIOSocStatus?, offcarStatus: [String: NIOJSONValue]?) -> Bool {
+        // charge_state 缺失或滞后时，用充电功率兜底判定（部分数据源不含该字段，导致充电状态不显示）
         let chargeState = socStatus?.chargeState ?? 0
-        guard chargeState == 1 else { return false }
+        let powerW = socStatus?.chargingPower ?? 0
+        guard chargeState == 1 || (chargeState == 0 && powerW > 0) else { return false }
 
         // 露营模式排查：开启露营模式时，车辆维持座舱放电，非插枪充电
         if let offcar = offcarStatus {

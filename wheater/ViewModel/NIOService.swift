@@ -10,6 +10,8 @@ import Combine
 import SwiftUI
 import UIKit
 import ActivityKit
+import BackgroundTasks
+import WidgetKit
 
 @MainActor
 final class NIOService: ObservableObject {
@@ -78,7 +80,19 @@ final class NIOService: ObservableObject {
     @Published var isLoadingChange = false
     @Published var isLoadingCheckin = false
     @Published var lastError: String?
-    @Published var lastVehicleFetch: Date?
+    /// 最近一次成功拉取车况的时刻（主 App 首页与桌面 Widget 更新时间的唯一数据源）。
+    /// 持久化到 UserDefaults，防止 App 重启后短暂为 nil 时被 `?? Date()` 兜底成"现在"。
+    @Published var lastVehicleFetch: Date? {
+        didSet {
+            let key = Self.lastVehicleFetchKey
+            if let lastVehicleFetch {
+                UserDefaults.standard.set(lastVehicleFetch.timeIntervalSince1970, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+    private static let lastVehicleFetchKey = "nio_last_vehicle_fetch_time"
     @Published var is403Detected = false
 
     var isConfigured: Bool {
@@ -170,6 +184,9 @@ final class NIOService: ObservableObject {
     var cachedLightStatus: [String: NIOJSONValue]? = nil
     var cachedOffcarStatus: [String: NIOJSONValue]? = nil
     private var lastFetchTimestamp: Date? = nil
+    /// 从小组件 / 控制胶囊进入 App 时，fetchVehicle 正在跑会被 guard 吞掉；
+    /// 记录 pending 标志，当前轮结束后自动补一轮，避免刷新卡住。
+    private var pendingVehicleRefresh = false
     /// Widget is inexpensive and keeps the live activity fresh. Full RVS blocks
     /// (tyre, FOTA, doors…) are only refreshed when stale, explicitly requested,
     /// or still absent; this avoids repeatedly hitting the private telemetry API.
@@ -177,9 +194,30 @@ final class NIOService: ObservableObject {
     private let telemetryRefreshInterval: TimeInterval = 15 * 60
 
     private init() {
+        // 先恢复持久化的更新时间，再异步加载缓存/网络数据，
+        // 确保冷启动初期 buildState 兜底不会把更新时间写成"现在"（init 内直接赋值不触发 didSet）
+        if let ts = UserDefaults.standard.object(forKey: Self.lastVehicleFetchKey) as? TimeInterval, ts > 0 {
+            lastVehicleFetch = Date(timeIntervalSince1970: ts)
+        }
         loadPersistedData()
         startScheduling()
         setupLifecycleObservers()
+        setupIslandRaiseObserver()
+    }
+
+    /// 控制胶囊上岛实时通道：App 已在前台运行时 scenePhase 不会变化（onChange 不触发），
+    /// Widget 扩展点击胶囊后 post Darwin 通知，此处监听立即消费上岛请求。
+    private func setupIslandRaiseObserver() {
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            { _, _, _, _, _ in
+                Task { @MainActor in NIOService.shared.checkPendingIslandRaise() }
+            },
+            "com.yumikotoysrr.wheater.raiseIsland" as CFString,
+            nil,
+            .deliverImmediately
+        )
     }
 
     private func setupLifecycleObservers() {
@@ -203,6 +241,8 @@ final class NIOService: ObservableObject {
             // 回到前台后平滑恢复调度，若数据已超 2 分钟则轻量刷新一次
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 guard let self = self else { return }
+                // 控制胶囊上岛接力：回前台先消费 Widget 扩展写入的快速上岛请求
+                self.checkPendingIslandRaise()
                 if let last = self.lastVehicleFetch, Date().timeIntervalSince(last) > 120 {
                     Task { [weak self] in await self?.fetchVehicle(force: false) }
                 }
@@ -258,7 +298,9 @@ final class NIOService: ObservableObject {
             async let c: () = fetchChange(force: force)
             async let k: () = fetchCheckin(force: force)
             _ = await (v, c, k)
-            self.lastVehicleFetch = Date()
+            // 更新时间由 fetchVehicle 成功路径（真实拿到数据后）写入。
+            // 此处不可无条件重置为当前时刻：请求被防抖吞掉或失败时，
+            // 会把"更新时间"伪刷新成"现在"，导致桌面 Widget 恒显示"刚刚"。
         }
     }
 
@@ -268,7 +310,12 @@ final class NIOService: ObservableObject {
 
     func fetchVehicle(force: Bool = false) async {
         guard isConfigured else { return }
-        guard !isLoadingVehicle else { return }
+        guard !isLoadingVehicle else {
+            // 从小组件进入时可能正赶上后台轮询在跑，静默丢弃会导致"卡住"。
+            // force 请求标记 pending，当前轮结束后自动补一轮。
+            if force { pendingVehicleRefresh = true }
+            return
+        }
 
         // 防抖节流阀：防止短时间连续点击造成的并发突发请求
         if !force, let last = lastFetchTimestamp, Date().timeIntervalSince(last) < 8.0 {
@@ -279,6 +326,11 @@ final class NIOService: ObservableObject {
         defer {
             isLoadingVehicle = false
             scheduleNextVehiclePoll()
+            // 补跑被 guard 吞掉的 force 请求（从小组件 / 控制胶囊进入时的刷新）
+            if pendingVehicleRefresh {
+                pendingVehicleRefresh = false
+                Task { await fetchVehicle(force: true) }
+            }
         }
 
         let token = normalizeBearer(nioVehicleAccessToken)
@@ -446,6 +498,19 @@ final class NIOService: ObservableObject {
         return try? JSONDecoder().decode(NIOVehicleStatus.self, from: data)
     }
 
+    // MARK: - 凭证失效上报 (401/403)
+
+    /// Token 过期/失效提醒：点亮"凭证失效"状态 + 明确文案 + 警示触感。
+    /// 此前 401/403 只写入拉取日志即静默返回，状态点/退避/横幅全部不触发；
+    /// 修复成功后由 fetchVehicle 成功分支自动复位（is403Detected = false + lastError = nil）。
+    private func noteAuthFailure(_ statusCode: Int) {
+        guard statusCode == 401 || statusCode == 403 else { return }
+        guard !is403Detected else { return }
+        is403Detected = true
+        lastError = "蔚来 Token 已失效（HTTP \(statusCode)），自动刷新已降频为 15 分钟重试 · 请重新嗅探并更新 Token"
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+
     private func fetchWidgetData(url: URL, token: String) async -> NIOVehicleStatus? {
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
@@ -475,6 +540,7 @@ final class NIOService: ObservableObject {
                 return decoded.data?.status
             } else {
                 updateLog(logEntry, statusCode: http.statusCode, preview: String(text.prefix(200)))
+                noteAuthFailure(http.statusCode)
             }
         } catch {
             updateLog(logEntry, statusCode: nil, preview: error.localizedDescription)
@@ -514,6 +580,7 @@ final class NIOService: ObservableObject {
                 return decoded.data?.status
             } else {
                 updateLog(logEntry, statusCode: http.statusCode, preview: String(text.prefix(200)))
+                noteAuthFailure(http.statusCode)
             }
         } catch {
             updateLog(logEntry, statusCode: nil, preview: error.localizedDescription)
@@ -701,14 +768,18 @@ final class NIOService: ObservableObject {
                 req.httpBody = try? JSONSerialization.data(withJSONObject: isAppNio ? ["page_num": 1, "page_size": 20] : ["offset": 0, "limit": 200])
 
                 let (data, response) = try await urlSession.data(for: req)
-                if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                    if let decoded = try? JSONDecoder().decode(NIOChangeResponse.self, from: data) {
-                        // 空响应保护：接口抖动返回空集时保留旧数据，避免看板突然空白
-                        if let newOrders = decoded.resultData?.data, !newOrders.isEmpty {
-                            self.serviceSummary = NIOOrderLib.analyzeServiceOrders(decoded)
-                            storeRecentOrders(newOrders)
+                if let http = response as? HTTPURLResponse {
+                    if http.statusCode == 200 {
+                        if let decoded = try? JSONDecoder().decode(NIOChangeResponse.self, from: data) {
+                            // 空响应保护：接口抖动返回空集时保留旧数据，避免看板突然空白
+                            if let newOrders = decoded.resultData?.data, !newOrders.isEmpty {
+                                self.serviceSummary = NIOOrderLib.analyzeServiceOrders(decoded)
+                                storeRecentOrders(newOrders)
+                            }
+                            return
                         }
-                        return
+                    } else {
+                        noteAuthFailure(http.statusCode)
                     }
                 }
             } catch { }
@@ -723,13 +794,17 @@ final class NIOService: ObservableObject {
                     req.setValue(token, forHTTPHeaderField: "Authorization")
 
                     let (data, response) = try await urlSession.data(for: req)
-                    if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                        if let decoded = try? JSONDecoder().decode(NIOChangeResponse.self, from: data) {
-                            if let newOrders = decoded.resultData?.data, !newOrders.isEmpty {
-                                self.serviceSummary = NIOOrderLib.analyzeServiceOrders(decoded)
-                                storeRecentOrders(newOrders)
+                    if let http = response as? HTTPURLResponse {
+                        if http.statusCode == 200 {
+                            if let decoded = try? JSONDecoder().decode(NIOChangeResponse.self, from: data) {
+                                if let newOrders = decoded.resultData?.data, !newOrders.isEmpty {
+                                    self.serviceSummary = NIOOrderLib.analyzeServiceOrders(decoded)
+                                    storeRecentOrders(newOrders)
+                                }
+                                return
                             }
-                            return
+                        } else {
+                            noteAuthFailure(http.statusCode)
                         }
                     }
                 } catch { }
@@ -780,13 +855,17 @@ final class NIOService: ObservableObject {
                 req.setValue(token, forHTTPHeaderField: "Authorization")
 
                 let (data, response) = try await urlSession.data(for: req)
-                if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                    if let rawJson = try? JSONSerialization.jsonObject(with: data) {
-                        if let ci = NIOOrderLib.extractCheckinData(from: rawJson) {
-                            self.checkinData = ci
-                            saveJSONAsync(ci, to: checkinFile)
-                            return
+                if let http = response as? HTTPURLResponse {
+                    if http.statusCode == 200 {
+                        if let rawJson = try? JSONSerialization.jsonObject(with: data) {
+                            if let ci = NIOOrderLib.extractCheckinData(from: rawJson) {
+                                self.checkinData = ci
+                                saveJSONAsync(ci, to: checkinFile)
+                                return
+                            }
                         }
+                    } else {
+                        noteAuthFailure(http.statusCode)
                     }
                 }
             } catch { }
@@ -1076,6 +1155,9 @@ final class NIOService: ObservableObject {
                 if let v = finalVehicle {
                     self.vehicleData = v
                     self.lastVehicleFetch = finalFetchedAt
+                    // 冷启动兜底：即使网络拉取失败（如 Token 失效），桌面 Widget 也能立即
+                    // 显示最近缓存车况，不再停留在"打开 App 同步车况"空状态
+                    self.updateLiveActivity()
                 }
                 if !finalHistory.isEmpty {
                     self.history = finalHistory
@@ -1102,6 +1184,8 @@ final class NIOService: ObservableObject {
     private var currentActivity: Activity<WheaterAttributes>?
     /// 上一次推送的"显著数据"指纹，用于无变化时跳过系统刷新
     private var lastActivityFingerprint: String?
+    /// 上一次写入桌面 Widget 快照的内容指纹（含里程/限充等 Widget 可见但灵动岛去重不敏感的字段）
+    private var lastWidgetFingerprint: String?
 
     /// 依据满电 CLTC 续航推算电池包容量 (kWh)：75 度 <600 / 100 度 <850 / 150 度
     func estimateBatteryCapacityKwh(socStatus: NIOSocStatus?) -> Double {
@@ -1112,8 +1196,16 @@ final class NIOService: ObservableObject {
         return 75.0
     }
 
+    /// 桌面 Widget 快照写入失败诊断标志：App Group 不可用（免费账号签名剥离等）时只在首次失败记录，
+    /// 恢复成功后记录复位日志，避免每轮轮询刷屏
+    private var widgetSyncFailureLogged = false
+
+    /// 从设置页首页标题读取车名（与 Dashboard homeTitle 一致）
+    private func resolveVehicleName() -> String {
+        UserDefaults.standard.string(forKey: "nio_home_title") ?? "兔可可·蔚来"
+    }
+
     func updateLiveActivity(force: Bool = false) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let resp = vehicleData, let status = resp.data?.status else { return }
 
         let socStatus = status.socStatus
@@ -1128,7 +1220,9 @@ final class NIOService: ObservableObject {
         let best = NIOVehicleLib.bestRange(cltcKm: cltcKm, actualKm: actKm)
         let mainRange = (preferActual && hasAct) ? Int(round(actKm!)) : (hasAct ? stdRange : (best?.km ?? stdRange))
         let subRange: Int? = {
-            if preferActual && hasAct { return stdRange }
+            // 实估优先时主续航已是实估，副续航不下发 CLTC（置 nil 确保各端不显示，
+            // 避免"CLTC 被误标为实估"的语义混乱）；非实估优先时副续航为真实实估值
+            if preferActual && hasAct { return nil }
             if hasAct { return Int(round(actKm!)) }
             if let b = best, b.isEstimated { return b.km }
             return nil
@@ -1168,8 +1262,9 @@ final class NIOService: ObservableObject {
         let fotaInfo = NIOVehicleLib.parseFotaInfo(version: rawFotaVer)
         let vehicleVersion = fotaInfo.shortVer.isEmpty ? nil : fotaInfo.fullDisplay
 
-        // 充电目标（上限优先，锁电兜底）与充满 ETA
-        let rawTarget = socStatus?.maxSoc ?? socStatus?.lockSoc ?? 0
+        // 充电目标（上限）：target_soc_percentage 为用户设定的限充值（与看板"目标电量"同源），
+        // max_soc 是满电 CLTC 相关字段而非限充，锁电 lock_soc 最后兜底
+        let rawTarget = socStatus?.targetSocPercentage ?? socStatus?.maxSoc ?? socStatus?.lockSoc ?? 0
         let targetSoc = (rawTarget > soc && rawTarget <= 100) ? rawTarget : 100.0
         let capacityKwh = estimateBatteryCapacityKwh(socStatus: socStatus)
         var etaDate: Date? = nil
@@ -1181,7 +1276,7 @@ final class NIOService: ObservableObject {
         }
 
         let state = WheaterAttributes.ContentState(
-            vehicleName: "兔可可 · 蔚来",
+            vehicleName: resolveVehicleName(),
             soc: soc,
             remainingRangeKm: displayRange,
             actualRangeKm: subRange,
@@ -1207,7 +1302,7 @@ final class NIOService: ObservableObject {
             frdgActive: frdgPwr,
             frdgTemp: frdgTemp,
             v2lActive: v2l,
-            updateTimestamp: Date(),
+            updateTimestamp: lastVehicleFetch ?? Date(),
             themeRaw: AnimeThemeService.shared.currentStyle.rawValue,
             chargingTargetSoc: targetSoc,
             batteryCapacityKwh: capacityKwh,
@@ -1218,15 +1313,63 @@ final class NIOService: ObservableObject {
             preferActualRange: preferActual
         )
 
+        // 桌面 Widget 同步：仅当快照可见内容变化（或 force 主题换装）时才落盘并触发时间线刷新。
+        // 此前每轮轮询（含数据完全未变的去重早退路径）都会 reloadAllTimelines，
+        // 反复唤醒 Widget Extension 进程白耗电；现在以指纹节流。
+        let widgetFingerprint = [
+            state.significantFingerprint,
+            String(format: "%.0f", targetSoc),
+            "\(mileage ?? -1)",
+            String(format: "%.1f", frdgTemp ?? -99),
+            String(format: "%.1f", lvVolt ?? -1)
+        ].joined(separator: "#")
+        if force || widgetFingerprint != lastWidgetFingerprint {
+            if WheaterVehicleSnapshot.save(from: state) {
+                WidgetCenter.shared.reloadAllTimelines()
+                if widgetSyncFailureLogged {
+                    widgetSyncFailureLogged = false
+                    appendLog(NIOFetchLogEntry(
+                        category: "widget_sync", level: "info",
+                        message: "桌面 Widget 快照恢复写入成功",
+                        detail: "App Group 容器已可用，Widget 数据恢复正常同步",
+                        timestamp: Date(), requestURL: nil, requestMethod: nil,
+                        requestBody: nil, responsePreview: nil, statusCode: nil
+                    ))
+                }
+            } else if !widgetSyncFailureLogged {
+                widgetSyncFailureLogged = true
+                appendLog(NIOFetchLogEntry(
+                    category: "widget_sync", level: "error",
+                    message: "桌面 Widget 快照写入失败（App Group 容器不可用），Widget 将一直显示空状态",
+                    detail: "通常因安装包缺少 App Group 权限。Xcode 直装：已修复（entitlements 已挂回 target，重新 Run 注册）；TrollStore/CI 包：重新走 CI 打包（ldid 已嵌入）",
+                    timestamp: Date(), requestURL: nil, requestMethod: nil,
+                    requestBody: nil, responsePreview: nil, statusCode: nil
+                ))
+            }
+            lastWidgetFingerprint = widgetFingerprint
+        }
+
+        // 灵动岛 / 实时活动仅在系统允许时进行（Widget 快照同步不受此开关影响，见上）
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+
+        // 失效引用自愈（必须在去重早退之前）：被用户长按强制下岛后系统已移除活动，
+        // 残留引用 + 未变化的指纹会导致永远无法重新上岛。
+        // activities 跨进程查询有开销，本轮只取一次复用。
+        let systemActivities = Activity<WheaterAttributes>.activities
+        if let stale = currentActivity, !systemActivities.contains(where: { $0.id == stale.id }) {
+            currentActivity = nil
+            lastActivityFingerprint = nil
+        }
+
         // 去重节流：显著数据无变化时跳过更新，降低 ActivityKit 系统刷新频率与功耗
         // force = true 时绕过（如切换主题需要立即换装）
         let fingerprint = state.significantFingerprint
         if !force, fingerprint == lastActivityFingerprint {
-            self.isLiveActivityActive = isLiveActivityActive || currentActivity != nil || !Activity<WheaterAttributes>.activities.isEmpty
+            self.isLiveActivityActive = isLiveActivityActive || currentActivity != nil || !systemActivities.isEmpty
             return
         }
 
-        if let activity = currentActivity ?? Activity<WheaterAttributes>.activities.first {
+        if let activity = currentActivity ?? systemActivities.first {
             lastActivityFingerprint = fingerprint
             Task {
                 await activity.update(using: state)
@@ -1244,6 +1387,8 @@ final class NIOService: ObservableObject {
                 self.lastActivityFingerprint = fingerprint
                 self.isLiveActivityActive = true
             } catch {
+                // 启动失败不再静默：写入 lastError 让侧栏告警卡可见（如灵动岛开关被系统关闭）
+                self.lastError = "灵动岛上岛失败：\(error.localizedDescription)"
                 print("[LiveActivity] 启动失败: \(error)")
             }
         }
@@ -1256,7 +1401,137 @@ final class NIOService: ObservableObject {
             }
             self.currentActivity = nil
             self.lastActivityFingerprint = nil
+            self.lastWidgetFingerprint = nil
             self.isLiveActivityActive = false
+            // 灵动岛已手动结束，复位控制胶囊常亮状态，避免按钮卡在绿色"常亮中"
+            self.resetControlKeepAlive()
+        }
+    }
+
+    /// 复位控制胶囊常亮状态：清 App Group 标志并通知系统重渲染按钮。
+    /// 所有无法继续上岛的路径（未配置、实时活动被关、请求过期、手动结束灵动岛）都必须调用，
+    /// 否则锁屏/控制中心按钮会永远停在绿色"常亮中"。
+    func resetControlKeepAlive() {
+        UserDefaults(suiteName: "group.com.YumikoToysRR.wheater")?
+            .removeObject(forKey: "nio_island_keep_alive")
+        // ControlWidget 注册 kind（与 IslandControlWidget.swift 的 WheaterIslandControl.controlKind
+        // 一致；该文件仅编译进扩展 target，App 侧此处直接用字面量）
+        ControlCenter.shared.reloadControls(ofKind: "com.YumikoToysRR.wheater.IslandRaise")
+    }
+
+    /// 控制胶囊 / 快捷指令触发的快速上岛：清除失效引用并立即重建实时活动
+    func raiseLiveActivityFromControl() {
+        // 无论后续能否成功上岛，先复位按钮状态（扩展侧点击时已置常亮标志，
+        // 若此处因未配置/授权关闭提前 return，按钮会卡在绿色"常亮中"）
+        resetControlKeepAlive()
+        guard isConfigured else { return }
+        // 重装 App（换签名/换账号）后系统会重置"实时活动"授权——此前此处静默 return，
+        // 胶囊点了毫无反应且无任何提示；现在明确告知用户去系统设置打开
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            lastError = "实时活动已被系统关闭，无法上岛：请在 系统设置 → 隐私与安全性 → 实时活动（或本 App 设置页）中允许"
+            return
+        }
+        if vehicleData != nil {
+            updateLiveActivity(force: true)
+            return
+        }
+        // 冷启动尚无数据：拉取空闲时主动拉一轮（正在跑的拉取轮次会自行上岛，勿重复触发），
+        // 并在后台等待数据就绪后强制上岛——fetchVehicle 的 isLoadingVehicle 防并发 guard
+        // 会吞掉直接发起的拉取，等待兜底确保请求不被静默丢弃（20s 内每秒探测一次）。
+        if !isLoadingVehicle {
+            refreshAll(force: true)
+        }
+        Task { @MainActor [weak self] in
+            for _ in 0..<20 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self = self else { return }
+                if self.vehicleData != nil {
+                    self.updateLiveActivity(force: true)
+                    return
+                }
+            }
+        }
+    }
+
+    /// 控制胶囊上岛请求的跨进程接力：Control Widget 的 intent 在 Widget 扩展进程执行，
+    /// 通过 App Group 标志位 + 容器文件双通道请求主 App 上岛；主 App 回前台激活时消费。
+    /// 五次探测（立即 / 0.5 / 1.2 / 2.5 / 4s）覆盖扩展写标志晚于 App 激活及冷启动动画的竞态；
+    /// App 运行中场景由 Darwin 通知实时触发（见 setupIslandRaiseObserver）。
+    func checkPendingIslandRaise() {
+        guard isConfigured else { return }
+        Task { @MainActor in
+            for delay in [0.0, 0.5, 1.2, 2.5, 4.0] {
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+                // 主通道：App Group UserDefaults
+                if let defaults = UserDefaults(suiteName: "group.com.YumikoToysRR.wheater"),
+                   let timestamp = defaults.object(forKey: "nio_raise_island_request") as? Double {
+                    defaults.removeObject(forKey: "nio_raise_island_request")
+                    guard Date().timeIntervalSince1970 - timestamp < 60 else {
+                        // 请求已过期（点击后 App 迟迟未消费，如用户上滑杀掉 App），
+                        // 上岛不会发生，复位控制胶囊常亮状态避免按钮卡绿
+                        self.resetControlKeepAlive()
+                        return
+                    }
+                    self.raiseLiveActivityFromControl()
+                    return
+                }
+                // 备份通道：App Group 容器文件（UserDefaults 跨进程同步有秒级延迟时兜底）
+                if let containerURL = FileManager.default.containerURL(
+                    forSecurityApplicationGroupIdentifier: "group.com.YumikoToysRR.wheater"
+                ) {
+                    let flagURL = containerURL.appendingPathComponent("raise_island_flag")
+                    if let data = try? String(contentsOf: flagURL, encoding: .utf8),
+                       let timestamp = Double(data.trimmingCharacters(in: .whitespacesAndNewlines)),
+                       Date().timeIntervalSince1970 - timestamp < 60 {
+                        try? FileManager.default.removeItem(at: flagURL)
+                        self.raiseLiveActivityFromControl()
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - 后台刷新 (BGTaskScheduler)：App 退后台后仍定期拉取车况并刷新灵动岛
+
+    static let backgroundRefreshTaskID = "com.YumikoToysRR.wheater.refresh"
+
+    /// App 启动时注册（必须在 didFinishLaunching 返回前完成，由 wheaterApp.init 调用）
+    nonisolated static func registerBackgroundRefresh() {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: backgroundRefreshTaskID, using: nil) { task in
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            handleBackgroundRefreshTask(refreshTask)
+        }
+    }
+
+    /// 预约下一次后台刷新（退到后台时调用，iOS 约 15 分钟起择机执行）
+    nonisolated static func scheduleBackgroundRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: backgroundRefreshTaskID)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    nonisolated private static func handleBackgroundRefreshTask(_ task: BGAppRefreshTask) {
+        // 先预约下一次，保证后台刷新链条不断
+        scheduleBackgroundRefresh()
+
+        let work = Task { @MainActor in
+            let service = NIOService.shared
+            guard service.isConfigured else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            await service.fetchVehicle(force: false) // 成功后内部自动 updateLiveActivity
+            await service.fetchChange(force: false)
+            task.setTaskCompleted(success: true)
+        }
+        task.expirationHandler = {
+            work.cancel()
         }
     }
 }

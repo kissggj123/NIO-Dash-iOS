@@ -21,11 +21,16 @@ enum NIOBootSettings {
     static let dailyOnceKey = "nio_boot_daily_once"
     static let lastShownKey = "nio_boot_last_shown"
 
-    /// 今日戳（用于"每日一次"判定）
-    static var todayStamp: String {
+    /// 今日戳格式化器（静态缓存，避免每次调用重复创建）
+    private static let stampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        return formatter
+    }()
+
+    /// 今日戳（用于"每日一次"判定）
+    static var todayStamp: String {
+        stampFormatter.string(from: Date())
     }
 }
 
@@ -48,7 +53,7 @@ enum NIOBootStyle: String, CaseIterable, Codable, Identifiable {
 
     var styleDescription: String {
         switch self {
-        case .energyCharge:  return "电池环充能 · 电弧凝聚"
+        case .energyCharge:  return "电池环充能 · 星流汇聚"
         case .pixelRemaster: return "点阵点亮 · 复古像素"
         case .minimalFast:   return "一步到位 · 极速直达"
         }

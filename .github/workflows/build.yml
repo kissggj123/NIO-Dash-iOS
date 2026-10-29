@@ -47,6 +47,13 @@ jobs:
         run: |
           mkdir -p build/Payload
           cp -r build/YumikoToysRR.xcarchive/Products/Applications/YumikoToysRR.app build/Payload/
+          # 为 TrollStore 安装嵌入权限（ldid 重签名，CoreTrust 旁路下任意权限有效）
+          brew install ldid
+          # 主 App：CarPlay + App Group（桌面 Widget 快照共享）
+          ldid -Swheater/wheater.entitlements build/Payload/YumikoToysRR.app/YumikoToysRR
+          # Widget 扩展：App Group（读取车况快照）
+          APPEX_BIN="build/Payload/YumikoToysRR.app/PlugIns/WheaterStatusExtension.appex/WheaterStatusExtension"
+          if [ -f "$APPEX_BIN" ]; then ldid -SWheaterStatus/Extension.entitlements "$APPEX_BIN"; fi
           cd build && zip -qry YumikoToysRR-unsigned.ipa Payload
           ls -lh YumikoToysRR-unsigned.ipa
 

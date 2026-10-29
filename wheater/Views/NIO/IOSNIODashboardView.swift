@@ -9,6 +9,8 @@
 import SwiftUI
 import Vision
 import CoreImage.CIFilterBuiltins
+import MapKit
+import CoreLocation
 
 /// 主页车型图片模式：纯渐变 / 内置车型图 / 外部导入
 enum NIOHeroPhotoMode: String, CaseIterable, Codable, Identifiable {
@@ -165,7 +167,7 @@ struct IOSNIODashboardView: View {
     @ObservedObject private var service = NIOService.shared
     @ObservedObject private var themeService = AnimeThemeService.shared
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @AppStorage("nio_home_title") private var homeTitle = "NIO"
+    @AppStorage("nio_home_title") private var homeTitle = "兔可可·蔚来"
     @AppStorage("nio_hero_photo_mode") private var heroPhotoModeRaw = NIOHeroPhotoMode.gradient.rawValue
     @AppStorage("nio_vehicle_selected_model") private var selectedModelSlug = "et5_special"
     @State private var showSettings = false
@@ -190,6 +192,19 @@ struct IOSNIODashboardView: View {
     private var soc: NIOSocStatus? { status?.socStatus }
     private var isCharging: Bool {
         NIOVehicleLib.isRealCharging(socStatus: soc, offcarStatus: status?.offcarModeStatus)
+    }
+
+    // MARK: - 续航主/副位统一语义
+    // 与灵动岛 / 锁屏 / 桌面 Widget（NIOService.buildState）同规则：
+    // 开启"实估优先"且有实估 → 主位=实估、副位=CLTC；否则主位=CLTC、副位=实估。
+    private var heroRangePreferActual: Bool {
+        UserDefaults.standard.bool(forKey: "nio_prefer_actual_range") && (soc?.remainingActualRange ?? 0) > 0
+    }
+    private var heroMainRange: (value: Double?, label: String) {
+        heroRangePreferActual ? (soc?.remainingActualRange, "实估续航") : (soc?.remainingRange, "CLTC 续航")
+    }
+    private var heroSubRange: (value: Double?, label: String) {
+        heroRangePreferActual ? (soc?.remainingRange, "CLTC 续航") : (soc?.remainingActualRange, "实估续航")
     }
 
     var body: some View {
@@ -314,10 +329,15 @@ struct IOSNIODashboardView: View {
 
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 16) {
+                            if service.is403Detected {
+                                credentialAlertBanner
+                                    .transition(.move(edge: .top).combined(with: .opacity))
+                            }
                             detailHeader
                             vehicleHero
                             sidebarDetailContent(twoColumns: twoColumns)
                         }
+                        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: service.is403Detected)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 32)
                         .frame(maxWidth: twoColumns ? 1040 : 860)
@@ -396,6 +416,45 @@ struct IOSNIODashboardView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(NIOThemePaint.stroke, lineWidth: 1)
         )
+    }
+
+    /// 凭证失效横幅：Token 过期（401/403）时在看板顶部醒目提示，点击直达配置页。
+    /// 重新拉取成功后由 service.is403Detected 复位自动消失。
+    private var credentialAlertBanner: some View {
+        Button {
+            showSettings = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.red)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("蔚来 Token 已失效")
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(hex: themeService.currentToken.textPrimary))
+                    Text("车况已停止刷新（15 分钟降频重试中）· 点击重新配置")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color(hex: themeService.currentToken.textSecondary))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: themeService.currentToken.textSecondary))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.red.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.red.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     /// 详情主区：按侧栏选择渲染对应卡片组；宽屏拆左右双列
@@ -501,9 +560,9 @@ struct IOSNIODashboardView: View {
                         .foregroundStyle(.white.opacity(0.72))
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(rangeText(soc?.remainingRange))
+                        Text(rangeText(heroMainRange.value))
                             .font(.title3.weight(.semibold))
-                        Text("CLTC 续航")
+                        Text(heroMainRange.label)
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.55))
                     }
@@ -520,7 +579,7 @@ struct IOSNIODashboardView: View {
                 .frame(height: 6)
 
                 HStack(spacing: 0) {
-                    HeroMetric(title: "实估续航", value: rangeText(soc?.remainingActualRange))
+                    HeroMetric(title: heroSubRange.label, value: rangeText(heroSubRange.value))
                     HeroMetric(title: "总里程", value: mileageText)
                     HeroMetric(title: isCharging ? "充电功率" : "车辆状态", value: isCharging ? powerText : vehicleStateLabel, trailing: true)
                 }
@@ -801,32 +860,7 @@ struct IOSNIODashboardView: View {
            let latitude = position.latitude,
            let longitude = position.longitude,
            NIOVehicleLib.isValidGPS(lat: latitude, lng: longitude) {
-            NIOSectionCard(title: "车辆位置", subtitle: "定位数据可能存在延迟") {
-                Link(destination: URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)")!) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 17))
-                            .foregroundStyle(.red)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("在地图中查看位置")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            Text(String(format: "%.5f, %.5f", latitude, longitude))
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        Spacer(minLength: 8)
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain) // 避免默认 tint 样式压缩/叠印 label
-            }
+            NIOParkingLocationCard(latitude: latitude, longitude: longitude)
         }
     }
 
@@ -952,6 +986,177 @@ private struct NIOSectionCard<Content: View>: View {
             content
         }
         .padding(16).background(NIOThemePaint.fill).clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+// MARK: - 停车位置卡（内嵌苹果地图 + 逆地理编码 + 外部地图跳转）
+
+private struct NIOParkingLocationCard: View {
+    let latitude: Double
+    let longitude: Double
+
+    @State private var placemarkText: String?
+    @State private var isLoadingPlacemark = false
+
+    // 蔚来 API 返回的坐标经测试为 WGS-84（与轨迹卡一致，直接使用不做 GCJ-02 转换）
+    private var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    private var region: MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
+        )
+    }
+
+    private var appleMapsURL: URL {
+        URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)&q=车辆停放位置")!
+    }
+
+    private var amapURL: URL? {
+        // dev=1 表示传入的是 WGS-84 坐标，高德内部自动转 GCJ-02
+        URL(string: "iosamap://viewMap?sourceApplication=YumikoToysRR&poiname=车辆停放位置&lat=\(latitude)&lon=\(longitude)&dev=1")
+    }
+
+    private var baiduMapsURL: URL? {
+        // coord_type=wgs84 声明坐标类型，百度内部自动转 BD-09
+        URL(string: "baidumap://map/marker?location=\(latitude),\(longitude)&coord_type=wgs84&title=车辆停放位置&content=停车位置&src=YumikoToysRR")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // 标题行
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("车辆位置")
+                        .font(.headline)
+                    if let placemarkText {
+                        Text(placemarkText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text("定位数据可能存在延迟")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if isLoadingPlacemark {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else {
+                    Button {
+                        reverseGeocode()
+                    } label: {
+                        Image(systemName: "arrow.clockwise.circle")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // 内嵌苹果地图
+            Map(initialPosition: .region(region)) {
+                Marker("车辆停放位置", coordinate: coordinate)
+                    .tint(.red)
+            }
+            .frame(height: 180)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .allowsHitTesting(false)
+
+            // 停放描述
+            if let placemarkText {
+                Label(placemarkText, systemImage: "pin.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+            }
+
+            // 外部地图跳转按钮
+            HStack(spacing: 10) {
+                Link(destination: appleMapsURL) {
+                    mapButton(icon: "map.fill", label: "苹果地图", tint: .blue)
+                }
+                if let amapURL, UIApplication.shared.canOpenURL(amapURL) {
+                    Link(destination: amapURL) {
+                        mapButton(icon: "location.fill", label: "高德地图", tint: .green)
+                    }
+                }
+                if let baiduMapsURL, UIApplication.shared.canOpenURL(baiduMapsURL) {
+                    Link(destination: baiduMapsURL) {
+                        mapButton(icon: "signpost.right.fill", label: "百度地图", tint: .orange)
+                    }
+                }
+            }
+
+            // 坐标
+            Text(String(format: "%.5f, %.5f", latitude, longitude))
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background(NIOThemePaint.fill)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .onAppear { reverseGeocode() }
+    }
+
+    private func mapButton(icon: String, label: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+            Text(label)
+                .font(.caption.weight(.medium))
+        }
+        .foregroundStyle(tint)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .background(tint.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func reverseGeocode() {
+        guard !isLoadingPlacemark else { return }
+        isLoadingPlacemark = true
+        let geocoder = CLGeocoder()
+        let location = CLLocation(latitude: latitude, longitude: longitude)
+        geocoder.reverseGeocodeLocation(location) { placemarks, error in
+            Task { @MainActor in
+                isLoadingPlacemark = false
+                guard let pm = placemarks?.first, error == nil else {
+                    placemarkText = nil
+                    return
+                }
+                placemarkText = formatPlacemark(pm)
+            }
+        }
+    }
+
+    private func formatPlacemark(_ pm: CLPlacemark) -> String {
+        var parts: [String] = []
+        // 优先道路名
+        if let street = pm.thoroughfare, !street.isEmpty {
+            parts.append(street)
+        }
+        // 子地标（店铺 / 小区）
+        if let sub = pm.subThoroughfare, !sub.isEmpty {
+            parts.append(sub + "号")
+        }
+        // 名称（POI / 店铺）
+        if let name = pm.name, !name.isEmpty, name != pm.thoroughfare {
+            parts.append(name)
+        }
+        // 行政区
+        if let area = pm.subLocality, !area.isEmpty, !parts.contains(area) {
+            parts.append(area)
+        }
+        if parts.isEmpty {
+            if let loc = pm.locality, !loc.isEmpty { return "停放于\(loc)附近" }
+            return "停放位置"
+        }
+        return "停放于" + parts.joined(separator: " · ") + "附近"
     }
 }
 

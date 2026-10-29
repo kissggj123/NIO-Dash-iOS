@@ -14,7 +14,15 @@ import SwiftUI
 import ActivityKit
 
 @main
-struct WheaterStatus: Widget {
+struct WheaterStatusBundle: WidgetBundle {
+    var body: some Widget {
+        WheaterStatusLiveActivityWidget()
+        WheaterIslandControlWidget()
+        NIOVehicleStatusWidget()
+    }
+}
+
+struct WheaterStatusLiveActivityWidget: Widget {
 
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: WheaterAttributes.self) { context in
@@ -48,7 +56,7 @@ struct WheaterStatus: Widget {
                             Text(power)
                                 .font(.system(size: 9, weight: .bold, design: .rounded))
                                 .foregroundStyle(.green)
-                        } else if let act = state.actualRangeKm, act > 0 {
+                        } else if state.preferActualRange != true, let act = state.actualRangeKm, act > 0 {
                             Text("实估 \(act)km")
                                 .font(.system(size: 9, weight: .semibold, design: .rounded))
                                 .foregroundStyle(theme.glow.opacity(0.95))
@@ -88,8 +96,8 @@ struct WheaterStatus: Widget {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(.white.opacity(0.6))
                         }
-                        if let act = state.actualRangeKm, act > 0 {
-                            Text((state.preferActualRange == true) ? "预估续航 \(act)km" : "实估 \(act)km")
+                        if state.preferActualRange != true, let act = state.actualRangeKm, act > 0 {
+                            Text("实估 \(act)km")
                                 .font(.system(size: 9, weight: .semibold, design: .rounded))
                                 .foregroundStyle(theme.glow.opacity(0.95))
                         } else if let t = state.insideTemp {
@@ -380,7 +388,7 @@ struct LiveActivityLockScreenView: View {
                     }
                     .overlay(Circle().stroke(theme.accent.opacity(0.7), lineWidth: 1))
 
-                    Text(state.vehicleName.isEmpty ? "蔚来 · 兔可可" : state.vehicleName)
+                    Text(state.vehicleName.isEmpty ? "兔可可·蔚来" : state.vehicleName)
                         .font(.system(size: 13, weight: .heavy, design: .rounded))
                         .foregroundStyle(theme.text)
 
@@ -508,8 +516,8 @@ struct LiveActivityLockScreenView: View {
                             .foregroundStyle(theme.textSoft)
                     }
 
-                    if let act = state.actualRangeKm, act > 0 {
-                        Text((state.preferActualRange == true) ? "预估续航 \(act) km" : "实估 \(act) km")
+                    if state.preferActualRange != true, let act = state.actualRangeKm, act > 0 {
+                        Text("实估 \(act) km")
                             .font(.system(size: 10, weight: .semibold, design: .rounded))
                             .foregroundStyle(theme.glow.opacity(theme.isDark ? 0.9 : 1.0))
                     }

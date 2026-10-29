@@ -29,7 +29,7 @@ struct IOSNIOConfigView: View {
     @AppStorage("nio_vehicle_selected_model") private var selectedModelSlug = "et5_special"
     @AppStorage("nio_vehicle_selected_color") private var selectedColorSlug = "nature_wonder"
     // 首页名称与车型图片（v5.1）
-    @AppStorage("nio_home_title") private var homeTitle = "NIO"
+    @AppStorage("nio_home_title") private var homeTitle = "兔可可·蔚来"
     @AppStorage("nio_hero_photo_mode") private var heroPhotoModeRaw = NIOHeroPhotoMode.gradient.rawValue
     @State private var heroPhotoItem: PhotosPickerItem?
     @State private var heroPhotoHint: String?
