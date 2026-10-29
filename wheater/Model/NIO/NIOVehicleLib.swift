@@ -1588,6 +1588,28 @@ public enum NIOThemePaint {
     public static var token: AnimeThemeToken { AnimeThemeService.shared.currentToken }
     public static var isDark: Bool { token.isDark }
 
+    // ── 主题令牌直取（视图层禁止再写 Color(hex: token.xxx)，统一走这里）──
+
+    /// 页面主背景
+    public static var background: Color { Color(hex: token.backgroundPrimary) }
+    /// 页面次背景 / 侧栏染底
+    public static var backgroundSoft: Color { Color(hex: token.backgroundSecondary) }
+    /// 主题强调色（图标、按钮、高亮）
+    public static var accent: Color { Color(hex: token.accentColor) }
+    /// 主题辉光色（阴影、光晕、图表辅色）
+    public static var glow: Color { Color(hex: token.glowColor) }
+    /// 暖点缀色
+    public static var warm: Color { Color(hex: token.warmAccent) }
+    /// 渐变起点
+    public static var gradientStart: Color { Color(hex: token.gradientStart) }
+    /// 渐变终点
+    public static var gradientEnd: Color { Color(hex: token.gradientEnd) }
+
+    /// 主题强调渐变（进度条 / 标题条 / 图表统一走这套）
+    public static var accentGradient: LinearGradient {
+        LinearGradient(colors: [gradientStart, gradientEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
     /// 正文主色
     public static var text: Color { Color(hex: token.textPrimary) }
     /// 正文弱化色

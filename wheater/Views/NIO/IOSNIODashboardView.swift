@@ -165,6 +165,7 @@ private struct NIOSidebarLabelStyle: LabelStyle {
 @MainActor
 struct IOSNIODashboardView: View {
     @ObservedObject private var service = NIOService.shared
+    // 仅用于订阅主题变化触发重绘；取色统一走 NIOThemePaint
     @ObservedObject private var themeService = AnimeThemeService.shared
     @Environment(\.horizontalSizeClass) private var sizeClass
     @AppStorage("nio_home_title") private var homeTitle = "兔可可·蔚来"
@@ -183,10 +184,6 @@ struct IOSNIODashboardView: View {
     private var heroPhotoMode: NIOHeroPhotoMode {
         NIOHeroPhotoMode(rawValue: heroPhotoModeRaw) ?? .gradient
     }
-
-    // 主题令牌便捷取色（hero 展台辉光用）
-    private var accentColor: Color { Color(hex: themeService.currentToken.accentColor) }
-    private var glowColor: Color { Color(hex: themeService.currentToken.glowColor) }
 
     private var status: NIOVehicleStatus? { service.vehicleData?.data?.status }
     private var soc: NIOSocStatus? { status?.socStatus }
@@ -295,7 +292,7 @@ struct IOSNIODashboardView: View {
             .toolbar(removing: .sidebarToggle) // 移除侧栏右上角系统玻璃钮，折叠走 detailHeader 自定义钮
             .background(
                 // 侧栏淡色染底：与详情主题背景呼应
-                Color(hex: themeService.currentToken.backgroundSecondary).opacity(0.55)
+                NIOThemePaint.backgroundSoft.opacity(0.55)
                     .ignoresSafeArea()
             )
             .navigationTitle(homeTitle.isEmpty ? "NIO" : homeTitle)
@@ -387,7 +384,7 @@ struct IOSNIODashboardView: View {
             } label: {
                 Image(systemName: splitVisibility == .all ? "sidebar.leading" : "sidebar.squares.leading")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(hex: themeService.currentToken.accentColor))
+                    .foregroundStyle(NIOThemePaint.accent)
                     .frame(width: 30, height: 30)
                     .background(NIOThemePaint.fill)
                     .clipShape(RoundedRectangle(cornerRadius: 9))
@@ -397,20 +394,20 @@ struct IOSNIODashboardView: View {
 
             Image(systemName: section.icon)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color(hex: themeService.currentToken.accentColor))
+                .foregroundStyle(NIOThemePaint.accent)
             Text(section.title)
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
-                .foregroundStyle(Color(hex: themeService.currentToken.textPrimary))
+                .foregroundStyle(NIOThemePaint.text)
             Spacer()
             Text("\(NIOSidebarSection.allCases.firstIndex(of: section)! + 1)/\(NIOSidebarSection.allCases.count)")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(Color(hex: themeService.currentToken.textSecondary).opacity(0.55))
+                .foregroundStyle(NIOThemePaint.textSoft.opacity(0.55))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(hex: themeService.currentToken.gradientStart).opacity(0.08))
+                .fill(NIOThemePaint.gradientStart.opacity(0.08))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -431,17 +428,17 @@ struct IOSNIODashboardView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("蔚来 Token 已失效")
                         .font(.system(size: 14, weight: .heavy, design: .rounded))
-                        .foregroundStyle(Color(hex: themeService.currentToken.textPrimary))
+                        .foregroundStyle(NIOThemePaint.text)
                     Text("车况已停止刷新（15 分钟降频重试中）· 点击重新配置")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(hex: themeService.currentToken.textSecondary))
+                        .foregroundStyle(NIOThemePaint.textSoft)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(hex: themeService.currentToken.textSecondary))
+                    .foregroundStyle(NIOThemePaint.textSoft)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
@@ -578,18 +575,24 @@ struct IOSNIODashboardView: View {
                 }
 
                 GeometryReader { proxy in
+                    let fraction = CGFloat(min(1, max(0, (soc?.soc ?? 0) / 100)))
                     ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.14))
-                        Capsule()
-                            .fill(isCharging ? Color.green : themeService.accentColor())
-                            .frame(width: max(6, proxy.size.width * CGFloat(min(1, max(0, (soc?.soc ?? 0) / 100)))))
+                        Capsule().fill(.white.opacity(0.16))
+                        if fraction > 0 {
+                            Capsule()
+                                .fill(isCharging ? AnyShapeStyle(Color.green) : AnyShapeStyle(NIOThemePaint.accentGradient))
+                                .frame(width: max(10, proxy.size.width * fraction))
+                                .shadow(color: isCharging ? Color.green.opacity(0.55) : NIOThemePaint.glow.opacity(0.55), radius: 5, y: 0)
+                        }
                     }
                 }
-                .frame(height: 6)
+                .frame(height: 8)
 
                 HStack(spacing: 0) {
                     HeroMetric(title: heroSubRange.label, value: rangeText(heroSubRange.value))
+                    HeroMetricDivider()
                     HeroMetric(title: "总里程", value: mileageText)
+                    HeroMetricDivider()
                     HeroMetric(title: isCharging ? "充电功率" : "车辆状态", value: isCharging ? powerText : vehicleStateLabel, trailing: true)
                 }
             }
@@ -605,7 +608,7 @@ struct IOSNIODashboardView: View {
     private var heroPhotoLayer: some View {
         switch heroPhotoMode {
         case .gradient:
-            Color(hex: themeService.currentToken.gradientEnd)
+            NIOThemePaint.gradientEnd
         case .builtin:
             // Vision 抠图就绪前显示纯渐变（避免黑底原图压在渐变上生硬突兀）
             if let cutout = builtinCutout {
@@ -614,7 +617,7 @@ struct IOSNIODashboardView: View {
                     Ellipse()
                         .fill(
                             RadialGradient(
-                                colors: [accentColor.opacity(0.42), glowColor.opacity(0.16), Color.clear],
+                                colors: [NIOThemePaint.accent.opacity(0.42), NIOThemePaint.glow.opacity(0.16), Color.clear],
                                 center: .center,
                                 startRadius: 8,
                                 endRadius: 170
@@ -629,10 +632,10 @@ struct IOSNIODashboardView: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         .offset(x: -4, y: 10)
-                        .shadow(color: accentColor.opacity(0.35), radius: 18, y: 6)
+                        .shadow(color: NIOThemePaint.accent.opacity(0.35), radius: 18, y: 6)
                 }
             } else {
-                Color(hex: themeService.currentToken.gradientEnd)
+                NIOThemePaint.gradientEnd
             }
         case .custom:
             if let image = customPhoto {
@@ -641,30 +644,37 @@ struct IOSNIODashboardView: View {
                     .aspectRatio(contentMode: .fill)
             } else {
                 // 未导入图片时兜底为渐变
-                LinearGradient(
-                    colors: [Color(hex: themeService.currentToken.gradientStart), Color(hex: themeService.currentToken.gradientEnd)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                NIOThemePaint.accentGradient
             }
         }
     }
 
-    /// 遮罩层：纯渐变模式满铺对角渐变；图片模式顶部浓、底部淡，文字清晰且车形透出
+    /// 遮罩层：纯渐变模式满铺对角渐变（叠加高光与底部压暗，突出文字层次）；图片模式顶部浓、底部淡，文字清晰且车形透出
     @ViewBuilder
     private var heroOverlay: some View {
         if heroPhotoMode == .gradient {
-            LinearGradient(
-                colors: [Color(hex: themeService.currentToken.gradientStart), Color(hex: themeService.currentToken.gradientEnd)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            ZStack {
+                NIOThemePaint.accentGradient
+                // 左上高光：给纯渐变一点"打光"的体积感
+                RadialGradient(
+                    colors: [.white.opacity(0.20), .clear],
+                    center: UnitPoint(x: 0.12, y: -0.05),
+                    startRadius: 10,
+                    endRadius: 400
+                )
+                // 底部压暗：保证 hero 指标行的可读性
+                LinearGradient(
+                    colors: [.black.opacity(0.16), .clear],
+                    startPoint: .bottom,
+                    endPoint: .center
+                )
+            }
         } else {
             LinearGradient(
                 stops: [
-                    .init(color: Color(hex: themeService.currentToken.gradientStart).opacity(0.9), location: 0),
-                    .init(color: Color(hex: themeService.currentToken.gradientStart).opacity(0.4), location: 0.48),
-                    .init(color: Color(hex: themeService.currentToken.gradientEnd).opacity(0.34), location: 1)
+                    .init(color: NIOThemePaint.gradientStart.opacity(0.9), location: 0),
+                    .init(color: NIOThemePaint.gradientStart.opacity(0.4), location: 0.48),
+                    .init(color: NIOThemePaint.gradientEnd.opacity(0.34), location: 1)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -953,11 +963,20 @@ private enum DashboardSection: String, CaseIterable, Identifiable {
 
 private struct NIOAppBackground: View {
     var body: some View {
-        LinearGradient(
-            colors: [AnimeThemeService.shared.backgroundPrimary(), AnimeThemeService.shared.backgroundSecondary()],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        ZStack {
+            LinearGradient(
+                colors: [NIOThemePaint.background, NIOThemePaint.backgroundSoft],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            // 顶部主题辉光：给纯渐变背景一点纵深
+            RadialGradient(
+                colors: [NIOThemePaint.glow.opacity(0.16), .clear],
+                center: UnitPoint(x: 0.5, y: -0.12),
+                startRadius: 20,
+                endRadius: 520
+            )
+        }
     }
 }
 
@@ -965,11 +984,15 @@ private struct NIOEmptyState: View {
     let onConfigure: () -> Void
     var body: some View {
         VStack(spacing: 18) {
-            Image(systemName: "car.2.fill").font(.system(size: 44)).foregroundStyle(Color(red: 0.11, green: 0.54, blue: 0.48))
+            Image(systemName: "car.2.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(NIOThemePaint.accentGradient)
             Text("连接你的 NIO").font(.title2.weight(.semibold))
             Text("粘贴从 NIO App 获取的车辆状态 URL 和 Access Token，即可在这里查看实时车况。")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Button("开始配置", action: onConfigure).buttonStyle(.borderedProminent).tint(Color(red: 0.10, green: 0.48, blue: 0.42))
+            Button("开始配置", action: onConfigure)
+                .buttonStyle(.borderedProminent)
+                .tint(NIOThemePaint.accent)
         }
     }
 }
@@ -980,21 +1003,25 @@ private struct NIOAlertCard: View {
     var body: some View {
         Button(action: action) {
             HStack { Image(systemName: "exclamationmark.triangle.fill"); Text(message).lineLimit(2); Spacer(); Image(systemName: "chevron.right") }
-                .font(.subheadline).foregroundStyle(.orange).padding(14).background(.orange.opacity(0.10)).clipShape(RoundedRectangle(cornerRadius: 16))
+                .font(.subheadline).foregroundStyle(.orange)
+                .padding(14)
+                .background(.orange.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.orange.opacity(0.30), lineWidth: 1)
+                )
         }
     }
 }
 
+/// 看板卡片壳统一走 NIODashCardShell（含主题标题条 / 描边 / 阴影），此别名保留原调用点
 private struct NIOSectionCard<Content: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder let content: Content
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) { Text(title).font(.headline); Text(subtitle).font(.caption).foregroundStyle(.secondary) }
-            content
-        }
-        .padding(16).background(NIOThemePaint.fill).clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        NIODashCardShell(title: title, subtitle: subtitle) { content }
     }
 }
 
@@ -1174,9 +1201,41 @@ private struct HeroMetric: View {
     var body: some View { VStack(alignment: trailing ? .trailing : .leading, spacing: 2) { Text(value).font(.subheadline.weight(.semibold)); Text(title).font(.caption2).foregroundStyle(.white.opacity(0.52)) }.frame(maxWidth: .infinity, alignment: trailing ? .trailing : .leading) }
 }
 
+/// hero 指标行之间的细分隔线（白色微透明，融入渐变底）
+private struct HeroMetricDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(.white.opacity(0.14))
+            .frame(width: 1, height: 26)
+            .padding(.horizontal, 10)
+    }
+}
+
 private struct StatusTile: View {
     let icon: String; let title: String; let value: String; let tint: Color
-    var body: some View { HStack(spacing: 10) { Image(systemName: icon).foregroundStyle(tint).frame(width: 20); VStack(alignment: .leading, spacing: 2) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.subheadline.weight(.medium)) }; Spacer() }.padding(12).background(tint.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 14)) }
+    var body: some View {
+        HStack(spacing: 10) {
+            // 图标底座：着色圆角小块，比裸图标更有层次
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text(value).font(.subheadline.weight(.semibold))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(tint.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(tint.opacity(0.12), lineWidth: 1)
+        )
+    }
 }
 
 private struct KeyValueRow: View {
@@ -1186,7 +1245,7 @@ private struct KeyValueRow: View {
 
 private struct TyreTile: View {
     let position: String; let item: NIOVehicleLib.TyreWheelInfo
-    var body: some View { VStack(alignment: .leading, spacing: 5) { Text(position).font(.caption).foregroundStyle(.secondary); Text(item.press.map { String(format: "%.1f bar", $0) } ?? "--").font(.subheadline.weight(.semibold)); Text(item.temp.map { "\($0)℃" } ?? "温度 --").font(.caption).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.secondary.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 14)) }
+    var body: some View { VStack(alignment: .leading, spacing: 5) { Text(position).font(.caption).foregroundStyle(.secondary); Text(item.press.map { String(format: "%.1f bar", $0) } ?? "--").font(.subheadline.weight(.semibold)); Text(item.temp.map { "\($0)℃" } ?? "温度 --").font(.caption).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.secondary.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NIOThemePaint.stroke, lineWidth: 1)) }
 }
 
 private struct InsightMetric: View {

@@ -15,7 +15,7 @@ import SwiftUI
 import Charts
 import MapKit
 
-// MARK: - 卡片容器（与看板 NIOSectionCard 同风格）
+// MARK: - 卡片容器（看板与增强卡组统一外壳）
 
 struct NIODashCardShell<Content: View>: View {
     let title: String
@@ -24,15 +24,29 @@ struct NIODashCardShell<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    // 主题渐变竖条：给每张卡片一个轻的主题锚点
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(NIOThemePaint.accentGradient)
+                        .frame(width: 3.5, height: 14)
+                    Text(title)
+                        .font(.headline)
+                }
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             content
         }
         .padding(16)
         .background(NIOThemePaint.fill)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(NIOThemePaint.stroke, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(NIOThemePaint.isDark ? 0.30 : 0.06), radius: 10, y: 5)
     }
 }
 
@@ -84,20 +98,24 @@ struct NIOModesCard: View {
                 ForEach(items) { item in
                     HStack(spacing: 10) {
                         Image(systemName: item.icon)
-                            .foregroundStyle(item.isActive ? .green : .secondary)
+                            .foregroundStyle(item.isActive ? NIOThemePaint.accent : .secondary)
                             .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.name)
                                 .font(.subheadline.weight(.medium))
                             Text(item.detail)
                                 .font(.caption2)
-                                .foregroundStyle(item.isActive ? .green : .secondary)
+                                .foregroundStyle(item.isActive ? NIOThemePaint.accent : .secondary)
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 0)
                     }
                     .padding(12)
-                    .background(item.isActive ? Color.green.opacity(0.08) : Color.secondary.opacity(0.08))
+                    .background(item.isActive ? NIOThemePaint.accent.opacity(0.10) : Color.secondary.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(item.isActive ? NIOThemePaint.accent.opacity(0.22) : NIOThemePaint.stroke, lineWidth: 1)
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
             }
@@ -328,8 +346,8 @@ struct NIOHistoryTrendCard: View {
     let deltas: [NIODailyDelta]
     @ObservedObject private var themeService = AnimeThemeService.shared
 
-    private var accent: Color { themeService.accentColor() }
-    private var glow: Color { themeService.glowColor() }
+    private var accent: Color { NIOThemePaint.accent }
+    private var glow: Color { NIOThemePaint.glow }
 
     /// 最近 7 天有 SOC 采样的点
     private var socPoints: [(date: Date, soc: Double)] {
@@ -535,7 +553,7 @@ struct NIOTodayTrackCard: View {
                         Map(initialPosition: .region(Self.region(for: coords))) {
                             MapPolyline(coordinates: coords)
                                 .stroke(
-                                    .linearGradient(colors: [Color.pink, Color.purple], startPoint: .leading, endPoint: .trailing),
+                                    .linearGradient(colors: [NIOThemePaint.gradientStart, NIOThemePaint.gradientEnd], startPoint: .leading, endPoint: .trailing),
                                     style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
                                 )
                         }
