@@ -2,8 +2,6 @@
 //  wheaterApp.swift
 //  wheater
 //
-//  Created by Hanif Fadillah Amrynudin on 31/08/22.
-//
 
 import SwiftUI
 import UserNotifications

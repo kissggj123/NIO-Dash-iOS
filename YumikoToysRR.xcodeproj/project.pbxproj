@@ -11,13 +11,6 @@
 		2B2BB25628BFB36300A8B2A3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB25528BFB36300A8B2A3 /* ContentView.swift */; };
 		2B2BB25828BFB36600A8B2A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */; };
 		2B2BB25B28BFB36600A8B2A3 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2B2BB25A28BFB36600A8B2A3 /* Preview Assets.xcassets */; };
-		2B2BB26528BFB36600A8B2A3 /* wheaterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB26428BFB36600A8B2A3 /* wheaterTests.swift */; };
-		2B2BB26F28BFB36600A8B2A3 /* wheaterUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB26E28BFB36600A8B2A3 /* wheaterUITests.swift */; };
-		2B2BB27128BFB36600A8B2A3 /* wheaterUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB27028BFB36600A8B2A3 /* wheaterUITestsLaunchTests.swift */; };
-		2B2BB28128C06B3800A8B2A3 /* WeatherData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB28028C06B3800A8B2A3 /* WeatherData.swift */; };
-		2B2BB28328C06DB300A8B2A3 /* WeatherViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB28228C06DB300A8B2A3 /* WeatherViewModel.swift */; };
-		2B2BB28528C06E0000A8B2A3 /* WeatherModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB28428C06E0000A8B2A3 /* WeatherModel.swift */; };
-		2B7631FD28C42E1200AE686C /* LocationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7631FC28C42E1200AE686C /* LocationViewModel.swift */; };
 		2B902BED28D91FFF003FB942 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B902BEC28D91FFF003FB942 /* WidgetKit.framework */; };
 		2B902BEF28D91FFF003FB942 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B902BEE28D91FFF003FB942 /* SwiftUI.framework */; };
 		2B902BF228D91FFF003FB942 /* WheaterStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B902BF128D91FFF003FB942 /* WheaterStatus.swift */; };
@@ -32,10 +25,6 @@
 		AA5600092D0E5A0000EED680 /* NIOHomeWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA56000A2D0E5A0000EED680 /* NIOHomeWidgets.swift */; };
 		AA5600022D0E5A0000EED680 /* NIOCarPlayScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5600042D0E5A0000EED680 /* NIOCarPlayScene.swift */; };
 		2B902C0228D932EA003FB942 /* WheaterAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B902C0028D9202B003FB942 /* WheaterAttributes.swift */; };
-		2B902C0328D9714D003FB942 /* LocationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7631FC28C42E1200AE686C /* LocationViewModel.swift */; };
-		2B902C0428D97158003FB942 /* WeatherViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB28228C06DB300A8B2A3 /* WeatherViewModel.swift */; };
-		2B902C0528D97627003FB942 /* WeatherModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB28428C06E0000A8B2A3 /* WeatherModel.swift */; };
-		2B902C0628D97657003FB942 /* WeatherData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB28028C06B3800A8B2A3 /* WeatherData.swift */; };
 		AA2000012C3E846A00EED680 /* NIO/NIOModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000012C3E846500EED680 /* NIO/NIOModels.swift */; };
 		AA2000022C3E846A00EED680 /* NIO/NIOVehicleLib.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000022C3E846500EED680 /* NIO/NIOVehicleLib.swift */; };
 		AA2000032C3E846A00EED680 /* NIO/NIOOrderLib.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000032C3E846500EED680 /* NIO/NIOOrderLib.swift */; };
@@ -53,25 +42,9 @@
 		AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */; };
 		AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */; };
 		AA2000132C3E846A00EED680 /* Services/VPN/NIOCredentialReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000132C3E846500EED680 /* Services/VPN/NIOCredentialReceiver.swift */; };
-		FC1663B22C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */; };
-		FC1663B32C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		2B2BB26128BFB36600A8B2A3 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 2B2BB24828BFB36300A8B2A3 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 2B2BB24F28BFB36300A8B2A3;
-			remoteInfo = wheater;
-		};
-		2B2BB26B28BFB36600A8B2A3 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 2B2BB24828BFB36300A8B2A3 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 2B2BB24F28BFB36300A8B2A3;
-			remoteInfo = wheater;
-		};
 		2B902BF928D92003003FB942 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2B2BB24828BFB36300A8B2A3 /* Project object */;
@@ -99,16 +72,7 @@
 		2B2BB25528BFB36300A8B2A3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2B2BB25A28BFB36600A8B2A3 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		2B2BB26028BFB36600A8B2A3 /* YumikoToysRRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YumikoToysRRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		2B2BB26428BFB36600A8B2A3 /* wheaterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = wheaterTests.swift; sourceTree = "<group>"; };
-		2B2BB26A28BFB36600A8B2A3 /* YumikoToysRRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YumikoToysRRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		2B2BB26E28BFB36600A8B2A3 /* wheaterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = wheaterUITests.swift; sourceTree = "<group>"; };
-		2B2BB27028BFB36600A8B2A3 /* wheaterUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = wheaterUITestsLaunchTests.swift; sourceTree = "<group>"; };
-		2B2BB28028C06B3800A8B2A3 /* WeatherData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherData.swift; sourceTree = "<group>"; };
-		2B2BB28228C06DB300A8B2A3 /* WeatherViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherViewModel.swift; sourceTree = "<group>"; };
-		2B2BB28428C06E0000A8B2A3 /* WeatherModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherModel.swift; sourceTree = "<group>"; };
 		2B7631FB28C412DA00AE686C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		2B7631FC28C42E1200AE686C /* LocationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationViewModel.swift; sourceTree = "<group>"; };
 		2B902BEA28D91FFF003FB942 /* WheaterStatusExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WheaterStatusExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B902BEC28D91FFF003FB942 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		2B902BEE28D91FFF003FB942 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -138,21 +102,10 @@
 		AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOMitmEngine.swift; sourceTree = "<group>"; };
 		AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOVPNManager.swift; sourceTree = "<group>"; };
 		AA1000132C3E846500EED680 /* Services/VPN/NIOCredentialReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/VPN/NIOCredentialReceiver.swift; sourceTree = "<group>"; };
-		FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnniversaryViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		2B2BB24D28BFB36300A8B2A3 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			files = (
-			);
-		};
-		2B2BB25D28BFB36600A8B2A3 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			files = (
-			);
-		};
-		2B2BB26728BFB36600A8B2A3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
 			);
@@ -171,8 +124,6 @@
 			isa = PBXGroup;
 			children = (
 				2B2BB25228BFB36300A8B2A3 /* wheater */,
-				2B2BB26328BFB36600A8B2A3 /* wheaterTests */,
-				2B2BB26D28BFB36600A8B2A3 /* wheaterUITests */,
 				2B902BF028D91FFF003FB942 /* WheaterStatus */,
 				2B902BEB28D91FFF003FB942 /* Frameworks */,
 				2B2BB25128BFB36300A8B2A3 /* Products */,
@@ -183,8 +134,6 @@
 			isa = PBXGroup;
 			children = (
 				2B2BB25028BFB36300A8B2A3 /* YumikoToysRR.app */,
-				2B2BB26028BFB36600A8B2A3 /* YumikoToysRRTests.xctest */,
-				2B2BB26A28BFB36600A8B2A3 /* YumikoToysRRUITests.xctest */,
 				2B902BEA28D91FFF003FB942 /* WheaterStatusExtension.appex */,
 			);
 			name = Products;
@@ -216,33 +165,13 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
-		2B2BB26328BFB36600A8B2A3 /* wheaterTests */ = {
-			isa = PBXGroup;
-			children = (
-				2B2BB26428BFB36600A8B2A3 /* wheaterTests.swift */,
-			);
-			path = wheaterTests;
-			sourceTree = "<group>";
-		};
-		2B2BB26D28BFB36600A8B2A3 /* wheaterUITests */ = {
-			isa = PBXGroup;
-			children = (
-				2B2BB26E28BFB36600A8B2A3 /* wheaterUITests.swift */,
-				2B2BB27028BFB36600A8B2A3 /* wheaterUITestsLaunchTests.swift */,
-			);
-			path = wheaterUITests;
-			sourceTree = "<group>";
-		};
 		2B2BB27D28C0522400A8B2A3 /* Model */ = {
 			isa = PBXGroup;
 			children = (
-				FC1663B12C3E846500EED680 /* AnniversaryViewModel.swift */,
 				AA1000012C3E846500EED680 /* NIO/NIOModels.swift */,
 				AA1000022C3E846500EED680 /* NIO/NIOVehicleLib.swift */,
 				AA1000032C3E846500EED680 /* NIO/NIOOrderLib.swift */,
 				AA1000042C3E846500EED680 /* NIO/NIOCheckinLib.swift */,
-				2B2BB28028C06B3800A8B2A3 /* WeatherData.swift */,
-				2B2BB28428C06E0000A8B2A3 /* WeatherModel.swift */,
 				2B902C0028D9202B003FB942 /* WheaterAttributes.swift */,
 			);
 			path = Model;
@@ -291,8 +220,6 @@
 		2BE35B7D28C1978600133DFB /* ViewModel */ = {
 			isa = PBXGroup;
 			children = (
-				2B7631FC28C42E1200AE686C /* LocationViewModel.swift */,
-				2B2BB28228C06DB300A8B2A3 /* WeatherViewModel.swift */,
 				AA1000052C3E846500EED680 /* NIOService.swift */,
 			);
 			path = ViewModel;
@@ -319,42 +246,6 @@
 			productName = wheater;
 			productReference = 2B2BB25028BFB36300A8B2A3 /* YumikoToysRR.app */;
 			productType = "com.apple.product-type.application";
-		};
-		2B2BB25F28BFB36600A8B2A3 /* YumikoToysRRTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 2B2BB27728BFB36600A8B2A3 /* Build configuration list for PBXNativeTarget "YumikoToysRRTests" */;
-			buildPhases = (
-				2B2BB25C28BFB36600A8B2A3 /* Sources */,
-				2B2BB25D28BFB36600A8B2A3 /* Frameworks */,
-				2B2BB25E28BFB36600A8B2A3 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				2B2BB26228BFB36600A8B2A3 /* PBXTargetDependency */,
-			);
-			name = YumikoToysRRTests;
-			productName = wheaterTests;
-			productReference = 2B2BB26028BFB36600A8B2A3 /* YumikoToysRRTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		2B2BB26928BFB36600A8B2A3 /* YumikoToysRRUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 2B2BB27A28BFB36600A8B2A3 /* Build configuration list for PBXNativeTarget "YumikoToysRRUITests" */;
-			buildPhases = (
-				2B2BB26628BFB36600A8B2A3 /* Sources */,
-				2B2BB26728BFB36600A8B2A3 /* Frameworks */,
-				2B2BB26828BFB36600A8B2A3 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				2B2BB26C28BFB36600A8B2A3 /* PBXTargetDependency */,
-			);
-			name = YumikoToysRRUITests;
-			productName = wheaterUITests;
-			productReference = 2B2BB26A28BFB36600A8B2A3 /* YumikoToysRRUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		2B902BE928D91FFF003FB942 /* WheaterStatusExtension */ = {
 			isa = PBXNativeTarget;
@@ -384,14 +275,6 @@
 					2B2BB24F28BFB36300A8B2A3 = {
 						CreatedOnToolsVersion = 13.4;
 					};
-					2B2BB25F28BFB36600A8B2A3 = {
-						CreatedOnToolsVersion = 13.4;
-						TestTargetID = 2B2BB24F28BFB36300A8B2A3;
-					};
-					2B2BB26928BFB36600A8B2A3 = {
-						CreatedOnToolsVersion = 13.4;
-						TestTargetID = 2B2BB24F28BFB36300A8B2A3;
-					};
 					2B902BE928D91FFF003FB942 = {
 						CreatedOnToolsVersion = 14.1;
 					};
@@ -411,8 +294,6 @@
 			projectRoot = "";
 			targets = (
 				2B2BB24F28BFB36300A8B2A3 /* YumikoToysRR */,
-				2B2BB25F28BFB36600A8B2A3 /* YumikoToysRRTests */,
-				2B2BB26928BFB36600A8B2A3 /* YumikoToysRRUITests */,
 				2B902BE928D91FFF003FB942 /* WheaterStatusExtension */,
 			);
 		};
@@ -424,16 +305,6 @@
 			files = (
 				2B2BB25B28BFB36600A8B2A3 /* Preview Assets.xcassets in Resources */,
 				2B2BB25828BFB36600A8B2A3 /* Assets.xcassets in Resources */,
-			);
-		};
-		2B2BB25E28BFB36600A8B2A3 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			files = (
-			);
-		};
-		2B2BB26828BFB36600A8B2A3 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			files = (
 			);
 		};
 		2B902BE828D91FFF003FB942 /* Resources */ = {
@@ -451,7 +322,6 @@
 				2B902BF828D92003003FB942 /* WheaterStatus.intentdefinition in Sources */,
 				2B902C0128D9202B003FB942 /* WheaterAttributes.swift in Sources */,
 				2B2BB25628BFB36300A8B2A3 /* ContentView.swift in Sources */,
-				FC1663B32C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */,
 				AA2000012C3E846A00EED680 /* NIO/NIOModels.swift in Sources */,
 				AA2000022C3E846A00EED680 /* NIO/NIOVehicleLib.swift in Sources */,
 				AA2000032C3E846A00EED680 /* NIO/NIOOrderLib.swift in Sources */,
@@ -469,58 +339,26 @@
 				AA2000112C3E846A00EED680 /* Services/VPN/NIOMitmEngine.swift in Sources */,
 				AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */,
 				AA2000132C3E846A00EED680 /* Services/VPN/NIOCredentialReceiver.swift in Sources */,
-				2B7631FD28C42E1200AE686C /* LocationViewModel.swift in Sources */,
 				2B2BB25428BFB36300A8B2A3 /* wheaterApp.swift in Sources */,
 				AA5600012D0E5A0000EED680 /* IslandControlWidget.swift in Sources */,
 				AA5600082D0E5A0000EED680 /* NIOVehicleSnapshot.swift in Sources */,
 				AA5600022D0E5A0000EED680 /* NIOCarPlayScene.swift in Sources */,
-				2B2BB28328C06DB300A8B2A3 /* WeatherViewModel.swift in Sources */,
-				2B2BB28128C06B3800A8B2A3 /* WeatherData.swift in Sources */,
-				2B2BB28528C06E0000A8B2A3 /* WeatherModel.swift in Sources */,
-			);
-		};
-		2B2BB25C28BFB36600A8B2A3 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			files = (
-				2B2BB26528BFB36600A8B2A3 /* wheaterTests.swift in Sources */,
-			);
-		};
-		2B2BB26628BFB36600A8B2A3 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			files = (
-				2B2BB26F28BFB36600A8B2A3 /* wheaterUITests.swift in Sources */,
-				2B2BB27128BFB36600A8B2A3 /* wheaterUITestsLaunchTests.swift in Sources */,
 			);
 		};
 		2B902BE628D91FFF003FB942 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
-				2B902C0428D97158003FB942 /* WeatherViewModel.swift in Sources */,
 				2B902BF228D91FFF003FB942 /* WheaterStatus.swift in Sources */,
 				AA5600052D0E5A0000EED680 /* IslandControlWidget.swift in Sources */,
 				AA5600062D0E5A0000EED680 /* NIOVehicleSnapshot.swift in Sources */,
 				AA5600092D0E5A0000EED680 /* NIOHomeWidgets.swift in Sources */,
-				FC1663B22C3E846A00EED680 /* AnniversaryViewModel.swift in Sources */,
-				2B902C0628D97657003FB942 /* WeatherData.swift in Sources */,
 				2B902BF728D92003003FB942 /* WheaterStatus.intentdefinition in Sources */,
 				2B902C0228D932EA003FB942 /* WheaterAttributes.swift in Sources */,
-				2B902C0528D97627003FB942 /* WeatherModel.swift in Sources */,
-				2B902C0328D9714D003FB942 /* LocationViewModel.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		2B2BB26228BFB36600A8B2A3 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 2B2BB24F28BFB36300A8B2A3 /* YumikoToysRR */;
-			targetProxy = 2B2BB26128BFB36600A8B2A3 /* PBXContainerItemProxy */;
-		};
-		2B2BB26C28BFB36600A8B2A3 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 2B2BB24F28BFB36300A8B2A3 /* YumikoToysRR */;
-			targetProxy = 2B2BB26B28BFB36600A8B2A3 /* PBXContainerItemProxy */;
-		};
 		2B902BFA28D92003003FB942 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 2B902BE928D91FFF003FB942 /* WheaterStatusExtension */;
@@ -717,82 +555,6 @@
 			};
 			name = Release;
 		};
-		2B2BB27828BFB36600A8B2A3 /* Debug configuration for PBXNativeTarget "YumikoToysRRTests" */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2807;
-				DEVELOPMENT_TEAM = 53329G7Z28;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 5.1.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YumikoToysRR.app/YumikoToysRR";
-			};
-			name = Debug;
-		};
-		2B2BB27928BFB36600A8B2A3 /* Release configuration for PBXNativeTarget "YumikoToysRRTests" */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2807;
-				DEVELOPMENT_TEAM = 53329G7Z28;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 5.1.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YumikoToysRR.app/YumikoToysRR";
-			};
-			name = Release;
-		};
-		2B2BB27B28BFB36600A8B2A3 /* Debug configuration for PBXNativeTarget "YumikoToysRRUITests" */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2807;
-				DEVELOPMENT_TEAM = 53329G7Z28;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 5.1.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = wheater;
-			};
-			name = Debug;
-		};
-		2B2BB27C28BFB36600A8B2A3 /* Release configuration for PBXNativeTarget "YumikoToysRRUITests" */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2807;
-				DEVELOPMENT_TEAM = 53329G7Z28;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 5.1.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheaterUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = wheater;
-			};
-			name = Release;
-		};
 		2B902BFD28D92004003FB942 /* Debug configuration for PBXNativeTarget "WheaterStatusExtension" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -871,22 +633,6 @@
 			buildConfigurations = (
 				2B2BB27528BFB36600A8B2A3 /* Debug configuration for PBXNativeTarget "YumikoToysRR" */,
 				2B2BB27628BFB36600A8B2A3 /* Release configuration for PBXNativeTarget "YumikoToysRR" */,
-			);
-			defaultConfigurationName = Release;
-		};
-		2B2BB27728BFB36600A8B2A3 /* Build configuration list for PBXNativeTarget "YumikoToysRRTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				2B2BB27828BFB36600A8B2A3 /* Debug configuration for PBXNativeTarget "YumikoToysRRTests" */,
-				2B2BB27928BFB36600A8B2A3 /* Release configuration for PBXNativeTarget "YumikoToysRRTests" */,
-			);
-			defaultConfigurationName = Release;
-		};
-		2B2BB27A28BFB36600A8B2A3 /* Build configuration list for PBXNativeTarget "YumikoToysRRUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				2B2BB27B28BFB36600A8B2A3 /* Debug configuration for PBXNativeTarget "YumikoToysRRUITests" */,
-				2B2BB27C28BFB36600A8B2A3 /* Release configuration for PBXNativeTarget "YumikoToysRRUITests" */,
 			);
 			defaultConfigurationName = Release;
 		};
