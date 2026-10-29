@@ -1,9 +1,12 @@
 <h1 align="center">🐰 YumikoToysRR for NIO (iOS)</h1>
 
 <p align="center">
-  <img src="docs/screenshots/dynamic_island.png" alt="灵动岛胶囊状态" width="180" style="border-radius: 14px; margin-bottom: 8px;">
+  <img src="docs/screenshots/dynamic_island.png" alt="灵动岛展开态实时车况" width="560" style="border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
   <br>
-  <img src="docs/screenshots/live_activity.png" alt="锁屏实时活动车况卡片" width="520" style="border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+  <img src="docs/screenshots/live_activity.png" alt="锁屏实时活动车况卡片" width="400" style="border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+  <img src="docs/screenshots/home_widget.png" alt="桌面中号小组件" width="400" style="border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+  <br>
+  <img src="docs/screenshots/app_dashboard.png" alt="App 车况看板 · 蜜桃兔兔主题" width="320" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
 </p>
 
 <p align="center">
