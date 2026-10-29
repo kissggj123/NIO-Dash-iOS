@@ -526,8 +526,17 @@ struct IOSNIODashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(vehicleName)
-                            .font(.title3.weight(.semibold))
+                        HStack(spacing: 8) {
+                            Image("NIO_brand")
+                                .renderingMode(.template)
+                                .resizable()
+                                .interpolation(.high)
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 20, height: 20)
+                                .foregroundStyle(.white)
+                            Text(vehicleName)
+                                .font(.title3.weight(.semibold))
+                        }
                         HStack(spacing: 5) {
                             Image(systemName: isCharging ? "bolt.fill" : vehicleStateIcon)
                             Text(vehicleStateLabel)
