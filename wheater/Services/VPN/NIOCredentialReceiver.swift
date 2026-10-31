@@ -27,8 +27,29 @@ final class NIOCredentialReceiver: ObservableObject {
     private let port: UInt16 = 8997
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "com.yumikotoys.credential-receiver", qos: .userInitiated)
+    /// 后台推送时暂存的剪贴板凭证（iOS 后台写剪贴板会被静默丢弃，回前台补写）
+    private static let pendingClipKey = "nio_pending_clip_credentials"
 
-    private init() {}
+    private init() {
+        // 后台推送暂存的剪贴板凭证：回前台第一时间补写，保证"剪贴板读取并识别"可用
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.flushPendingClipboard()
+            }
+        }
+    }
+
+    @MainActor
+    private func flushPendingClipboard() {
+        guard let pending = UserDefaults.standard.string(forKey: Self.pendingClipKey) else { return }
+        UIPasteboard.general.string = pending
+        UserDefaults.standard.removeObject(forKey: Self.pendingClipKey)
+        statusMessage = "📋 已补写剪贴板（后台推送时暂存的凭证）"
+    }
 
     // MARK: - 启动接收服务器
 
@@ -82,13 +103,27 @@ final class NIOCredentialReceiver: ObservableObject {
         conn.start(queue: queue)
         // 累积读取直到 HTTP 头 + Content-Length 声明的 body 收全：
         // 单次 64KB receive 在 body 分包到达时会静默丢数据，导致推送"成功"却无反应
-        accumulateRequest(conn, buffer: Data())
+        accumulateRequest(conn, buffer: Data(), gate: ParseGate())
     }
 
-    nonisolated private func accumulateRequest(_ conn: NWConnection, buffer: Data) {
+    /// 一次性解析闸门：EOF / 静默超时 / Content-Length 收全三条路径谁先到谁解析
+    private final class ParseGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var parsed = false
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if parsed { return false }
+            parsed = true
+            return true
+        }
+    }
+
+    nonisolated private func accumulateRequest(_ conn: NWConnection, buffer: Data, gate: ParseGate) {
         conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self = self, let chunk = data, !chunk.isEmpty, error == nil else {
-                conn.cancel()
+                // EOF（脚本"发完即关"）/ 错误：已积累到完整请求则解析，此前这里会直接丢弃
+                self?.finish(conn, buffer: buffer, gate: gate)
                 return
             }
             var accumulated = buffer
@@ -98,23 +133,37 @@ final class NIOCredentialReceiver: ObservableObject {
             // 1) 头未收全 → 继续读（上限 1MB 防异常膨胀）
             guard let headerEnd = raw.range(of: "\r\n\r\n").map({ raw.distance(from: raw.startIndex, to: $0.upperBound) }) else {
                 if isComplete || accumulated.count > 1024 * 1024 {
-                    conn.cancel()
-                    return
+                    self.finish(conn, buffer: accumulated, gate: gate)
+                } else {
+                    self.accumulateRequest(conn, buffer: accumulated, gate: gate)
                 }
-                self.accumulateRequest(conn, buffer: accumulated)
                 return
             }
-            // 2) 头已收全：若声明 Content-Length 且 body 未收全 → 继续读
-            if let expected = Self.contentLength(of: raw),
-               accumulated.count < headerEnd + expected,
-               accumulated.count <= 1024 * 1024, !isComplete {
-                self.accumulateRequest(conn, buffer: accumulated)
+            // 2) 头已收全且 Content-Length 满足 → 完成
+            if let expected = Self.contentLength(of: raw), accumulated.count >= headerEnd + expected {
+                self.finish(conn, buffer: accumulated, gate: gate)
                 return
             }
-            // 3) 收全（或无 Content-Length 的短推送）→ 解析应用
-            conn.cancel()
-            self.parseHTTPAndApply(raw)
+            // 3) 无 Content-Length（或 body 未收全）：等 EOF；为防客户端保持连接不关，
+            //    静默 800ms 后用已有内容直接解析（脚本推送为一次性请求，通常随即关闭）
+            if !isComplete, accumulated.count <= 1024 * 1024 {
+                self.queue.asyncAfter(deadline: .now() + 0.8) { [weak self, weak conn] in
+                    guard let conn = conn, let self = self else { return }
+                    self.finish(conn, buffer: accumulated, gate: gate)
+                }
+                self.accumulateRequest(conn, buffer: accumulated, gate: gate)
+                return
+            }
+            self.finish(conn, buffer: accumulated, gate: gate)
         }
+    }
+
+    nonisolated private func finish(_ conn: NWConnection, buffer: Data, gate: ParseGate) {
+        defer { conn.cancel() }
+        guard gate.claim() else { return }
+        let raw = String(decoding: buffer, as: UTF8.self)
+        guard raw.contains("\r\n\r\n") else { return } // 连 HTTP 头都没有：无从解析
+        parseHTTPAndApply(raw)
     }
 
     nonisolated private static func contentLength(of raw: String) -> Int? {
@@ -141,13 +190,23 @@ final class NIOCredentialReceiver: ObservableObject {
     nonisolated private func parseHTTPAndApply(_ raw: String) {
         // 分离 HTTP header 和 body（\r\n\r\n 分隔）
         let separator = "\r\n\r\n"
-        guard let sepRange = raw.range(of: separator) else { return }
+        guard let sepRange = raw.range(of: separator) else {
+            Task { @MainActor [weak self] in
+                self?.statusMessage = "⚠️ 收到请求但缺少 HTTP 头（分包异常）"
+            }
+            return
+        }
         let body = String(raw[sepRange.upperBound...])
 
         guard !body.isEmpty,
               let jsonData = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-        else { return }
+        else {
+            Task { @MainActor [weak self] in
+                self?.statusMessage = "⚠️ 收到请求但 JSON 解析失败（body 不完整或格式异常）"
+            }
+            return
+        }
 
         let token      = Self.clean(json["vehicle_token"] as? String ?? json["token"] as? String ?? "")
         let vehicleId  = Self.clean(json["vehicle_id"]    as? String ?? "")
@@ -221,7 +280,10 @@ final class NIOCredentialReceiver: ObservableObject {
         let summary = applied.joined(separator: " · ")
         statusMessage = "✅ 已回填: \(summary)"
 
-        // 自动复制精简凭证 JSON 到剪贴板
+        // 自动复制精简凭证 JSON 到剪贴板。
+        // 注意：iOS 会静默丢弃后台 App 的剪贴板写入——保活上线后推送多发生在后台
+        // （用户正在用 Shadowrocket），此时先暂存，回前台第一时间补写，
+        // 保证设置页"剪贴板读取并识别"始终能读到最新凭证。
         var clipDict: [String: String] = [:]
         if !token.isEmpty     { clipDict["vehicle_token"] = token }
         if !vehicleId.isEmpty { clipDict["vehicle_id"]    = vehicleId }
@@ -232,7 +294,12 @@ final class NIOCredentialReceiver: ObservableObject {
         if !userGuid.isEmpty  { clipDict["user_guid"]     = userGuid }
         if let clipData = try? JSONSerialization.data(withJSONObject: clipDict, options: [.prettyPrinted, .sortedKeys]),
            let clipStr = String(data: clipData, encoding: .utf8) {
-            UIPasteboard.general.string = clipStr
+            if UIApplication.shared.applicationState == .active {
+                UIPasteboard.general.string = clipStr
+                UserDefaults.standard.removeObject(forKey: Self.pendingClipKey)
+            } else {
+                UserDefaults.standard.set(clipStr, forKey: Self.pendingClipKey)
+            }
         }
 
         // 震动
