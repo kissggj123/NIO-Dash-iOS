@@ -24,9 +24,16 @@ struct wheaterApp: App {
         WindowGroup {
             ContentView()
                 .onOpenURL { url in
-                    // 控制胶囊 / 外部通过 yumikotoysrr://raise-island 拉起时直接触发上岛
-                    if url.host == "raise-island" {
+                    switch url.host {
+                    case "raise-island":
+                        // 控制胶囊 / 外部通过 yumikotoysrr://raise-island 拉起时直接触发上岛
                         NIOService.shared.raiseLiveActivityFromControl()
+                    case "open-dashboard":
+                        // 灵动岛 / 锁屏卡片点击：立即刷新车况 + 主卡片入场动画
+                        Task { await NIOService.shared.refreshAll(force: true) }
+                        NIOService.shared.islandEntryPulse = Date()
+                    default:
+                        break
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in

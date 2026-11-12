@@ -1055,3 +1055,35 @@ struct NIOStatusRawBlocksCard: View {
         .padding(.vertical, 5)
     }
 }
+
+// MARK: - 全局主题动效与控件手感（App 整体统一，随主题令牌联动）
+
+/// 统一动效曲线：全 App 交互动画从这里取，保证手感一致
+enum NIOThemeMotion {
+    /// 主题 / 内容切换（柔和跟随，与 AnimeThemeService.setStyle 同款手感）
+    static let themeSpring = Animation.spring(response: 0.45, dampingFraction: 0.85)
+    /// 控件按压 / 小件展开（弹一点）
+    static let pressSpring = Animation.spring(response: 0.3, dampingFraction: 0.7)
+    /// 卡片入场 / 大块布局变化
+    static let layoutSpring = Animation.spring(response: 0.5, dampingFraction: 0.8)
+    /// 数值 / 进度缓动
+    static let easeSmooth = Animation.easeInOut(duration: 0.35)
+}
+
+/// 统一按压手感：按下轻微缩小 + 降透明，松手弹回，带轻触感
+/// 替代 `.buttonStyle(.plain)`，视觉零差异、只加交互层
+struct NIOPressableButtonStyle: ButtonStyle {
+    var haptic: Bool = true
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(NIOThemeMotion.pressSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isDown in
+                if isDown, haptic {
+                    NIOBootHaptics.impact(.light)
+                }
+            }
+    }
+}

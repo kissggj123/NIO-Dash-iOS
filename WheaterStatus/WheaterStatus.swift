@@ -13,6 +13,9 @@ import WidgetKit
 import SwiftUI
 import ActivityKit
 
+/// 灵动岛 / 锁屏卡片点击 → 深链进 App（App 侧触发主卡片入场动画并立即刷新车况）
+let islandOpenAppURL = URL(string: "yumikotoysrr://open-dashboard")!
+
 @main
 struct WheaterStatusBundle: WidgetBundle {
     var body: some Widget {
@@ -29,8 +32,11 @@ struct WheaterStatusLiveActivityWidget: Widget {
             // MARK: - 锁屏实时活动卡片 (Lock Screen Live Activity)
             LiveActivityLockScreenView(
                 state: context.state,
-                theme: WheaterThemeColors(themeRaw: context.state.themeRaw)
+                theme: NIOWidgetBackgroundStore.adjustedTheme(
+                    from: WheaterThemeColors(themeRaw: context.state.themeRaw)
+                )
             )
+            .widgetURL(islandOpenAppURL)
         } dynamicIsland: { context in
             // MARK: - 灵动岛 (Dynamic Island) · 与 App 主题同步换装
             let state = context.state
@@ -228,6 +234,7 @@ struct WheaterStatusLiveActivityWidget: Widget {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(compactSocStyle(state, theme))
                     .frame(width: 14, height: 14)
+                    .widgetURL(islandOpenAppURL)
             } compactTrailing: {
                 // 紧凑右侧：SOC 数字为主体（续航/ETA 空间放不下，留给展开态）
                 // 未锁车时前置橙色警示点
@@ -244,12 +251,14 @@ struct WheaterStatusLiveActivityWidget: Widget {
                         .minimumScaleFactor(0.65)
                         .fixedSize()
                 }
+                .widgetURL(islandOpenAppURL)
             } minimal: {
                 // 极简挖孔区：空间更小，只留单图标（色彩即信息）
                 Image(systemName: state.isCharging ? "bolt.fill" : compactBatteryIcon(state.soc))
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(compactSocStyle(state, theme))
                     .frame(width: 12, height: 12)
+                    .widgetURL(islandOpenAppURL)
             }
         }
     }
@@ -669,22 +678,14 @@ struct LiveActivityLockScreenView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    /// 主题化背景：自定义图片（App Group 共享）→ 深色主题暗夜辉光 / 浅色主题白卡光晕
+    /// 主题化背景：自定义图片（焦点填充，App Group 共享）→ 深色主题暗夜辉光 / 浅色主题白卡光晕
     @ViewBuilder
     private var lockScreenBackground: some View {
-        if let image = NIOWidgetBackgroundStore.loadImage() {
+        if NIOWidgetBackgroundStore.loadImage(for: .lock) != nil {
             ZStack {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                if NIOWidgetBackgroundStore.scrimEnabled {
-                    LinearGradient(
-                        colors: theme.isDark
-                            ? [Color.black.opacity(0.62), Color.black.opacity(0.35)]
-                            : [Color.white.opacity(0.60), Color.white.opacity(0.30)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                NIOWidgetFocalBackground(slot: .lock, theme: theme)
+                if let scrim = NIOWidgetBackgroundStore.scrimGradient(isDarkTheme: theme.isDark) {
+                    scrim
                 }
             }
         } else {

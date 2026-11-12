@@ -66,6 +66,7 @@ struct WheaterAttributes: ActivityAttributes {
         var vehicleVersion: String?      // 车机固件短版本号 (FOTA，e.g. "5.1.5"，取不到则 nil)
         var preferActualRange: Bool?     // 用户是否偏好实估续航展示模式
         var refreshNotice: String?       // 最近一次刷新结果标签（"已更新"/"无数据更新"），Widget 与锁屏实时活动展示
+        var bgStamp: Int?                // 小组件/锁屏自定义背景版本号（背景变更时递增，驱动实时活动重绘换装）
 
         // 辅助格式化
         var socDisplay: String {
@@ -124,6 +125,7 @@ struct WheaterAttributes: ActivityAttributes {
                 defenderActive ? "G\(defenderWarnCount ?? 0)" : "-",
                 petModeActive ? "P" : "-",
                 campModeActive ? "C" : "-",
+                "\(bgStamp ?? -1)",
                 powerHoldActive ? "H" : "-",
                 (frdgActive ?? false) ? "F" : "-",
                 (v2lActive ?? false) ? "V" : "-",
@@ -357,6 +359,47 @@ public struct WheaterThemeColors: Sendable {
 
     public init(themeRaw: String?) {
         self.init(token: .preset(named: themeRaw))
+    }
+
+    /// 完整拷贝构造（供自定义背景遮罩下的文字色调翻转）
+    public init(background: Color, backgroundSoft: Color, accent: Color, glow: Color, warm: Color,
+                gradientStart: Color, gradientEnd: Color, cardFill: Color, cardStroke: Color,
+                text: Color, textSoft: Color, isDark: Bool) {
+        self.background = background
+        self.backgroundSoft = backgroundSoft
+        self.accent = accent
+        self.glow = glow
+        self.warm = warm
+        self.gradientStart = gradientStart
+        self.gradientEnd = gradientEnd
+        self.cardFill = cardFill
+        self.cardStroke = cardStroke
+        self.text = text
+        self.textSoft = textSoft
+        self.isDark = isDark
+    }
+
+    /// 强制翻转文字明暗（深底浅字 / 浅底深字），主题色保持不变
+    public func overridingTextTone(dark: Bool) -> WheaterThemeColors {
+        guard dark != isDark else { return self }
+        if dark {
+            return WheaterThemeColors(
+                background: background, backgroundSoft: backgroundSoft,
+                accent: accent, glow: glow, warm: warm,
+                gradientStart: gradientStart, gradientEnd: gradientEnd,
+                cardFill: Color.white.opacity(0.14), cardStroke: Color.white.opacity(0.20),
+                text: .white, textSoft: Color.white.opacity(0.72), isDark: true
+            )
+        } else {
+            return WheaterThemeColors(
+                background: background, backgroundSoft: backgroundSoft,
+                accent: accent, glow: glow, warm: warm,
+                gradientStart: gradientStart, gradientEnd: gradientEnd,
+                cardFill: Color.black.opacity(0.06), cardStroke: Color.black.opacity(0.10),
+                text: Color(red: 0.10, green: 0.10, blue: 0.12),
+                textSoft: Color(red: 0.30, green: 0.30, blue: 0.36), isDark: false
+            )
+        }
     }
 
     /// 电量进度条用渐变

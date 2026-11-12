@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import Vision
 
 @MainActor
 struct IOSNIOConfigView: View {
@@ -138,7 +139,7 @@ struct IOSNIOConfigView: View {
                                         .background(NIOThemePaint.well)
                                         .clipShape(RoundedRectangle(cornerRadius: 14))
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(NIOPressableButtonStyle())
 
                                     // 5. 🚗 核心车辆 API (必填)
                                     vehicleApiCard
@@ -292,7 +293,7 @@ struct IOSNIOConfigView: View {
                         }
 
                         // 主题色板网格（自适应列数：窄 2 列 / 宽 3 列）
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 138), spacing: 8)], spacing: 8) {
                             ForEach(styles) { style in
                                 themeSwatchButton(style)
                             }
@@ -375,7 +376,7 @@ struct IOSNIOConfigView: View {
                     .stroke(isSelected ? sakuraPink.opacity(0.7) : NIOThemePaint.stroke, lineWidth: isSelected ? 1.2 : 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NIOPressableButtonStyle())
         .accessibilityLabel("\(style.category.displayName)主题 \(style.displayName)")
     }
 
@@ -423,7 +424,7 @@ struct IOSNIOConfigView: View {
                                     .clipShape(Capsule())
                                     .overlay(Capsule().stroke(bootPaceRaw == pace.rawValue ? pastelYellow.opacity(0.6) : NIOThemePaint.stroke, lineWidth: 1))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(NIOPressableButtonStyle())
                         }
                     }
                 }
@@ -475,7 +476,7 @@ struct IOSNIOConfigView: View {
                     .background(sakuraPink.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(NIOPressableButtonStyle())
             }
         }
     }
@@ -527,7 +528,7 @@ struct IOSNIOConfigView: View {
                     .stroke(isSelected ? sakuraPink.opacity(0.7) : NIOThemePaint.stroke, lineWidth: isSelected ? 1.2 : 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NIOPressableButtonStyle())
         .accessibilityLabel("启动动画风格 \(style.displayName)")
     }
 
@@ -583,7 +584,7 @@ struct IOSNIOConfigView: View {
                                     .clipShape(Capsule())
                                     .overlay(Capsule().stroke(isSelected ? pastelYellow.opacity(0.6) : NIOThemePaint.stroke, lineWidth: 1))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(NIOPressableButtonStyle())
                         }
                     }
 
@@ -615,7 +616,7 @@ struct IOSNIOConfigView: View {
                                         .background(NIOThemePaint.fill)
                                         .clipShape(Capsule())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(NIOPressableButtonStyle())
                             }
                         }
 
@@ -1536,7 +1537,7 @@ struct IOSNIOConfigView: View {
                                 .clipShape(Capsule())
                                 .overlay(Capsule().stroke(NIOThemePaint.stroke, lineWidth: 0.8))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(NIOPressableButtonStyle())
                     }
                 }
                 .padding(.horizontal, 8)
@@ -1837,9 +1838,45 @@ struct IOSNIOConfigView: View {
 private struct NIOWidgetBackgroundSection: View {
     @ObservedObject private var themeService = AnimeThemeService.shared
     @State private var pickerItem: PhotosPickerItem?
+    @State private var pickerSlot: NIOWidgetBackgroundSlot = .small
+    @State private var pickerPresented = false
+    @State private var cropImage: UIImage?
     @State private var hint: String?
     @State private var modeRaw = NIOWidgetBackgroundMode.theme.rawValue
     @State private var scrim = NIOWidgetBackgroundStore.scrimEnabled
+    // 遮罩上帝模式：风格 + 起点/终点浓度
+    @State private var scrimStyleSel = NIOWidgetBackgroundStore.scrimStyle
+    @State private var scrimTop = NIOWidgetBackgroundStore.scrimTopOpacity
+    @State private var scrimBottom = NIOWidgetBackgroundStore.scrimBottomOpacity
+
+    private var themeIsDark: Bool {
+        WheaterThemeColors(token: themeService.currentToken).isDark
+    }
+
+    /// 预览卡遮罩（直接用本地 @State 计算，拖滑条即时反馈）
+    private var scrimPreviewGradient: LinearGradient? {
+        guard scrim else { return nil }
+        let dark: Bool
+        switch scrimStyleSel {
+        case .auto: dark = themeIsDark
+        case .dark: dark = true
+        case .light: dark = false
+        }
+        let base = dark ? Color.black : Color.white
+        return LinearGradient(colors: [base.opacity(scrimTop), base.opacity(scrimBottom)],
+                              startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    /// 预览卡文字色调：压暗遮罩 → 浅色字；提亮遮罩 → 深色字（与小组件实际渲染同规则）
+    private var previewTextTone: Color {
+        let dark: Bool
+        switch scrimStyleSel {
+        case .auto: dark = themeIsDark
+        case .dark: dark = true
+        case .light: dark = false
+        }
+        return dark ? .white : Color(red: 0.10, green: 0.10, blue: 0.12)
+    }
 
     // 二次元萌系主题色（与父视图同规则，跟随全局主题实时刷新）
     private var sakuraPink: Color { themeService.accentColor() }
@@ -1852,9 +1889,27 @@ private struct NIOWidgetBackgroundSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("小组件 / 锁屏卡片背景")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(NIOThemePaint.text)
+            HStack(spacing: 8) {
+                Text("小组件 / 锁屏卡片背景")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(NIOThemePaint.text)
+                Spacer(minLength: 0)
+                if NIOWidgetBackgroundStore.hasCustomImage {
+                    Button {
+                        NIOBootHaptics.impact(.light)
+                        NIOWidgetBackgroundStore.clearAll()
+                        hint = "已清除全部自定义背景，恢复主题渐变"
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                            .padding(7)
+                            .background(NIOThemePaint.fill)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(NIOPressableButtonStyle())
+                }
+            }
 
             HStack(spacing: 6) {
                 ForEach([NIOWidgetBackgroundMode.theme, .custom], id: \.rawValue) { mode in
@@ -1875,50 +1930,30 @@ private struct NIOWidgetBackgroundSection: View {
                             .clipShape(Capsule())
                             .overlay(Capsule().stroke(isSelected ? mintCyan.opacity(0.6) : NIOThemePaint.stroke, lineWidth: 1))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NIOPressableButtonStyle())
                 }
             }
 
             if mode == .custom {
-                HStack(spacing: 10) {
-                    PhotosPicker(selection: $pickerItem, matching: .images) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "photo.badge.plus")
-                                .font(.system(size: 12, weight: .semibold))
-                            Text(NIOWidgetBackgroundStore.hasCustomImage ? "重新导入图片" : "从相册导入")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing))
-                        .clipShape(Capsule())
+                // 三个展示位预览卡：名称在卡下方，整行不塞按钮，宽度自适应不挤压
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(NIOWidgetBackgroundSlot.allCases) { slot in
+                        slotPreview(slot)
                     }
-
-                    if NIOWidgetBackgroundStore.hasCustomImage {
-                        Button {
-                            NIOWidgetBackgroundStore.clear()
-                            hint = "已清除自定义背景，小组件恢复主题渐变"
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 12))
-                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                                .padding(8)
-                                .background(NIOThemePaint.fill)
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Spacer()
+                    Spacer(minLength: 0)
                 }
+                .photosPicker(isPresented: $pickerPresented, selection: $pickerItem, matching: .images)
+
+                Text("点击卡片从相册选图并框选该展示位的区域；只设置一个尺寸时其余自动补图")
+                    .font(.system(size: 9))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
 
                 Toggle(isOn: $scrim) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("文字对比遮罩")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(NIOThemePaint.text)
-                        Text("在图片上叠加主题方向渐变，保证小组件文字可读")
+                        Text("在图片上叠加渐变，保证小组件文字可读")
                             .font(.system(size: 9))
                             .foregroundStyle(NIOThemePaint.text.opacity(0.5))
                     }
@@ -1928,39 +1963,490 @@ private struct NIOWidgetBackgroundSection: View {
                     NIOWidgetBackgroundStore.scrimEnabled = newValue
                 }
 
+                // 上帝模式：风格 + 浓度滑条 + 实时预览
+                if scrim {
+                    Picker("遮罩风格", selection: $scrimStyleSel) {
+                        Text("跟随主题").tag(NIOWidgetBackgroundStore.ScrimStyle.auto)
+                        Text("压暗").tag(NIOWidgetBackgroundStore.ScrimStyle.dark)
+                        Text("提亮").tag(NIOWidgetBackgroundStore.ScrimStyle.light)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: scrimStyleSel) { _, newStyle in
+                        NIOWidgetBackgroundStore.scrimStyle = newStyle
+                    }
+
+                    scrimSliderRow(label: "起点浓度", value: $scrimTop)
+                    scrimSliderRow(label: "终点浓度", value: $scrimBottom)
+                        .onChange(of: scrimTop) { _, newValue in
+                            NIOWidgetBackgroundStore.scrimTopOpacity = newValue
+                        }
+                        .onChange(of: scrimBottom) { _, newValue in
+                            NIOWidgetBackgroundStore.scrimBottomOpacity = newValue
+                        }
+                }
+
                 if let hint {
                     Text(hint)
                         .font(.system(size: 9))
                         .foregroundStyle(mintCyan)
                 } else {
-                    Text("图片压缩后写入 App Group，桌面小组件与锁屏实时活动卡片同步换装；灵动岛紧凑/展开态由系统接管，无法自定义背景")
+                    Text("遮罩保证文字可读；点上方对应卡片可单独调整每个展示位的裁剪区域")
                         .font(.system(size: 9))
                         .foregroundStyle(NIOThemePaint.text.opacity(0.5))
                 }
             }
+
+            // 三个背景保存方案：点卡应用整套配置；菜单按钮把当前配置存入方案
+            HStack(spacing: 6) {
+                ForEach(1...3, id: \.self) { index in
+                    presetChip(index)
+                }
+                Spacer(minLength: 0)
+                Menu {
+                    ForEach(1...3, id: \.self) { index in
+                        Button("保存到方案\(index)") {
+                            if NIOWidgetBackgroundStore.savePreset(index) {
+                                hint = "💾 当前背景配置已存入方案\(index)"
+                            } else {
+                                hint = "⚠️ 方案保存失败"
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 12))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                        .padding(8)
+                        .background(NIOThemePaint.fill)
+                        .clipShape(Capsule())
+                }
+            }
+
+            Text("方案保存完整背景配置（三张裁剪图 + 取景 + 遮罩参数）；点方案卡应用，点下载按钮存入")
+                .font(.system(size: 9))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.5))
         }
         .onAppear {
+            NIOWidgetBackgroundStore.migrateLegacyIfNeeded()
             modeRaw = NIOWidgetBackgroundStore.mode.rawValue
             scrim = NIOWidgetBackgroundStore.scrimEnabled
+            scrimStyleSel = NIOWidgetBackgroundStore.scrimStyle
+            scrimTop = NIOWidgetBackgroundStore.scrimTopOpacity
+            scrimBottom = NIOWidgetBackgroundStore.scrimBottomOpacity
         }
         .onChange(of: pickerItem) { _, item in
             guard let item else { return }
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
-                    if NIOWidgetBackgroundStore.save(image: image) {
-                        hint = "✅ 已导入，桌面小组件与锁屏卡片同步换装"
-                    } else {
-                        hint = "⚠️ 图片写入失败（检查 App Group 权限）"
-                    }
+                    // 先进入裁剪编辑，确认展示区域后再落盘
+                    cropImage = image
                 } else {
                     hint = "⚠️ 图片读取失败，请重试"
                 }
                 pickerItem = nil
             }
         }
+        .sheet(isPresented: Binding(
+            get: { cropImage != nil },
+            set: { if !$0 { cropImage = nil } }
+        )) {
+            if let image = cropImage {
+                NIOWidgetImageCropSheet(image: image, slot: pickerSlot) { cropped, source, focal, slot in
+                    if NIOWidgetBackgroundStore.saveSource(source, for: slot),
+                       NIOWidgetBackgroundStore.save(image: cropped, for: slot) {
+                        NIOWidgetBackgroundStore.setFocal(focal, for: slot)
+                        hint = "✅ 已应用到\(slot.displayName)展示位，取景随实际容器尺寸自适应"
+                    } else {
+                        hint = "⚠️ 图片写入失败（检查 App Group 权限）"
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: 遮罩微调控件
+
+    /// 浓度滑条行：拖动中只写值实时预览，松手后统一刷新小组件时间线
+    private func scrimSliderRow(label: String, value: Binding<Double>) -> some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(NIOThemePaint.text)
+                .frame(width: 56, alignment: .leading)
+            Slider(value: value, in: 0...0.85) { editing in
+                if !editing {
+                    NIOWidgetBackgroundStore.reloadAllTimelines()
+                }
+            }
+            .tint(mintCyan)
+            Text("\(Int(value.wrappedValue * 100))%")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 36, alignment: .trailing)
+        }
+    }
+
+    /// 单个方案卡：实心点表示已保存，点按应用，长按弹出“存入此方案”
+    private func presetChip(_ index: Int) -> some View {
+        let saved = NIOWidgetBackgroundStore.hasPreset(index)
+        return Button {
+            NIOBootHaptics.impact(.light)
+            if NIOWidgetBackgroundStore.applyPreset(index) {
+                hint = "🎨 已应用方案\(index)（图片 + 取景 + 遮罩一并恢复）"
+                modeRaw = NIOWidgetBackgroundStore.mode.rawValue
+                scrim = NIOWidgetBackgroundStore.scrimEnabled
+                scrimStyleSel = NIOWidgetBackgroundStore.scrimStyle
+                scrimTop = NIOWidgetBackgroundStore.scrimTopOpacity
+                scrimBottom = NIOWidgetBackgroundStore.scrimBottomOpacity
+            } else {
+                hint = "方案\(index)还没有保存过"
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(saved ? mintCyan : NIOThemePaint.text.opacity(0.25))
+                    .frame(width: 5, height: 5)
+                Text("方案\(index)")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(saved ? mintCyan : NIOThemePaint.text.opacity(0.6))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(saved ? mintCyan.opacity(0.14) : NIOThemePaint.fill)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(saved ? mintCyan.opacity(0.5) : NIOThemePaint.stroke, lineWidth: 1))
+        }
+        .buttonStyle(NIOPressableButtonStyle())
+        .contextMenu {
+            Button {
+                if NIOWidgetBackgroundStore.savePreset(index) {
+                    hint = "💾 当前背景配置已存入方案\(index)"
+                }
+            } label: {
+                Label("将当前配置存入方案\(index)", systemImage: "square.and.arrow.down")
+            }
+        }
+    }
+
+    /// 单个展示位预览卡：纯图片（示例文字在 50pt 下不可读，遮罩效果看图片明暗即可），
+    /// 名称与“已设置”状态点放卡下方；高度 56 时三卡总宽 56+123+87+间距 ≈ 282pt 不溢出
+    private func slotPreview(_ slot: NIOWidgetBackgroundSlot) -> some View {
+        let h: CGFloat = 56
+        let hasOwn = NIOWidgetBackgroundStore.hasCustomImage(for: slot)
+        return VStack(spacing: 4) {
+            ZStack {
+                if let img = NIOWidgetBackgroundStore.loadImage(for: slot) {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    LinearGradient(
+                        colors: [Color(hex: themeService.currentToken.gradientStart), Color(hex: themeService.currentToken.gradientEnd)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+                if let scrimPreviewGradient {
+                    scrimPreviewGradient
+                }
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(5)
+            }
+            .frame(width: h * slot.ratio, height: h)
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 11).stroke(hasOwn ? mintCyan.opacity(0.55) : NIOThemePaint.stroke, lineWidth: hasOwn ? 1.2 : 1))
+            .overlay(alignment: .topTrailing) {
+                if hasOwn {
+                    Button {
+                        NIOBootHaptics.impact(.light)
+                        NIOWidgetBackgroundStore.clear(slot: slot)
+                        hint = "已清除\(slot.displayName)背景，回退其他展示位补图或主题渐变"
+                    } label: {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 7))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                            .padding(3.5)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .buttonStyle(NIOPressableButtonStyle(haptic: false))
+                    .offset(x: 3, y: -3)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                NIOBootHaptics.impact(.light)
+                pickerSlot = slot
+                pickerPresented = true
+            }
+
+            HStack(spacing: 3) {
+                Circle()
+                    .fill(hasOwn ? mintCyan : NIOThemePaint.text.opacity(0.22))
+                    .frame(width: 4, height: 4)
+                Text(slot.displayName)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(hasOwn ? mintCyan : NIOThemePaint.text.opacity(0.55))
+            }
+        }
     }
 }
+
+// MARK: - 小组件背景裁剪编辑器（拖动 / 双指缩放选区）
+
+/// 选完图片后先裁剪：拖动 + 双指缩放选择要展示的区域，
+/// 展示位可在小尺寸（1:1）/ 中尺寸（2.2:1）/ 锁屏卡片（1.55:1）间切换
+private struct NIOWidgetImageCropSheet: View {
+    /// 裁剪结果：烘焙图 + 裁剪来源整图 + 焦点元数据（供渲染端按实际容器比例重算取景）
+    let onUse: (UIImage, UIImage, NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal?, NIOWidgetBackgroundSlot) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var slot: NIOWidgetBackgroundSlot
+    /// 工作图：选图后立即方向归一 + 降采样（Live Photo/HEIC EXIF 方向烘焙为正立像素，
+    /// 且避免 4032px 原图让手势布局逐帧全量渲染卡顿）
+    @State private var workingImage: UIImage
+    @State private var viewport: CGSize = .zero
+    @State private var zoom: CGFloat = 1
+    @State private var lastZoom: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    @State private var didApplySalientFocus = false
+
+    init(image: UIImage, slot: NIOWidgetBackgroundSlot, onUse: @escaping (UIImage, UIImage, NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal?, NIOWidgetBackgroundSlot) -> Void) {
+        self._slot = State(initialValue: slot)
+        self._workingImage = State(initialValue: NIOWidgetBackgroundStore.prepare(image, maxEdge: 2048))
+        self.onUse = onUse
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 14) {
+                GeometryReader { geo in
+                    let vp = Self.viewport(for: geo.size, ratio: slot.ratio)
+                    cropCanvas(vp: vp)
+                        .frame(width: vp.width, height: vp.height)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .onAppear {
+                            viewport = vp
+                            reset(vp: vp)
+                            applySalientFocus()
+                        }
+                        .onChange(of: vp) { _, newVP in
+                            viewport = newVP
+                            reset(vp: newVP)
+                            didApplySalientFocus = false
+                            applySalientFocus()
+                        }
+                }
+
+                Picker("展示位", selection: $slot) {
+                    ForEach(NIOWidgetBackgroundSlot.allCases) { target in
+                        Text(target.displayName).tag(target)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+
+                HStack(spacing: 10) {
+                    Button {
+                        NIOBootHaptics.impact(.light)
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            workingImage = Self.rotated90(workingImage)
+                        }
+                        reset(vp: viewport)
+                    } label: {
+                        Label("旋转 90°", systemImage: "rotate.left")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.8))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(NIOThemePaint.fill)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(NIOPressableButtonStyle())
+
+                    Text("已自动识别画面主体 · 拖动/双指缩放微调")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+            }
+            .navigationTitle("选择展示区域")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("使用这张") {
+                        let t = Self.fitScale(imageSize: workingImage.size, viewport: viewport) * zoom
+                        let focal = NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal(
+                            cx: (workingImage.size.width / 2 - offset.width / t) / workingImage.size.width,
+                            cy: (workingImage.size.height / 2 - offset.height / t) / workingImage.size.height,
+                            covW: viewport.width / (workingImage.size.width * t),
+                            covH: viewport.height / (workingImage.size.height * t)
+                        )
+                        onUse(croppedImage(), workingImage, focal, slot)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: 画布
+
+    @ViewBuilder
+    private func cropCanvas(vp: CGSize) -> some View {
+        let fit = Self.fitScale(imageSize: workingImage.size, viewport: vp)
+        ZStack {
+            Color.black
+            Image(uiImage: workingImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: workingImage.size.width * fit, height: workingImage.size.height * fit)
+                .scaleEffect(zoom)
+                .offset(offset)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    let raw = CGSize(width: lastOffset.width + value.translation.width,
+                                     height: lastOffset.height + value.translation.height)
+                    offset = Self.clampOffset(raw, imageSize: workingImage.size, viewport: vp, zoom: zoom)
+                }
+                .onEnded { _ in lastOffset = offset }
+        )
+        .simultaneousGesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    zoom = min(max(lastZoom * value, Self.minZoom(imageSize: workingImage.size, viewport: vp)), 8)
+                    offset = Self.clampOffset(lastOffset, imageSize: workingImage.size, viewport: vp, zoom: zoom)
+                }
+                .onEnded { _ in lastZoom = zoom }
+        )
+    }
+
+    // MARK: 智能选区（Vision 显著性检测，自动把主体框进取景口）
+
+    private func applySalientFocus() {
+        guard !didApplySalientFocus, viewport.width > 10 else { return }
+        didApplySalientFocus = true
+        let img = workingImage
+        let vp = viewport
+        Task {
+            let rect = await Task.detached { Self.salientRect(of: img) }.value
+            guard viewport.width > 10, let box = rect else { return }
+            let fit = Self.fitScale(imageSize: img.size, viewport: vp)
+            let mz = Self.minZoom(imageSize: img.size, viewport: vp)
+            // 让显著区域尽量铺满取景口，但不低于铺满图的最小缩放
+            let targetZoom = min(
+                max(max(vp.width / (box.width * fit), vp.height / (box.height * fit)), mz),
+                max(mz, 6)
+            )
+            let cx = box.midX - img.size.width / 2
+            let cy = box.midY - img.size.height / 2
+            let raw = CGSize(width: -cx * fit * targetZoom, height: -cy * fit * targetZoom)
+            let clamped = Self.clampOffset(raw, imageSize: img.size, viewport: vp, zoom: targetZoom)
+            withAnimation(.easeOut(duration: 0.35)) {
+                zoom = targetZoom
+                lastZoom = targetZoom
+                offset = clamped
+                lastOffset = clamped
+            }
+        }
+    }
+
+    /// Vision 注意力显著性框（归一化坐标，原点左下 → 转图片点坐标，原点左上）
+    private static func salientRect(of image: UIImage) -> CGRect? {
+        guard let cg = image.cgImage else { return nil }
+        let request = VNGenerateAttentionBasedSaliencyImageRequest()
+        let handler = VNImageRequestHandler(cgImage: cg, orientation: .up)
+        try? handler.perform([request])
+        guard let bb = request.results?.first?.salientObjects?.first?.boundingBox,
+              bb.width > 0.02, bb.height > 0.02 else { return nil }
+        return CGRect(
+            x: bb.minX * image.size.width,
+            y: (1 - bb.maxY) * image.size.height,
+            width: bb.width * image.size.width,
+            height: bb.height * image.size.height
+        )
+    }
+
+    /// 顺时针旋转 90°（方向归一后的正立像素图，重绘产生干净的 upright 图）
+    private static func rotated90(_ image: UIImage) -> UIImage {
+        let size = CGSize(width: image.size.height, height: image.size.width)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = image.scale
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            ctx.cgContext.translateBy(x: size.width / 2, y: size.height / 2)
+            ctx.cgContext.rotate(by: .pi / 2)
+            image.draw(in: CGRect(x: -image.size.width / 2, y: -image.size.height / 2,
+                                  width: image.size.width, height: image.size.height))
+        }
+    }
+
+    // MARK: 几何计算
+
+    private static func viewport(for container: CGSize, ratio: CGFloat) -> CGSize {
+        let w = min(container.width, container.height * ratio)
+        return CGSize(width: w, height: w / ratio)
+    }
+
+    private static func fitScale(imageSize: CGSize, viewport: CGSize) -> CGFloat {
+        min(viewport.width / imageSize.width, viewport.height / imageSize.height)
+    }
+
+    /// 保证图片至少铺满视口的最小缩放
+    private static func minZoom(imageSize: CGSize, viewport: CGSize) -> CGFloat {
+        let fit = fitScale(imageSize: imageSize, viewport: viewport)
+        let dW = imageSize.width * fit, dH = imageSize.height * fit
+        return max(1, max(viewport.width / dW, viewport.height / dH))
+    }
+
+    private static func clampOffset(_ o: CGSize, imageSize: CGSize, viewport: CGSize, zoom: CGFloat) -> CGSize {
+        let fit = fitScale(imageSize: imageSize, viewport: viewport)
+        let dW = imageSize.width * fit * zoom, dH = imageSize.height * fit * zoom
+        let mx = max(0, (dW - viewport.width) / 2)
+        let my = max(0, (dH - viewport.height) / 2)
+        return CGSize(width: min(mx, max(-mx, o.width)), height: min(my, max(-my, o.height)))
+    }
+
+    private func reset(vp: CGSize) {
+        let mz = Self.minZoom(imageSize: workingImage.size, viewport: vp)
+        zoom = mz
+        lastZoom = mz
+        offset = .zero
+        lastOffset = .zero
+    }
+
+    /// 把当前视口映射回原图像素并裁剪（基于方向归一后的 workingImage）
+    private func croppedImage() -> UIImage {
+        guard viewport.width > 10, let cg = workingImage.cgImage else { return workingImage }
+        let imgSize = workingImage.size
+        let fit = Self.fitScale(imageSize: imgSize, viewport: viewport)
+        let t = fit * zoom
+        let dW = imgSize.width * t, dH = imgSize.height * t
+        let xLeft = (viewport.width - dW) / 2 + offset.width
+        let yTop = (viewport.height - dH) / 2 + offset.height
+        // 视口在图片点坐标中的位置（图片绘制原点在 (xLeft, yTop)）
+        var rect = CGRect(x: -xLeft / t, y: -yTop / t, width: viewport.width / t, height: viewport.height / t)
+        let scale = workingImage.scale
+        rect = rect.applying(CGAffineTransform(scaleX: scale, y: scale))
+        let bounds = CGRect(x: 0, y: 0, width: cg.width, height: cg.height)
+        rect = rect.intersection(bounds)
+        guard rect.width >= 8, rect.height >= 8, let cropped = cg.cropping(to: rect.integral) else { return workingImage }
+        return UIImage(cgImage: cropped, scale: 1, orientation: .up)
+    }
+}
+
+// MARK: - 自适应呈现（大屏全屏 / 窄屏 sheet，供设置页子页面统一使用）
 
 private struct AdaptivePresentationModifier<V: View>: ViewModifier {
     let isPresented: Binding<Bool>

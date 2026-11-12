@@ -234,6 +234,9 @@ struct IOSNIODashboardView: View {
                         .padding(.bottom, 32)
                         .frame(maxWidth: 620)
                         .frame(maxWidth: .infinity)
+                        // 分区切换 / 数据更新的统一布局动效
+                        .animation(NIOThemeMotion.layoutSpring, value: selectedSection)
+                        .animation(NIOThemeMotion.easeSmooth, value: heroPhotoModeRaw)
                     }
                     .refreshable { await refresh() }
                     .task(id: heroPhotoModeRaw) {
@@ -401,7 +404,7 @@ struct IOSNIODashboardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(NIOThemePaint.stroke, lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(NIOPressableButtonStyle())
 
             Image(systemName: section.icon)
                 .font(.system(size: 14, weight: .semibold))
@@ -462,7 +465,7 @@ struct IOSNIODashboardView: View {
                     .stroke(Color.red.opacity(0.35), lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NIOPressableButtonStyle())
     }
 
     /// 详情主区：按侧栏选择渲染对应卡片组；宽屏拆左右双列
@@ -517,6 +520,9 @@ struct IOSNIODashboardView: View {
             }
         }
     }
+
+    /// 灵动岛/锁屏卡片点击进 App 的主卡片入场动画（收起 → 弹性展开）
+    @State private var heroEntryShown = true
 
     private var vehicleHero: some View {
         ZStack(alignment: .bottomLeading) {
@@ -612,6 +618,20 @@ struct IOSNIODashboardView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 16, y: 10)
+        .scaleEffect(heroEntryShown ? 1 : 0.9, anchor: .top)
+        .opacity(heroEntryShown ? 1 : 0.3)
+        .offset(y: heroEntryShown ? 0 : -8)
+        .onReceive(service.$islandEntryPulse) { pulse in
+            guard pulse != nil else { return }
+            // 无动画瞬间收起，再弹性展开（经典重播手法）
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { heroEntryShown = false }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+                heroEntryShown = true
+            }
+            NIOBootHaptics.impact(.light)
+        }
     }
 
     /// 车型图片层：内置资产 / 外部导入照片 / 无（纯渐变兜底）
@@ -1192,7 +1212,7 @@ private struct NIOParkingLocationCard: View {
                             .font(.system(size: 16))
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NIOPressableButtonStyle())
                 }
             }
 

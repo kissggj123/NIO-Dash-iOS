@@ -1952,7 +1952,9 @@ public final class AnimeThemeService: ObservableObject {
     }
 
     public func setStyle(_ style: AnimeThemeStyle) {
-        withAnimation(.easeInOut(duration: 0.28)) {
+        // 全局主题过渡：柔和弹簧（与 NIOThemeMotion.themeSpring 同手感），
+        // 所有依赖令牌取色的视图自动获得颜色过渡
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
             self.currentStyle = style
         }
         UserDefaults.standard.set(style.rawValue, forKey: "nio_app_anime_theme")

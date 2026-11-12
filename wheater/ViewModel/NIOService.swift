@@ -141,6 +141,8 @@ final class NIOService: ObservableObject {
     private var lastTelemetrySummary: String = ""
 
     @Published var isLoadingVehicle = false
+    /// 灵动岛/锁屏卡片点击进 App 的时间戳（看板监听后播放主卡片入场动画）
+    @Published var islandEntryPulse: Date?
     @Published var isLoadingChange = false
     @Published var isLoadingCheckin = false
     @Published var lastError: String?
@@ -283,6 +285,21 @@ final class NIOService: ObservableObject {
         startScheduling()
         setupLifecycleObservers()
         setupIslandRaiseObserver()
+        setupWidgetBackgroundObserver()
+    }
+
+    /// 小组件/锁屏自定义背景变更：立即强推一次实时活动更新（LA 不响应 reloadAllTimelines，
+    /// 只有 ContentState 变化才会重绘；bgStamp 已并入指纹，force 绕过去重早退）
+    private var widgetBackgroundObserver: NSObjectProtocol?
+    private func setupWidgetBackgroundObserver() {
+        widgetBackgroundObserver = NotificationCenter.default.addObserver(
+            forName: NIOWidgetBackgroundStore.backgroundChangedNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateLiveActivity(force: true)
+            }
+        }
     }
 
     /// 控制胶囊上岛实时通道：App 已在前台运行时 scenePhase 不会变化（onChange 不触发），
@@ -1744,7 +1761,8 @@ final class NIOService: ObservableObject {
             lvBattVolt: lvVolt,
             vehicleVersion: vehicleVersion,
             preferActualRange: preferActual,
-            refreshNotice: lastRefreshNotice
+            refreshNotice: lastRefreshNotice,
+            bgStamp: NIOWidgetBackgroundStore.backgroundStamp
         )
 
         // 桌面 Widget 同步：仅当快照可见内容变化（或 force 主题换装）时才落盘并触发时间线刷新。
