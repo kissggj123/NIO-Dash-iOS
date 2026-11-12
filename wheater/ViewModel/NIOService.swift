@@ -137,6 +137,8 @@ final class NIOService: ObservableObject {
     @Published var dailyPaths: [NIODailyPath] = []
     @Published var dailyMileageDeltas: [NIODailyDelta] = []
     @Published var fetchLogs: [NIOFetchLogEntry] = []
+    /// 最近一次遥测块摘要（去重：内容不变不重复写 telemetry 日志，防止高频轮询刷屏）
+    private var lastTelemetrySummary: String = ""
 
     @Published var isLoadingVehicle = false
     @Published var isLoadingChange = false
@@ -803,6 +805,18 @@ final class NIOService: ObservableObject {
                 let normData = try JSONSerialization.data(withJSONObject: norm)
                 let decoded = try JSONDecoder().decode(NIOVehicleResponse.self, from: normData)
                 updateLog(logEntry, statusCode: 200, preview: String(text.prefix(200)))
+                // 遥测取证：soc/exterior 块原文摘要写入诊断日志（内容变化才记录，防轮询刷屏）
+                let summary = RVSRormalizer.telemetryBlockSummary(from: norm)
+                if !summary.isEmpty, summary != lastTelemetrySummary {
+                    lastTelemetrySummary = summary
+                    appendLog(NIOFetchLogEntry(
+                        category: "telemetry", level: "info",
+                        message: summary,
+                        detail: nil, timestamp: Date(),
+                        requestURL: url.absoluteString, requestMethod: "GET",
+                        requestBody: nil, responsePreview: nil, statusCode: 200
+                    ))
+                }
                 return decoded.data?.status
             } else {
                 updateLog(logEntry, statusCode: http.statusCode, preview: String(text.prefix(200)))

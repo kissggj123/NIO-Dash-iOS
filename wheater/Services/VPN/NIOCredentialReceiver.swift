@@ -261,6 +261,8 @@ final class NIOCredentialReceiver: ObservableObject {
         let poseidonSamples = json["poseidon_samples"] as? [[String: Any]] ?? []
         // 充电站/换电站地图 API 样本（app.nio.com /app/api/pe/ 前缀，独立签名体系，含真实 sign）
         let peSamples = json["pe_samples"] as? [[String: Any]] ?? []
+        // 快捷场景链路样本（km/shortcut：场景列表响应模型 + POST body 签名结构，含请求+响应原文）
+        let shortcutSamples = json["shortcut_samples"] as? [[String: Any]] ?? []
 
         // 收件箱存档（重启可查；无论凭证是否去重都更新，保证样本区始终最新）
         persistInbox(json)
@@ -272,7 +274,8 @@ final class NIOCredentialReceiver: ObservableObject {
                 sign: sign, timestamp: timestamp,
                 userGuid: userGuid, appVer: appVer, userAgent: userAgent,
                 userToken: userToken, commandSamples: commandSamples,
-                poseidonSamples: poseidonSamples, peSamples: peSamples
+                poseidonSamples: poseidonSamples, peSamples: peSamples,
+                shortcutSamples: shortcutSamples
             )
         }
     }
@@ -301,6 +304,7 @@ final class NIOCredentialReceiver: ObservableObject {
         let commandSamples  = json["command_samples"]  as? [[String: Any]] ?? []
         let poseidonSamples = json["poseidon_samples"] as? [[String: Any]] ?? []
         let peSamples       = json["pe_samples"]       as? [[String: Any]] ?? []
+        let shortcutSamples = json["shortcut_samples"] as? [[String: Any]] ?? []
         // 全量导出（export_version 2）附加字段：换电/签到 API 与 Token、签名密钥（可选）
         let changeURL    = Self.clean(json["change_url"]    as? String ?? "")
         let changeToken  = Self.clean(json["change_token"]  as? String ?? "")
@@ -326,7 +330,8 @@ final class NIOCredentialReceiver: ObservableObject {
                 sign: sign, timestamp: timestamp,
                 userGuid: userGuid, appVer: appVer, userAgent: userAgent,
                 userToken: userToken, commandSamples: commandSamples,
-                poseidonSamples: poseidonSamples, peSamples: peSamples
+                poseidonSamples: poseidonSamples, peSamples: peSamples,
+                shortcutSamples: shortcutSamples
             )
         }
         return true
@@ -341,7 +346,8 @@ final class NIOCredentialReceiver: ObservableObject {
                                   userGuid: String = "", appVer: String = "", userAgent: String = "",
                                   userToken: String = "", commandSamples: [[String: Any]] = [],
                                   poseidonSamples: [[String: Any]] = [],
-                                  peSamples: [[String: Any]] = []) {
+                                  peSamples: [[String: Any]] = [],
+                                  shortcutSamples: [[String: Any]] = []) {
         let service = NIOService.shared
         var applied: [String] = []
         // 设备标识：device_id 优先，User-Guid 兜底（网关请求无 query device_id）
@@ -355,7 +361,12 @@ final class NIOCredentialReceiver: ObservableObject {
         let samplesDigest = commandSamples.prefix(5).map { "\($0["url"] ?? "")|\($0["body"] ?? "")" }.joined(separator: ";")
         let poseidonDigest = poseidonSamples.prefix(5).map { "\($0["url"] ?? "")|\($0["status"] ?? "")|\(($0["resp_body"] as? String ?? "").prefix(120))" }.joined(separator: ";")
         let peDigest = peSamples.prefix(8).map { "\($0["fingerprint"] ?? $0["url"] ?? "")" }.joined(separator: ";")
-        let fingerprint = "\(token)|\(vehicleId)|\(effectiveDeviceId)|\(userToken)|\(samplesDigest)|\(poseidonDigest)|\(peDigest)"
+        let shortcutDigest = shortcutSamples.prefix(8).map { s -> String in
+            let u = (s["url"] as? String) ?? ""
+            let path = URL(string: u)?.path ?? u
+            return "\((s["method"] as? String) ?? "")|\(path)|\(((s["req_body"] as? String) ?? "").prefix(120))|\(((s["resp_body"] as? String) ?? "").prefix(120))"
+        }.joined(separator: ";")
+        let fingerprint = "\(token)|\(vehicleId)|\(effectiveDeviceId)|\(userToken)|\(samplesDigest)|\(poseidonDigest)|\(peDigest)|\(shortcutDigest)"
         if fingerprint == lastAppliedFingerprint {
             lastReceivedAt = Date()
             if service.is403Detected {
@@ -430,6 +441,25 @@ final class NIOCredentialReceiver: ObservableObject {
             ))
         }
         if !peSamples.isEmpty { applied.append("充电地图×\(peSamples.count)") }
+        // 快捷场景链路样本 → 诊断日志（km/shortcut 端点族：请求+响应原文，供场景列表移植与 POST body 签名破解）
+        for sample in shortcutSamples.prefix(8) {
+            let url = (sample["url"] as? String) ?? ""
+            let method = (sample["method"] as? String) ?? "POST"
+            let reqBody = (sample["req_body"] as? String) ?? ""
+            let auth = (sample["auth"] as? String) ?? ""
+            let status = sample["status"] as? Int ?? 0
+            let respBody = (sample["resp_body"] as? String) ?? ""
+            let time = (sample["time"] as? String) ?? ""
+            let pathTail = URL(string: url)?.pathComponents.suffix(3).joined(separator: "/") ?? url
+            service.appendLog(NIOFetchLogEntry(
+                category: "shortcut_capture", level: "info",
+                message: "🎛 快捷场景样本·\(pathTail) \(time)",
+                detail: "\(method) \(url)\nreq=\(reqBody)\nauth=\(auth)\nstatus=\(status)\nresp=\(respBody)",
+                timestamp: Date(), requestURL: url, requestMethod: method,
+                requestBody: reqBody, responsePreview: String(respBody.prefix(800)), statusCode: status
+            ))
+        }
+        if !shortcutSamples.isEmpty { applied.append("快捷场景×\(shortcutSamples.count)") }
         if !vehicleId.isEmpty { service.nioVehicleId         = vehicleId; applied.append("VehicleID") }
         if !effectiveDeviceId.isEmpty { service.nioDeviceId = effectiveDeviceId; applied.append("DeviceID") }
         if !sign.isEmpty      { service.nioVehicleApiSign    = sign }

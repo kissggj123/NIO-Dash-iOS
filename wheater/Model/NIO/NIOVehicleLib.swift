@@ -662,6 +662,14 @@ enum NIOVehicleLib {
         }
         guard let useName = verifiedName else { return nil }
 
+        // 官方 App 6.9.0 主页 field 集不含 exterior（车速/行驶状态块），抓包 URL 照抄会导致
+        // exterior_status 整块缺失 → 车速恒为 "--"。签名由本地重算，追加 field 安全无副作用；
+        // 幂等处理：已含 exterior 的抓包不重复追加。
+        if base.contains("/status"),
+           !pairs.contains(where: { $0.key == "field" && $0.value == "exterior" }) {
+            pairs.append(("field", "exterior"))
+        }
+
         // 换新 timestamp 重算 sign；其余参数（field= 等）保持逐字节不变，避免重新编码破坏签名。
         // timestamp 位数沿用抓包原值（10 位秒级 / 13 位毫秒级），防止格式不一致被判过期。
         let now: String
@@ -1464,6 +1472,25 @@ enum NIOVehicleLib {
 // MARK: - RVS 归一化器
 
 enum RVSRormalizer {
+    /// 提取 soc_status / exterior_status 块的紧凑键值摘要（遥测字段漂移排查取证用，
+    /// 写入诊断日志 category=telemetry，服务端改字段名时可直接对照）
+    static func telemetryBlockSummary(from normalized: [String: Any]) -> String {
+        guard let data = normalized["data"] as? [String: Any],
+              let status = data["status"] as? [String: Any] else { return "" }
+        var parts: [String] = []
+        for block in ["soc_status", "exterior_status"] {
+            guard let dict = status[block] as? [String: Any], !dict.isEmpty else { continue }
+            let kvs = dict.sorted { $0.key < $1.key }.map { kv -> String in
+                switch kv.value {
+                case let n as NSNumber: return "\(kv.key)=\(n)"
+                case let s as String: return "\(kv.key)=\"\(s)\""
+                default: return "\(kv.key)=\(String(describing: type(of: kv.value)))"
+                }
+            }
+            parts.append("\(block){\(kvs.joined(separator: " "))}")
+        }
+        return parts.joined(separator: " · ")
+    }
 
     /// 将 RVS 平铺响应归一化为 data.status 结构
     static func normalize(_ raw: [String: Any]) -> [String: Any] {
