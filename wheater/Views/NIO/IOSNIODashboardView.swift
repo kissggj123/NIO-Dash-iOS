@@ -749,8 +749,6 @@ struct IOSNIODashboardView: View {
     private var driveCard: some View {
         NIOSectionCard(title: "行驶", subtitle: "来自 RVS exterior status") {
             VStack(spacing: 0) {
-                KeyValueRow(label: "当前车速", value: status?.exteriorStatus?.speed.map { String(format: "%.0f km/h", $0) } ?? "--")
-                Divider()
                 KeyValueRow(label: "行驶状态", value: vehicleStateLabel)
                 Divider()
                 KeyValueRow(label: "数据采样", value: sampleTimeLabel)
@@ -865,6 +863,7 @@ struct IOSNIODashboardView: View {
                     .foregroundStyle(.primary)
                 }
             }
+            NIOStatusRawBlocksCard(status: status)
         }
     }
 

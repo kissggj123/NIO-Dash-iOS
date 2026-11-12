@@ -14,6 +14,7 @@
 import SwiftUI
 import Charts
 import MapKit
+import UIKit
 
 // MARK: - 卡片容器（看板与增强卡组统一外壳）
 
@@ -776,4 +777,281 @@ private func orderCardEmptyHint(_ text: String) -> some View {
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
+}
+
+// MARK: - 原始数据块查看器（同步诊断 · 全量字段取证）
+// 把拼接后的 RVS status 全部数据块按语义分组展开，键值对逐行呈现。
+// 作用：① 直观核对"拼到了哪些数据"；② 为后续精准解析提供真实字段名（宁缺毋假）。
+
+struct NIOStatusRawBlocksCard: View {
+    let status: NIOVehicleStatus?
+
+    @State private var expanded: Set<String> = []
+
+    // MARK: 数据结构
+
+    struct BlockItem: Identifiable {
+        let key: String          // 原始字段名
+        let label: String        // 语义化标签（无映射时与 key 相同）
+        let value: String        // 格式化后的值
+        let isBool: Bool
+        let boolValue: Bool
+        var id: String { key }
+    }
+
+    struct BlockEntry: Identifiable {
+        let key: String
+        let label: String
+        let icon: String
+        let items: [BlockItem]
+        var id: String { key }
+    }
+
+    // MARK: 已知块语义（对齐官方 App 6.9.0 field 集）
+
+    private static let knownBlocks: [(key: String, label: String, icon: String)] = [
+        ("soc_status", "电量与续航", "bolt.batteryblock.fill"),
+        ("exterior_status", "行驶与外观", "car.fill"),
+        ("hvac_status", "空调座舱", "thermometer.medium"),
+        ("door_status", "车门与车锁", "lock.fill"),
+        ("window_status", "车窗", "square.stack.3d.up"),
+        ("tyre_status", "轮胎", "circle.circle"),
+        ("position_status", "车辆定位", "location.fill"),
+        ("charge_status_order", "充电订单", "bolt.horizontal.fill"),
+        ("power_swap_order", "换电订单", "arrow.triangle.2.circlepath"),
+        ("offcar_power_swap_status", "离车换电", "bolt.badge.clock.fill"),
+        ("offcar_mode_status", "离车模式", "shield.lefthalf.filled"),
+        ("remote_operate_status", "远程操作", "arrow.uturn.forward.circle"),
+        ("device_status", "车端设备", "cpu"),
+        ("key_status", "数字钥匙", "key.fill"),
+        ("fota_status", "车机版本 FOTA", "arrow.down.circle.fill"),
+        ("connection_status", "云端连接", "antenna.radiowaves.left.and.right"),
+        ("lv_batt_status", "12V 低压电瓶", "car.battery"),
+        ("frdg_status", "车载冰箱", "refrigerator"),
+        ("heating_status", "加热与除霜", "flame.fill"),
+        ("light_status", "灯光照明", "lightbulb.max.fill"),
+        ("box_status", "BOX 终端", "shippingbox.fill"),
+        ("maintain_status", "维保状态", "wrench.and.screwdriver.fill"),
+        ("trip_share_status", "行程分享", "square.and.arrow.up"),
+        ("nearby_car_ctrl", "附近车控", "dot.radiowaves.left.and.right"),
+        ("special_status", "特殊状态", "star.fill"),
+        ("mix_auth", "混合授权", "checkmark.shield.fill")
+    ]
+
+    /// 常见字段语义映射（未命中的直接显示原始 key）
+    private static let keyLabels: [String: String] = [
+        "sample_time": "采样时间",
+        "soc": "电量",
+        "remaining_range": "CLTC 续航",
+        "remaining_actual_range": "实估续航",
+        "target_soc_percentage": "目标电量",
+        "lock_soc": "电池锁定下限",
+        "vehicle_state": "行驶状态",
+        "speed": "车速",
+        "mileage": "总里程",
+        "vehicle_lock_status": "车锁",
+        "inside_temperature": "车内温度",
+        "outside_temperature": "车外温度",
+        "air_conditioner_on": "空调开关",
+        "frdg_pwr_sts": "冰箱电源",
+        "frdg_cur_t": "冰箱当前温",
+        "frdg_tar_t": "冰箱目标温",
+        "lv_batt_volt": "电瓶电压",
+        "lv_batt_soc": "电瓶电量",
+        "latitude": "纬度",
+        "longitude": "经度",
+        "connected": "云端在线",
+        "current_version": "车机版本",
+        "tire_press_fl": "胎压 左前",
+        "tire_press_fr": "胎压 右前",
+        "tire_press_rl": "胎压 左后",
+        "tire_press_rr": "胎压 右后"
+    ]
+
+    // MARK: 解析
+
+    /// 把 status 编码回 JSON 字典，按已知块顺序分组（额外出现的键附加在末尾，不丢字段）
+    private static func blockEntries(from status: NIOVehicleStatus?) -> [BlockEntry] {
+        guard let status,
+              let data = try? JSONEncoder().encode(status),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+
+        var entries: [BlockEntry] = []
+        var consumed = Set<String>()
+        for known in knownBlocks {
+            guard let raw = obj[known.key], !isEmptyBlock(raw) else { continue }
+            let blockItems = items(from: raw)
+            guard !blockItems.isEmpty else { continue }
+            entries.append(BlockEntry(key: known.key, label: known.label, icon: known.icon, items: blockItems))
+            consumed.insert(known.key)
+        }
+        for key in obj.keys.sorted() where !consumed.contains(key) {
+            guard let raw = obj[key], !isEmptyBlock(raw) else { continue }
+            let blockItems = items(from: raw)
+            guard !blockItems.isEmpty else { continue }
+            entries.append(BlockEntry(key: key, label: key, icon: "curlybraces.square.fill", items: blockItems))
+        }
+        return entries
+    }
+
+    private static func isEmptyBlock(_ raw: Any) -> Bool {
+        if let dict = raw as? [String: Any] { return dict.isEmpty }
+        if let arr = raw as? [Any] { return arr.isEmpty }
+        return raw is NSNull
+    }
+
+    private static func items(from raw: Any) -> [BlockItem] {
+        if let dict = raw as? [String: Any] {
+            return dict.keys.sorted().map { key in
+                makeItem(key: key, value: dict[key])
+            }
+        }
+        if let arr = raw as? [Any] {
+            return [BlockItem(key: "items", label: "列表 (\(arr.count))", value: formatValue(arr), isBool: false, boolValue: false)]
+        }
+        return [BlockItem(key: "value", label: "值", value: formatValue(raw), isBool: false, boolValue: false)]
+    }
+
+    private static func makeItem(key: String, value: Any?) -> BlockItem {
+        let v = value ?? NSNull()
+        let raw = formatValue(v)
+        // 时间戳字段顺手转可读日期（毫秒/秒都兼容）
+        var display = raw
+        if key.lowercased().contains("time"), let n = v as? NSNumber, n.doubleValue > 1_000_000_000 {
+            let seconds = n.doubleValue > 10_000_000_000 ? n.doubleValue / 1000 : n.doubleValue
+            let date = Date(timeIntervalSince1970: seconds)
+            display = raw + "  (" + date.formatted(date: .abbreviated, time: .shortened) + ")"
+        }
+        if let b = v as? Bool {
+            return BlockItem(key: key, label: keyLabels[key] ?? key, value: display, isBool: true, boolValue: b)
+        }
+        return BlockItem(key: key, label: keyLabels[key] ?? key, value: display, isBool: false, boolValue: false)
+    }
+
+    private static func formatValue(_ v: Any) -> String {
+        if v is NSNull { return "null" }
+        if let b = v as? Bool { return b ? "true" : "false" }
+        if let n = v as? NSNumber { return n.stringValue }
+        if let s = v as? String { return s.isEmpty ? "\"\"" : s }
+        if let dict = v as? [String: Any] {
+            guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]) else { return "{}" }
+            return String(data: data, encoding: .utf8) ?? "{}"
+        }
+        if let arr = v as? [Any] {
+            guard let data = try? JSONSerialization.data(withJSONObject: arr, options: [.sortedKeys]) else { return "[]" }
+            return String(data: data, encoding: .utf8) ?? "[]"
+        }
+        return "\(v)"
+    }
+
+    // MARK: 视图
+
+    var body: some View {
+        let blocks = Self.blockEntries(from: status)
+        return NIODashCardShell(title: "原始数据块", subtitle: "拼接后 RVS status 全量字段 · 解析取证") {
+            if blocks.isEmpty {
+                Text("暂无状态数据，刷新车况后自动显示")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 0) {
+                    // 摘要行：块数 / 字段数 / 复制全部
+                    HStack(spacing: 8) {
+                        Text("\(blocks.count) 个数据块 · \(blocks.reduce(0) { $0 + $1.items.count }) 个字段")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            copyAllJSON(blocks)
+                        } label: {
+                            Label("复制 JSON", systemImage: "doc.on.doc")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                        if copied {
+                            Label("已复制", systemImage: "checkmark.circle.fill")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.green)
+                                .transition(.opacity)
+                        }
+                    }
+                    .padding(.bottom, 8)
+
+                    ForEach(blocks) { block in
+                        blockDisclosure(block)
+                            .padding(.vertical, 4)
+                        if block.id != blocks.last?.id { Divider() }
+                    }
+                }
+            }
+        }
+    }
+
+    @State private var copied = false
+
+    private func copyAllJSON(_ blocks: [BlockEntry]) {
+        let payload: [String: Any] = Dictionary(uniqueKeysWithValues: blocks.map {
+            ($0.key, Dictionary(uniqueKeysWithValues: $0.items.map { ($0.key, $0.value) }))
+        })
+        UIPasteboard.general.string = Self.prettyJSON(payload)
+        withAnimation(.easeOut(duration: 0.2)) { copied = true }
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            withAnimation(.easeIn(duration: 0.2)) { copied = false }
+        }
+    }
+
+    private static func prettyJSON(_ obj: Any) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .prettyPrinted]) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    private func blockDisclosure(_ block: BlockEntry) -> some View {
+        DisclosureGroup(isExpanded: Binding(
+            get: { expanded.contains(block.id) },
+            set: { isOn in
+                withAnimation(.snappy(duration: 0.22)) {
+                    if isOn { expanded.insert(block.id) } else { expanded.remove(block.id) }
+                }
+            }
+        )) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(block.items) { item in
+                    itemRow(item)
+                    if item.id != block.items.last?.id { Divider() }
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: block.icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NIOThemePaint.accent)
+                    .frame(width: 20)
+                Text(block.label)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(block.items.count) 项")
+                    .font(.caption2.weight(.medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func itemRow(_ item: BlockItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(item.label)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(item.value)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(item.isBool ? (item.boolValue ? Color.green : Color.secondary) : Color.primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 5)
+    }
 }
