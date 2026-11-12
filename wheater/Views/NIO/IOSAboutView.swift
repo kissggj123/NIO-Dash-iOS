@@ -309,6 +309,16 @@ struct IOSAboutView: View {
                 )
 
                 creditRow(
+                    roleKey: "undying_wave",
+                    roleName: "Muse of the Undying Wave",
+                    roleCn: "电波缪斯·杏坛信使",
+                    author: "@🫧夏无隅",
+                    tagline: "“素缎墨兰立于庭前，以粉笔为电键、诗书为长码；落笔成波，声声不逝——长河无声奔去，唯爱与信念永存。”",
+                    allusionLabel: "电波典籍溯源：",
+                    allusion: "舞剧《永不消逝的电波》剧铭：‘长河无声奔去，唯爱与信念永存。’；1958 电影版李侠绝笔电文：‘同志们，永别了，我想念你们。’其名‘无隅’亦出自《道德经》——‘大方无隅，大器晚成。’"
+                )
+
+                creditRow(
                     roleKey: "limner",
                     roleName: "The Limner of the Sigil",
                     roleCn: "徽记描绘者",
@@ -353,6 +363,7 @@ struct IOSAboutView: View {
         roleCn: String,
         author: String,
         tagline: String,
+        allusionLabel: String = "📖 莎翁典籍溯源：",
         allusion: String
     ) -> some View {
         let isExpanded = expandedCredit == roleKey
@@ -394,7 +405,7 @@ struct IOSAboutView: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("📖 莎翁典籍溯源：")
+                    Text(allusionLabel)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(pastelYellow)
                     Text(allusion)
