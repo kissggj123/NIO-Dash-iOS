@@ -8,6 +8,8 @@
 //
 
 import Foundation
+import UIKit
+import WidgetKit
 
 struct WheaterVehicleSnapshot: Codable {
     var vehicleName: String
@@ -118,5 +120,105 @@ struct WheaterVehicleSnapshot: Codable {
             tyrePressFL: 2.5, tyrePressFR: 2.5, tyrePressRL: 2.4, tyrePressRR: 2.4,
             themeRaw: "kawaiiLight", refreshNotice: "已更新", updatedAt: Date()
         )
+    }
+}
+
+// MARK: - 小组件 / 锁屏实时活动 自定义背景（App Group 共享）
+// App 端导入图片 → 缩放压缩后写入 App Group 容器；
+// Widget / LiveActivity 进程直接读取同一文件渲染，文字对比度由遮罩层保证。
+
+enum NIOWidgetBackgroundMode: String {
+    case theme    // 跟随主题渐变（默认）
+    case custom   // 自定义图片
+}
+
+struct NIOWidgetBackgroundStore {
+    private static let modeKey = "nio_widget_bg_mode"
+    private static let scrimKey = "nio_widget_bg_scrim"
+    private static let fileName = "nio_widget_bg.jpg"
+    /// 最长边像素上限：控制 App Group 容器体积，Widget 渲染尺寸远小于此
+    private static let maxDimension: CGFloat = 1024
+
+    static var fileURL: URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: WheaterVehicleSnapshot.appGroupID)?
+            .appendingPathComponent(fileName)
+    }
+
+    static var hasCustomImage: Bool {
+        guard let url = fileURL else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    // MARK: 模式与遮罩
+
+    static var mode: NIOWidgetBackgroundMode {
+        get {
+            UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)?
+                .string(forKey: modeKey).flatMap(NIOWidgetBackgroundMode.init(rawValue:)) ?? .theme
+        }
+        set {
+            UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)?.set(newValue.rawValue, forKey: modeKey)
+            reloadWidgets()
+        }
+    }
+
+    /// 遮罩层开关：自定义图片上叠加深/浅色渐变，保证主题文字可读（默认开）
+    static var scrimEnabled: Bool {
+        get {
+            UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)?
+                .object(forKey: scrimKey) as? Bool ?? true
+        }
+        set {
+            UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)?.set(newValue, forKey: scrimKey)
+            reloadWidgets()
+        }
+    }
+
+    // MARK: 图片读写
+
+    /// App 端：压缩落盘（最长边 1024，JPEG 0.85）
+    static func save(image: UIImage) -> Bool {
+        guard let url = fileURL else { return false }
+        let resized = downscale(image)
+        guard let jpeg = resized.jpegData(compressionQuality: 0.85) else { return false }
+        do {
+            try jpeg.write(to: url, options: .atomic)
+            reloadWidgets()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Widget / LiveActivity 端：仅自定义模式下读取
+    static func loadImage() -> UIImage? {
+        guard mode == .custom, let url = fileURL, let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    static func clear() {
+        guard let url = fileURL else { return }
+        try? FileManager.default.removeItem(at: url)
+        reloadWidgets()
+    }
+
+    // MARK: 内部
+
+    private static func downscale(_ image: UIImage) -> UIImage {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxDimension, longest > 0 else { return image }
+        let scale = maxDimension / longest
+        let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: newSize, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    /// 背景变化后立即刷新桌面小组件时间线（锁屏实时活动随下次更新生效）
+    private static func reloadWidgets() {
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

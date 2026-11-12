@@ -633,6 +633,11 @@ struct IOSNIOConfigView: View {
 
                 Divider().background(NIOThemePaint.stroke)
 
+                // 桌面小组件 / 锁屏实时活动自定义背景（独立子视图，避免撑爆卡片 body）
+                NIOWidgetBackgroundSection()
+
+                Divider().background(NIOThemePaint.stroke)
+
                 // 特别版切换开关 / 默认
                 Button(action: {
                     let impact = UIImpactFeedbackGenerator(style: .light)
@@ -1825,6 +1830,137 @@ struct IOSNIOConfigView: View {
 }
 
 // MARK: - 自适应呈现（大屏全屏 / 窄屏 sheet，供设置页子页面统一使用）
+
+/// 桌面小组件 / 锁屏实时活动自定义背景设置区
+/// 独立子视图：状态自包含，同时避免把爱车配置卡片的 ViewBuilder body 撑爆
+/// （巨型 body 在 Debug 构建下会因类型元数据实例化触发 EXC_BAD_ACCESS）
+private struct NIOWidgetBackgroundSection: View {
+    @ObservedObject private var themeService = AnimeThemeService.shared
+    @State private var pickerItem: PhotosPickerItem?
+    @State private var hint: String?
+    @State private var modeRaw = NIOWidgetBackgroundMode.theme.rawValue
+    @State private var scrim = NIOWidgetBackgroundStore.scrimEnabled
+
+    // 二次元萌系主题色（与父视图同规则，跟随全局主题实时刷新）
+    private var sakuraPink: Color { themeService.accentColor() }
+    private var lavenderDream: Color { Color(hex: themeService.currentToken.gradientEnd) }
+    private var mintCyan: Color { themeService.glowColor() }
+
+    private var mode: NIOWidgetBackgroundMode {
+        NIOWidgetBackgroundMode(rawValue: modeRaw) ?? .theme
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("小组件 / 锁屏卡片背景")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(NIOThemePaint.text)
+
+            HStack(spacing: 6) {
+                ForEach([NIOWidgetBackgroundMode.theme, .custom], id: \.rawValue) { mode in
+                    let isSelected = (self.mode == mode)
+                    Button {
+                        NIOBootHaptics.impact(.light)
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            modeRaw = mode.rawValue
+                            NIOWidgetBackgroundStore.mode = mode
+                        }
+                    } label: {
+                        Text(mode == .theme ? "跟随主题渐变" : "自定义图片")
+                            .font(.system(size: 11, weight: isSelected ? .heavy : .semibold, design: .rounded))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(isSelected ? mintCyan.opacity(0.18) : NIOThemePaint.fill)
+                            .foregroundStyle(isSelected ? mintCyan : NIOThemePaint.text.opacity(0.6))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(isSelected ? mintCyan.opacity(0.6) : NIOThemePaint.stroke, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if mode == .custom {
+                HStack(spacing: 10) {
+                    PhotosPicker(selection: $pickerItem, matching: .images) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "photo.badge.plus")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(NIOWidgetBackgroundStore.hasCustomImage ? "重新导入图片" : "从相册导入")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing))
+                        .clipShape(Capsule())
+                    }
+
+                    if NIOWidgetBackgroundStore.hasCustomImage {
+                        Button {
+                            NIOWidgetBackgroundStore.clear()
+                            hint = "已清除自定义背景，小组件恢复主题渐变"
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 12))
+                                .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                                .padding(8)
+                                .background(NIOThemePaint.fill)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Spacer()
+                }
+
+                Toggle(isOn: $scrim) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("文字对比遮罩")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(NIOThemePaint.text)
+                        Text("在图片上叠加主题方向渐变，保证小组件文字可读")
+                            .font(.system(size: 9))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                    }
+                }
+                .tint(mintCyan)
+                .onChange(of: scrim) { _, newValue in
+                    NIOWidgetBackgroundStore.scrimEnabled = newValue
+                }
+
+                if let hint {
+                    Text(hint)
+                        .font(.system(size: 9))
+                        .foregroundStyle(mintCyan)
+                } else {
+                    Text("图片压缩后写入 App Group，桌面小组件与锁屏实时活动卡片同步换装；灵动岛紧凑/展开态由系统接管，无法自定义背景")
+                        .font(.system(size: 9))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                }
+            }
+        }
+        .onAppear {
+            modeRaw = NIOWidgetBackgroundStore.mode.rawValue
+            scrim = NIOWidgetBackgroundStore.scrimEnabled
+        }
+        .onChange(of: pickerItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    if NIOWidgetBackgroundStore.save(image: image) {
+                        hint = "✅ 已导入，桌面小组件与锁屏卡片同步换装"
+                    } else {
+                        hint = "⚠️ 图片写入失败（检查 App Group 权限）"
+                    }
+                } else {
+                    hint = "⚠️ 图片读取失败，请重试"
+                }
+                pickerItem = nil
+            }
+        }
+    }
+}
 
 private struct AdaptivePresentationModifier<V: View>: ViewModifier {
     let isPresented: Binding<Bool>

@@ -98,6 +98,31 @@ func widgetMetaPill(icon: String, text: String, theme: WheaterThemeColors) -> so
     .clipShape(Capsule())
 }
 
+/// 统一的小组件背景层：App 内启用自定义图片时渲染图片 + 主题方向遮罩，否则回退主题渐变。
+/// 遮罩方向与深浅由主题决定，保证主题文字对比度（可在 App 设置中关闭遮罩）。
+@ViewBuilder
+func nioWidgetBackground(theme: WheaterThemeColors) -> some View {
+    if let image = NIOWidgetBackgroundStore.loadImage() {
+        ZStack {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+            if NIOWidgetBackgroundStore.scrimEnabled {
+                LinearGradient(
+                    colors: theme.isDark
+                        ? [Color.black.opacity(0.55), Color.black.opacity(0.28)]
+                        : [Color.white.opacity(0.60), Color.white.opacity(0.32)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
+    } else {
+        LinearGradient(colors: [theme.background, theme.backgroundSoft],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+}
+
 struct NIOVehicleWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WheaterVehicleSnapshotEntry
@@ -133,8 +158,7 @@ struct NIOVehicleEmptyView: View {
                 .foregroundStyle(.secondary)
         }
         .containerBackground(for: .widget) {
-            LinearGradient(colors: [Color(wheaterHex: "EEF1FB"), Color(wheaterHex: "E4E9F8")],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            nioWidgetBackground(theme: WheaterThemeColors(themeRaw: nil))
         }
     }
 }
@@ -258,8 +282,7 @@ struct NIOVehicleSmallView: View {
         .padding(.top, 3)
         }
         .containerBackground(for: .widget) {
-            LinearGradient(colors: [theme.background, theme.backgroundSoft],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            nioWidgetBackground(theme: theme)
         }
     }
 
@@ -511,8 +534,7 @@ struct NIOVehicleMediumView: View {
         }
         }
         .containerBackground(for: .widget) {
-            LinearGradient(colors: [theme.background, theme.backgroundSoft],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            nioWidgetBackground(theme: theme)
         }
     }
 

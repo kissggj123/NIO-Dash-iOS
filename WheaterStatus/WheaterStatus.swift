@@ -669,41 +669,59 @@ struct LiveActivityLockScreenView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    /// 主题化背景：深色主题为暗夜 + 粉/青辉光；浅色主题为白卡 + 柔和光晕
+    /// 主题化背景：自定义图片（App Group 共享）→ 深色主题暗夜辉光 / 浅色主题白卡光晕
+    @ViewBuilder
     private var lockScreenBackground: some View {
-        ZStack {
-            if theme.isDark {
-                Color(red: 0.08, green: 0.07, blue: 0.16)
-                RadialGradient(
-                    colors: [Color.pink.opacity(0.15), Color.clear],
-                    center: .topTrailing,
-                    startRadius: 20,
-                    endRadius: 160
-                )
-                RadialGradient(
-                    colors: [Color.cyan.opacity(0.15), Color.clear],
-                    center: .bottomLeading,
-                    startRadius: 20,
-                    endRadius: 160
-                )
-            } else {
-                LinearGradient(
-                    colors: [theme.background, theme.backgroundSoft],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                RadialGradient(
-                    colors: [theme.accent.opacity(0.12), Color.clear],
-                    center: .topTrailing,
-                    startRadius: 20,
-                    endRadius: 160
-                )
-                RadialGradient(
-                    colors: [theme.glow.opacity(0.1), Color.clear],
-                    center: .bottomLeading,
-                    startRadius: 20,
-                    endRadius: 160
-                )
+        if let image = NIOWidgetBackgroundStore.loadImage() {
+            ZStack {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                if NIOWidgetBackgroundStore.scrimEnabled {
+                    LinearGradient(
+                        colors: theme.isDark
+                            ? [Color.black.opacity(0.62), Color.black.opacity(0.35)]
+                            : [Color.white.opacity(0.60), Color.white.opacity(0.30)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+            }
+        } else {
+            ZStack {
+                if theme.isDark {
+                    Color(red: 0.08, green: 0.07, blue: 0.16)
+                    RadialGradient(
+                        colors: [Color.pink.opacity(0.15), Color.clear],
+                        center: .topTrailing,
+                        startRadius: 20,
+                        endRadius: 160
+                    )
+                    RadialGradient(
+                        colors: [Color.cyan.opacity(0.15), Color.clear],
+                        center: .bottomLeading,
+                        startRadius: 20,
+                        endRadius: 160
+                    )
+                } else {
+                    LinearGradient(
+                        colors: [theme.background, theme.backgroundSoft],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    RadialGradient(
+                        colors: [theme.accent.opacity(0.12), Color.clear],
+                        center: .topTrailing,
+                        startRadius: 20,
+                        endRadius: 160
+                    )
+                    RadialGradient(
+                        colors: [theme.glow.opacity(0.1), Color.clear],
+                        center: .bottomLeading,
+                        startRadius: 20,
+                        endRadius: 160
+                    )
+                }
             }
         }
     }
