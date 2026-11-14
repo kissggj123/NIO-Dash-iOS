@@ -45,6 +45,9 @@
 		AA7000002D21000000EED680 /* NIO/NIOConfigBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100002D21000000EED680 /* NIO/NIOConfigBackupView.swift */; };
 		AA7000012D20000000EED680 /* NIO/NIOCredentialInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100012D20000000EED680 /* NIO/NIOCredentialInboxView.swift */; };
 		AA7000022D20000000EED680 /* NIO_Secrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = AA7100022D20000000EED680 /* NIO_Secrets.plist */; };
+		AA7000032D21000000EED680 /* NIO/NIODatingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100032D21000000EED680 /* NIO/NIODatingModels.swift */; };
+		AA7000042D21000000EED680 /* NIO/NIODatingVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100042D21000000EED680 /* NIO/NIODatingVault.swift */; };
+		AA7000052D21000000EED680 /* NIO/NIODatingLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100052D21000000EED680 /* NIO/NIODatingLabView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -108,6 +111,9 @@
 		AA7100002D21000000EED680 /* NIO/NIOConfigBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOConfigBackupView.swift; sourceTree = "<group>"; };
 		AA7100012D20000000EED680 /* NIO/NIOCredentialInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOCredentialInboxView.swift; sourceTree = "<group>"; };
 		AA7100022D20000000EED680 /* NIO_Secrets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = NIO_Secrets.plist; sourceTree = "<group>"; };
+		AA7100032D21000000EED680 /* NIO/NIODatingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODatingModels.swift; sourceTree = "<group>"; };
+		AA7100042D21000000EED680 /* NIO/NIODatingVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODatingVault.swift; sourceTree = "<group>"; };
+		AA7100052D21000000EED680 /* NIO/NIODatingLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODatingLabView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -199,6 +205,9 @@
 				AA5600042D0E5A0000EED680 /* NIO/NIOCarPlayScene.swift */,
 				AA7100012D20000000EED680 /* NIO/NIOCredentialInboxView.swift */,
 				AA7100002D21000000EED680 /* NIO/NIOConfigBackupView.swift */,
+				AA7100032D21000000EED680 /* NIO/NIODatingModels.swift */,
+				AA7100042D21000000EED680 /* NIO/NIODatingVault.swift */,
+				AA7100052D21000000EED680 /* NIO/NIODatingLabView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -354,6 +363,9 @@
 				AA5600022D0E5A0000EED680 /* NIO/NIOCarPlayScene.swift in Sources */,
 				AA7000012D20000000EED680 /* NIO/NIOCredentialInboxView.swift in Sources */,
 				AA7000002D21000000EED680 /* NIO/NIOConfigBackupView.swift in Sources */,
+				AA7000032D21000000EED680 /* NIO/NIODatingModels.swift in Sources */,
+				AA7000042D21000000EED680 /* NIO/NIODatingVault.swift in Sources */,
+				AA7000052D21000000EED680 /* NIO/NIODatingLabView.swift in Sources */,
 			);
 		};
 		2B902BE628D91FFF003FB942 /* Sources */ = {
@@ -505,7 +517,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = wheater/wheater.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2810;
+				CURRENT_PROJECT_VERSION = 2811;
 				DEVELOPMENT_ASSET_PATHS = "\"wheater/Preview Content\"";
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
@@ -523,7 +535,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.2.1;
+				MARKETING_VERSION = 5.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -539,7 +551,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = wheater/wheater.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2810;
+				CURRENT_PROJECT_VERSION = 2811;
 				DEVELOPMENT_ASSET_PATHS = "\"wheater/Preview Content\"";
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
@@ -557,7 +569,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.2.1;
+				MARKETING_VERSION = 5.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -574,7 +586,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CODE_SIGN_ENTITLEMENTS = WheaterStatus/Extension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2810;
+				CURRENT_PROJECT_VERSION = 2811;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WheaterStatus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WheaterStatus;
@@ -585,7 +597,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 5.2.1;
+				MARKETING_VERSION = 5.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.WheaterStatus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -604,7 +616,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CODE_SIGN_ENTITLEMENTS = WheaterStatus/Extension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2810;
+				CURRENT_PROJECT_VERSION = 2811;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WheaterStatus/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WheaterStatus;
@@ -615,7 +627,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 5.2.1;
+				MARKETING_VERSION = 5.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.WheaterStatus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

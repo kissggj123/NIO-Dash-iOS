@@ -32,12 +32,11 @@ struct IOSAboutView: View {
     }
 
     // 交互状态
-    @State private var tapCount = 0
-    @State private var easterEggText: String?
     @State private var isIconBouncing = false
     @State private var bounceWork = NIOScheduledWork()
     @State private var expandedCredit: String?
     @State private var showReleaseNotesSheet = false
+    @State private var showDatingLab = false
 
     var body: some View {
         NavigationStack {
@@ -91,6 +90,9 @@ struct IOSAboutView: View {
             .sheet(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
             }
+            .sheet(isPresented: $showDatingLab) {
+                NIODatingLabView()
+            }
         }
     }
 
@@ -131,33 +133,15 @@ struct IOSAboutView: View {
             .onTapGesture {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                tapCount += 1
                 isIconBouncing = true
                 // 连点时重置上一轮定时器，避免抖动提前复位
                 bounceWork.scheduleReplacing(after: 0.25) {
                     isIconBouncing = false
                 }
-
-                if tapCount == 1 {
-                    easterEggText = "被你戳到了喵！💖"
-                } else if tapCount == 3 {
-                    easterEggText = "兔可可为你守护爱车每一公里~ 🌸"
-                } else if tapCount == 5 {
-                    easterEggText = "✨ 注入超能电量魔晶能量中…"
-                } else if tapCount >= 7 {
-                    easterEggText = "👑 恭喜解锁隐藏称号：蔚来次元领航员！"
-                }
-            }
-
-            if let egg = easterEggText {
-                Text(egg)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(pastelYellow)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(NIOThemePaint.stroke)
-                    .clipShape(Capsule())
-                    .transition(.scale.combined(with: .opacity))
+                // 进入恋爱好感度实验室（蜜柑 🍊 × 夏老师 🫧 双人互评）
+                // 触发彩蛋后，设置页将出现常驻入口
+                NIODatingVault.markDiscovered()
+                showDatingLab = true
             }
 
             VStack(spacing: 4) {
@@ -592,11 +576,37 @@ struct IOSReleaseNotesView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        // v5.3.0
+                        versionSection(
+                            version: "v5.3.0 (Build 2811)",
+                            date: "2026-11",
+                            isLatest: true,
+                            items: [
+                                ("💞 恋爱好感度实验室", [
+                                    "🐰 关于页点击兔子头像进入：蜜柑 🍊 × 夏老师 🫧 双人密码盲评互评游戏",
+                                    "🔦 双阶段心理学体系：初识心动期（Aron 亲近感实验 / Byrne 相似-吸引）/ 深度关系期（Sternberg 三角 + Gottman + 依恋理论），看板可切换",
+                                    "🙈 军事级加密：AES-256-GCM 密封原始评分与留言，密钥由本人密码 2 万轮拉伸派生，对方只见聚合结论不见原始分"
+                                ]),
+                                ("🧠 循证心理学引擎", [
+                                    "📐 看板每项数据均附「依据」展开：完整计算式 + 文献出处（14 篇实证研究）",
+                                    "📈 指数移动平均（EMA α=0.6）纵向平滑多轮评分，留言情绪由 NaturalLanguage 端内模型实时演算（±6 分加成）",
+                                    "⚖️ 新增六维均衡度与结果稳定度分级：轮次越多结论越可信",
+                                    "✨ 判定体系：心动火花等级（初识期）/ Sternberg 八种爱情类型（稳定期）+ 默契指数 + 相性评级 SSS-C"
+                                ]),
+                                ("🎮 玩法与体验", [
+                                    "📖 三页分步引导轮播：欢迎 → 玩法规则 → 隐私与理论",
+                                    "🔁 无限次重写评分即连载新章节，本人可见「上次评分」对照与轮间变化量",
+                                    "📤 分享结论卡：结论渲染为高清分享图，严格不含任何个人原始分",
+                                    "🛡 独立重置向导：任一方密码授权，或忘记密码恢复路径（确认短语 + 冷静期）",
+                                    "📍 触发彩蛋后设置页出现常驻入口"
+                                ])
+                            ]
+                        )
                         // v5.2.1
                         versionSection(
                             version: "v5.2.1 (Build 2810)",
                             date: "2026-11",
-                            isLatest: true,
+                            isLatest: false,
                             items: [
                                 ("🖼 自定义背景全面升级", [
                                     "📐 小 / 中 / 锁屏三个展示位独立裁剪与存储，只设一个尺寸其余自动补图",

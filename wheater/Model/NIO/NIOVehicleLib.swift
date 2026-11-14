@@ -1844,88 +1844,100 @@ extension Color {
     }
 }
 
-// MARK: - 主题系统 v2（二次元 / 简洁 / 酷 · 支持浅色与深色）
+// MARK: - 主题系统 v3（甜品软萌系 · 6 浅 + 4 深）
 // 主题令牌本体定义在 WheaterAttributes.swift（App 与 Widget 共享）。
 
 public enum AnimeThemeCategory: String, CaseIterable, Sendable, Identifiable {
-    case anime  // 二次元
-    case clean  // 简洁
-    case cool   // 酷
+    case sweet     // 奶甜系
+    case fresh     // 清新系
+    case nocturne  // 星夜系
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
-        case .anime: return "二次元"
-        case .clean: return "简洁"
-        case .cool:  return "酷"
+        case .sweet:    return "奶甜"
+        case .fresh:    return "清新"
+        case .nocturne: return "星夜"
         }
     }
 
     public var categoryIcon: String {
         switch self {
-        case .anime: return "heart.fill"
-        case .clean: return "square.grid.2x2"
-        case .cool:  return "bolt.horizontal.fill"
+        case .sweet:    return "heart.fill"
+        case .fresh:    return "leaf.fill"
+        case .nocturne: return "moon.stars.fill"
         }
     }
 }
 
 public enum AnimeThemeStyle: String, CaseIterable, Codable, Sendable, Identifiable {
-    // 二次元
-    case kawaiiLight  // 蜜桃兔兔 · 浅色（默认，参考 YumikoToys 浅藕荷粉紫）
-    case kawaii       // 樱夜粉兔 · 深色
-    case healing      // 抹茶奶盖 · 浅色
-    // 简洁
-    case minimalLight // 云石膏 · 浅色
-    case minimalDark  // 曜石灰 · 深色
-    // 酷
-    case cyber        // 赛博霓虹 · 深色
-    case makoto       // 暮光星野 · 深色
+    // 奶甜系
+    case strawberryShake  // 草莓奶昔 · 浅色（默认）
+    case taroBoba         // 香芋啵啵 · 浅色
+    case cloudGummy       // 云朵软糖 · 浅色
+    case peachOolong      // 蜜桃乌龙 · 浅色
+    // 清新系
+    case mintMilk         // 薄荷奶绿 · 浅色
+    case lemonSoda        // 柠檬汽水 · 浅色
+    // 星夜系
+    case strawberryNocturne  // 草莓夜曲 · 深色
+    case taroPlanet          // 芋泥星球 · 深色
+    case nebulaMarshmallow   // 星云棉花糖 · 深色
+    case caramelPudding      // 焦糖布丁 · 深色
 
     public var id: String { rawValue }
 
     public var category: AnimeThemeCategory {
         switch self {
-        case .kawaiiLight, .kawaii, .healing: return .anime
-        case .minimalLight, .minimalDark:     return .clean
-        case .cyber, .makoto:                 return .cool
+        case .strawberryShake, .taroBoba, .cloudGummy, .peachOolong: return .sweet
+        case .mintMilk, .lemonSoda:                                  return .fresh
+        case .strawberryNocturne, .taroPlanet, .nebulaMarshmallow, .caramelPudding: return .nocturne
         }
     }
 
     public var displayName: String {
         switch self {
-        case .kawaiiLight:  return "蜜桃兔兔"
-        case .kawaii:       return "樱夜粉兔"
-        case .healing:      return "抹茶奶盖"
-        case .minimalLight: return "云石膏"
-        case .minimalDark:  return "曜石灰"
-        case .cyber:        return "赛博霓虹"
-        case .makoto:       return "暮光星野"
+        case .strawberryShake:    return "草莓奶昔"
+        case .taroBoba:           return "香芋啵啵"
+        case .cloudGummy:         return "云朵软糖"
+        case .peachOolong:        return "蜜桃乌龙"
+        case .mintMilk:           return "薄荷奶绿"
+        case .lemonSoda:          return "柠檬汽水"
+        case .strawberryNocturne: return "草莓夜曲"
+        case .taroPlanet:         return "芋泥星球"
+        case .nebulaMarshmallow:  return "星云棉花糖"
+        case .caramelPudding:     return "焦糖布丁"
         }
     }
 
     public var themeIcon: String {
         switch self {
-        case .kawaiiLight:  return "carrot.fill"
-        case .kawaii:       return "moon.stars.fill"
-        case .healing:      return "leaf.fill"
-        case .minimalLight: return "sun.max.fill"
-        case .minimalDark:  return "circle.lefthalf.filled"
-        case .cyber:        return "cpu.fill"
-        case .makoto:       return "cloud.sun.fill"
+        case .strawberryShake:    return "heart.fill"
+        case .taroBoba:           return "sparkles"
+        case .cloudGummy:         return "cloud.fill"
+        case .peachOolong:        return "cup.and.saucer.fill"
+        case .mintMilk:           return "leaf.fill"
+        case .lemonSoda:          return "sun.max.fill"
+        case .strawberryNocturne: return "moon.stars.fill"
+        case .taroPlanet:         return "globe.asia.australia.fill"
+        case .nebulaMarshmallow:  return "star.fill"
+        case .caramelPudding:     return "flame.fill"
         }
     }
 
     public var description: String {
         switch self {
-        case .kawaiiLight:  return "浅藕荷粉紫 · 白卡奶霜，兔可可的午后小屋"
-        case .kawaii:       return "草莓樱夜 · 粉紫辉光，甜而不腻的梦幻夜"
-        case .healing:      return "抹茶奶盖 · 晨光草绿，日系治愈的清新感"
-        case .minimalLight: return "云石膏白 · 单点靛蓝，克制干净的极简风"
-        case .minimalDark:  return "曜石炭黑 · 一抹冰蓝，专注纯粹的暗色极简"
-        case .cyber:        return "电光青 × 品红 · 深空霓虹赛博机能"
-        case .makoto:       return "暮蓝 × 落日玫瑰 · 新海诚式电影光影"
+        case .strawberryShake:    return "奶油粉底 · 樱花粉主色，奶fufu甜度最高"
+        case .taroBoba:           return "芋泥紫主色 · 泡泡糖粉点缀，梦幻软糯"
+        case .cloudGummy:         return "云朵蓝主色 · 蜜桃粉点缀，清爽软萌"
+        case .peachOolong:        return "蜜桃橘粉 · 焦糖奶渐变，温暖元气"
+        case .mintMilk:           return "薄荷绿主色 · 奶绿渐变，清新治愈"
+        case .lemonSoda:          return "柠檬黄主色 · 奶黄渐变，活泼气泡"
+        case .strawberryNocturne: return "莓果深夜 · 高对比莓粉文字，软萌不刺眼"
+        case .taroPlanet:         return "芋泥深空 · 亮芋紫文字，梦幻夜巡"
+        case .nebulaMarshmallow:  return "星云蓝紫 · 棉花糖亮字，夜空甜梦"
+        case .caramelPudding:     return "焦糖琥珀 · 奶油亮字，温柔暖夜"
         }
     }
 
@@ -1944,11 +1956,15 @@ public enum AnimeThemeStyle: String, CaseIterable, Codable, Sendable, Identifiab
 public final class AnimeThemeService: ObservableObject {
     public static let shared = AnimeThemeService()
 
-    @Published public var currentStyle: AnimeThemeStyle = .kawaiiLight
+    @Published public var currentStyle: AnimeThemeStyle = .strawberryShake
 
     private init() {
-        let saved = UserDefaults.standard.string(forKey: "nio_app_anime_theme") ?? AnimeThemeStyle.kawaiiLight.rawValue
-        self.currentStyle = AnimeThemeStyle(rawValue: saved) ?? .kawaiiLight
+        let saved = UserDefaults.standard.string(forKey: "nio_app_anime_theme") ?? AnimeThemeStyle.strawberryShake.rawValue
+        // 旧版主题名（蜜桃兔兔等）经兼容映射落到最接近的新主题
+        self.currentStyle = AnimeThemeStyle(rawValue: saved)
+            ?? AnimeThemeToken.legacyAlias(named: saved).flatMap { token in
+                AnimeThemeStyle.allCases.first { $0.token == token }
+            } ?? .strawberryShake
     }
 
     public func setStyle(_ style: AnimeThemeStyle) {
@@ -1984,7 +2000,7 @@ public final class AnimeThemeService: ObservableObject {
 
 // MARK: - 语义色画笔（视图层按主题深浅自动切换玻璃拟态）
 // 视图内不再硬编码 Color.white / Color.black，统一经由此处取色，
-// 浅色主题（蜜桃兔兔 / 抹茶奶盖 / 云石膏）下自动映射为墨色文字与白卡。
+// 浅色主题（奶甜 / 清新全系）下自动映射为墨色文字与白卡。
 
 @MainActor
 public enum NIOThemePaint {

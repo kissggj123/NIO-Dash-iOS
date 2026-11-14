@@ -119,7 +119,7 @@ struct WheaterVehicleSnapshot: Codable {
             lvBattSoc: 96, lvBattVolt: 12.8, vehicleVersion: nil,
             preferActualRange: false,
             tyrePressFL: 2.5, tyrePressFR: 2.5, tyrePressRL: 2.4, tyrePressRR: 2.4,
-            themeRaw: "kawaiiLight", refreshNotice: "已更新", updatedAt: Date()
+            themeRaw: "strawberryShake", refreshNotice: "已更新", updatedAt: Date()
         )
     }
 }
@@ -172,10 +172,11 @@ struct NIOWidgetBackgroundStore {
     /// 最长边像素上限：控制 App Group 容器体积，Widget 渲染尺寸远小于此
     private static let maxDimension: CGFloat = 1024
     /// 解码缓存：限制容量防止 Widget 扩展进程内存超限（扩展内存预算极低，
-    /// 多个组件同时渲染时 1024px 位图 ×4MB/张 很容易触发 jetsam → 背景显示失败/骨架占位）
+    /// 多个组件同时渲染时 1024px 位图 ×4MB/张 很容易触发 jetsam → 背景显示失败/骨架占位）。
+    /// 配合 ImageIO 降采样解码，单张位图 ≈2.7MB，3 张上限峰值可控
     private static let imageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 2
+        cache.countLimit = 3
         return cache
     }()
 
@@ -188,6 +189,52 @@ struct NIOWidgetBackgroundStore {
     static func hasCustomImage(for slot: NIOWidgetBackgroundSlot) -> Bool {
         guard let url = fileURL(for: slot) else { return false }
         return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    /// 渲染入口的轻量判断：仅检查文件存在（不触发解码）。
+    /// 此前锁屏卡/小组件先用 loadImage（解码 1024px 位图）判断有无背景，
+    /// 焦点视图内又解码一次 → 双份位图叠加触发扩展进程内存峰值 → 实时活动壁纸加载失败。
+    static func hasRenderableImage(for slot: NIOWidgetBackgroundSlot) -> Bool {
+        guard mode == .custom else { return false }
+        return slot.fallbackSlots.contains { hasCustomImage(for: $0) }
+    }
+
+    // MARK: 实时活动锁屏卡渲染诊断（真机排障探针）
+
+    private static let laDebugKey = "nio_la_bg_debug"
+    private static let widgetDebugKey = "nio_widget_bg_debug"
+
+    /// 实时活动每次归档渲染时记录真实状态（文件有无 / 解码结果 / 模式 / 版本号），
+    /// App 设置页读取展示 —— 静态分析无法确定的"扩展进程里到底发生了什么"以此为准
+    static func recordLockRenderDebug(
+        gate: Bool, baked: Bool, focal: Bool, source: Bool, themeRaw: String?
+    ) {
+        let defaults = UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)
+        let line = "gate=\(gate ? 1 : 0) mode=\(mode.rawValue) baked=\(baked ? 1 : 0) "
+            + "focal=\(focal ? 1 : 0) src=\(source ? 1 : 0) "
+            + "lockFile=\(hasCustomImage(for: .lock) ? 1 : 0) smallFile=\(hasCustomImage(for: .small) ? 1 : 0) "
+            + "stamp=\(backgroundStamp) theme=\(themeRaw ?? "nil") t=\(Int(Date().timeIntervalSince1970))"
+        // 只有变化才写，避免归档渲染高频重复写盘
+        guard defaults?.string(forKey: laDebugKey) != line else { return }
+        defaults?.set(line, forKey: laDebugKey)
+    }
+
+    /// 桌面小组件渲染探针：小组件必会重渲染，用于验证扩展进程能否写 App Group 诊断
+    static func recordWidgetRenderDebug(slot: NIOWidgetBackgroundSlot, baked: Bool) {
+        let defaults = UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)
+        let line = "slot=\(slot.rawValue) mode=\(mode.rawValue) baked=\(baked ? 1 : 0) "
+            + "file=\(hasCustomImage(for: slot) ? 1 : 0) "
+            + "stamp=\(backgroundStamp) t=\(Int(Date().timeIntervalSince1970))"
+        guard defaults?.string(forKey: widgetDebugKey) != line else { return }
+        defaults?.set(line, forKey: widgetDebugKey)
+    }
+
+    static var lockRenderDebug: String? {
+        UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)?.string(forKey: laDebugKey)
+    }
+
+    static var widgetRenderDebug: String? {
+        UserDefaults(suiteName: WheaterVehicleSnapshot.appGroupID)?.string(forKey: widgetDebugKey)
     }
 
     /// 是否存在任意展示位的自定义图
@@ -274,22 +321,10 @@ struct NIOWidgetBackgroundStore {
     }
 
     /// Widget / LiveActivity 端：仅自定义模式下读取；自身缺失时按兜底顺序补位。
-    /// 解码包 autoreleasepool，位图及时释放，避免扩展进程内存峰值
+    /// ImageIO 降采样解码（紧凑位图）+ autoreleasepool，避免扩展进程内存峰值
     static func loadImage(for slot: NIOWidgetBackgroundSlot) -> UIImage? {
         guard mode == .custom else { return nil }
-        for candidate in slot.fallbackSlots {
-            let key = candidate.rawValue as NSString
-            if let cached = imageCache.object(forKey: key) { return cached }
-            guard let url = fileURL(for: candidate) else { continue }
-            let decoded: UIImage? = autoreleasepool {
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return UIImage(data: data)
-            }
-            guard let image = decoded else { continue }
-            imageCache.setObject(image, forKey: key)
-            return image
-        }
-        return nil
+        return slot.fallbackSlots.lazy.compactMap { decodedImage(fileURL(for: $0), cacheKey: $0.rawValue) }.first
     }
 
     /// 清除单个展示位（回退到其他展示位补位 / 主题渐变）
@@ -454,19 +489,29 @@ struct NIOWidgetBackgroundStore {
     /// 裁剪来源整图（1024px 方向归一）；按兜底顺序取，与焦点同源
     static func sourceImage(for slot: NIOWidgetBackgroundSlot) -> UIImage? {
         guard mode == .custom else { return nil }
-        for candidate in slot.fallbackSlots {
-            let key = "src_\(candidate.rawValue)" as NSString
-            if let cached = imageCache.object(forKey: key) { return cached }
-            guard let url = sourceFileURL(for: candidate) else { continue }
-            let decoded: UIImage? = autoreleasepool {
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return UIImage(data: data)
-            }
-            guard let image = decoded else { continue }
-            imageCache.setObject(image, forKey: key)
-            return image
+        return slot.fallbackSlots.lazy.compactMap { decodedImage(sourceFileURL(for: $0), cacheKey: "src_\($0.rawValue)") }.first
+    }
+
+    /// ImageIO 降采样解码：位图最长边压到 maxDimension 内，渲染时才不会按原图全量展开。
+    /// 此前 UIImage(data:) 惰性解码会在首帧绘制时按原始像素展开大位图，
+    /// 实时活动 + 多小组件同帧渲染叠加触发 jetsam → 壁纸整页消失
+    private static func decodedImage(_ url: URL?, cacheKey: String) -> UIImage? {
+        guard let url, FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let key = cacheKey as NSString
+        if let cached = imageCache.object(forKey: key) { return cached }
+        let decoded: UIImage? = autoreleasepool {
+            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,   // 烘焙 EXIF 方向
+                kCGImageSourceThumbnailMaxPixelSize: maxDimension
+            ]
+            guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) else { return nil }
+            return UIImage(cgImage: cg)
         }
-        return nil
+        guard let image = decoded else { return nil }
+        imageCache.setObject(image, forKey: key)
+        return image
     }
 
     /// App 端：保存裁剪来源整图（不触发刷新，由随后 save(image:for:) 统一 bump）
@@ -589,12 +634,24 @@ struct NIOWidgetBackgroundStore {
 }
 
 /// 焦点填充背景视图：有焦点元数据时按真实容器尺寸重算取景（任何比例下与裁剪所见一致），
-/// 无元数据回退烘焙图 scaledToFill，再回退主题渐变
+/// 无元数据回退烘焙图 scaledToFill，再回退主题渐变。
+/// focalEnabled=false（实时活动锁屏卡）：GeometryReader + 显式像素 frame 的定位图
+/// 在实时活动归档快照渲染中不可靠（整图渲染为空白），直接用烘焙裁剪图 scaledToFill。
 struct NIOWidgetFocalBackground: View {
     let slot: NIOWidgetBackgroundSlot
     let theme: WheaterThemeColors
+    var focalEnabled: Bool = true
 
     var body: some View {
+        if focalEnabled {
+            focalBody
+        } else {
+            bakedBody
+        }
+    }
+
+    /// 焦点精确取景（小组件用）
+    private var focalBody: some View {
         GeometryReader { geo in
             let container = geo.size
             if let focal = NIOWidgetBackgroundStore.focal(for: slot),
@@ -614,14 +671,22 @@ struct NIOWidgetFocalBackground: View {
                     .resizable()
                     .frame(width: srcW * scale, height: srcH * scale)
                     .position(x: posX, y: posY)
-            } else if let baked = NIOWidgetBackgroundStore.loadImage(for: slot) {
-                Image(uiImage: baked)
-                    .resizable()
-                    .scaledToFill()
             } else {
-                LinearGradient(colors: [theme.background, theme.backgroundSoft],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                bakedBody
             }
+        }
+    }
+
+    /// 烘焙裁剪图直接铺满（实时活动锁屏卡用，无 GeometryReader 依赖）
+    @ViewBuilder
+    private var bakedBody: some View {
+        if let baked = NIOWidgetBackgroundStore.loadImage(for: slot) {
+            Color.clear
+                .overlay(Image(uiImage: baked).resizable().scaledToFill())
+                .clipped()
+        } else {
+            LinearGradient(colors: [theme.background, theme.backgroundSoft],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 }

@@ -27,6 +27,9 @@ struct IOSNIOConfigView: View {
     @State private var showAboutSheet = false
     @State private var showReleaseNotesSheet = false
     @State private var showLaunchPreview = false
+    // 恋爱好感度实验室：触发彩蛋（关于页点击兔子头像）后常驻显示
+    @AppStorage(NIODatingVault.discoveredKey) private var datingLabDiscovered = false
+    @State private var showDatingLabSheet = false
     @AppStorage("nio_prefer_actual_range") private var preferActualRange = false
     @ObservedObject private var themeService = AnimeThemeService.shared
     @ObservedObject private var vpnManager = NIOVPNManager.shared
@@ -209,6 +212,9 @@ struct IOSNIOConfigView: View {
             .adaptivePresentation(isPresented: $showAboutSheet) {
                 IOSAboutView()
             }
+            .sheet(isPresented: $showDatingLabSheet) {
+                NIODatingLabView()
+            }
             .adaptivePresentation(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
             }
@@ -266,12 +272,12 @@ struct IOSNIOConfigView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    // MARK: - 2. 🎨 主题风格卡片（三系七主题 · 分类分组 + 色板预览）
+    // MARK: - 2. 🎨 主题风格卡片（三系十主题 · 分类分组 + 色板预览）
 
     private var themeSelectorCard: some View {
         cardContainer(title: "🎨 主题外观风格", icon: "paintpalette.fill", accentColor: sakuraPink) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("七大主题 · 二次元 / 简洁 / 酷，浅色深色全适配，灵动岛同步换装：")
+                Text("十大甜品主题 · 奶甜 / 清新 / 星夜，浅色深色全适配，灵动岛同步换装：")
                     .font(.system(size: 11))
                     .foregroundStyle(NIOThemePaint.text.opacity(0.7))
 
@@ -390,7 +396,7 @@ struct IOSNIOConfigView: View {
     private var launchAnimationCard: some View {
         cardContainer(title: "🚀 启动动画风格", icon: "rocket.launch.fill", accentColor: pastelYellow) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("三套开屏风格 · 省电动效模式下自动切换为极简快启：")
+                Text("四套开屏风格 · 省电动效模式下自动切换为极简快启：")
                     .font(.system(size: 11))
                     .foregroundStyle(NIOThemePaint.text.opacity(0.7))
 
@@ -1704,6 +1710,33 @@ struct IOSNIOConfigView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(mintCyan.opacity(0.3), lineWidth: 1))
                 }
             }
+
+            // 💞 恋爱好感度实验室：触发彩蛋后常驻入口（蜜柑 🍊 × 夏老师 🫧 双人互评）
+            if datingLabDiscovered {
+                Button(action: { showDatingLabSheet = true }) {
+                    HStack(spacing: 8) {
+                        Text("💞")
+                            .font(.system(size: 14))
+                        Text("恋爱好感度实验室")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(NIOThemePaint.text)
+                        Spacer()
+                        Text("蜜柑 🍊 × 夏老师 🫧")
+                            .font(.system(size: 10))
+                            .foregroundStyle(sakuraPink)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(NIOThemePaint.fill)
+                    .foregroundStyle(NIOThemePaint.text)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(sakuraPink.opacity(0.35), lineWidth: 1))
+                }
+                .buttonStyle(NIOPressableButtonStyle())
+            }
         }
     }
 
@@ -1841,6 +1874,8 @@ private struct NIOWidgetBackgroundSection: View {
     @State private var pickerSlot: NIOWidgetBackgroundSlot = .small
     @State private var pickerPresented = false
     @State private var cropImage: UIImage?
+    /// 本次裁剪是否基于已保存的壁纸（还原取景 + 显示"换一张"，区别于全新选图）
+    @State private var editingExisting = false
     @State private var hint: String?
     @State private var modeRaw = NIOWidgetBackgroundMode.theme.rawValue
     @State private var scrim = NIOWidgetBackgroundStore.scrimEnabled
@@ -1944,9 +1979,35 @@ private struct NIOWidgetBackgroundSection: View {
                 }
                 .photosPicker(isPresented: $pickerPresented, selection: $pickerItem, matching: .images)
 
-                Text("点击卡片从相册选图并框选该展示位的区域；只设置一个尺寸时其余自动补图")
+                Text("点卡片直接在当前壁纸下调整取景；未设置时从相册选图。只设一个尺寸时其余自动补图")
                     .font(.system(size: 9))
                     .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+
+                // 渲染探针（扩展进程归档渲染的真实状态，真机排障用）
+                Group {
+                    if let widgetDebug = NIOWidgetBackgroundStore.widgetRenderDebug {
+                        Text("🔬 小组件渲染: \(widgetDebug)")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                    } else {
+                        Text("🔬 小组件渲染: 尚未采集（回到桌面等小组件刷新一次）")
+                            .font(.system(size: 8))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.35))
+                    }
+                    if let laDebug = NIOWidgetBackgroundStore.lockRenderDebug {
+                        Text("🔬 LA渲染诊断: \(laDebug)")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                    } else {
+                        Text("🔬 LA渲染诊断: 尚未采集（锁屏卡片还没用新构建重新归档渲染）")
+                            .font(.system(size: 8))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.35))
+                    }
+                }
 
                 Toggle(isOn: $scrim) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -2052,7 +2113,12 @@ private struct NIOWidgetBackgroundSection: View {
             set: { if !$0 { cropImage = nil } }
         )) {
             if let image = cropImage {
-                NIOWidgetImageCropSheet(image: image, slot: pickerSlot) { cropped, source, focal, slot in
+                NIOWidgetImageCropSheet(
+                    image: image,
+                    slot: pickerSlot,
+                    initialFocal: editingExisting ? NIOWidgetBackgroundStore.focal(for: pickerSlot) : nil,
+                    allowReplace: editingExisting
+                ) { cropped, source, focal, slot in
                     if NIOWidgetBackgroundStore.saveSource(source, for: slot),
                        NIOWidgetBackgroundStore.save(image: cropped, for: slot) {
                         NIOWidgetBackgroundStore.setFocal(focal, for: slot)
@@ -2180,7 +2246,14 @@ private struct NIOWidgetBackgroundSection: View {
             .onTapGesture {
                 NIOBootHaptics.impact(.light)
                 pickerSlot = slot
-                pickerPresented = true
+                // 该展示位（含补位来源）已有壁纸 → 直接在当前壁纸上调整取景，不重新选图
+                if let existing = NIOWidgetBackgroundStore.sourceImage(for: slot) {
+                    editingExisting = true
+                    cropImage = existing
+                } else {
+                    editingExisting = false
+                    pickerPresented = true
+                }
             }
 
             HStack(spacing: 3) {
@@ -2202,12 +2275,17 @@ private struct NIOWidgetBackgroundSection: View {
 private struct NIOWidgetImageCropSheet: View {
     /// 裁剪结果：烘焙图 + 裁剪来源整图 + 焦点元数据（供渲染端按实际容器比例重算取景）
     let onUse: (UIImage, UIImage, NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal?, NIOWidgetBackgroundSlot) -> Void
+    /// 允许在裁剪器内直接从相册换一张图（编辑已有壁纸时显示）
+    let allowReplace: Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var slot: NIOWidgetBackgroundSlot
     /// 工作图：选图后立即方向归一 + 降采样（Live Photo/HEIC EXIF 方向烘焙为正立像素，
     /// 且避免 4032px 原图让手势布局逐帧全量渲染卡顿）
     @State private var workingImage: UIImage
+    /// 已保存壁纸的取景元数据：进入编辑时先还原当前取景，Vision 自动主体框选跳过
+    @State private var initialFocal: NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal?
+    @State private var replaceItem: PhotosPickerItem?
     @State private var viewport: CGSize = .zero
     @State private var zoom: CGFloat = 1
     @State private var lastZoom: CGFloat = 1
@@ -2215,9 +2293,17 @@ private struct NIOWidgetImageCropSheet: View {
     @State private var lastOffset: CGSize = .zero
     @State private var didApplySalientFocus = false
 
-    init(image: UIImage, slot: NIOWidgetBackgroundSlot, onUse: @escaping (UIImage, UIImage, NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal?, NIOWidgetBackgroundSlot) -> Void) {
+    init(
+        image: UIImage,
+        slot: NIOWidgetBackgroundSlot,
+        initialFocal: NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal? = nil,
+        allowReplace: Bool = false,
+        onUse: @escaping (UIImage, UIImage, NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal?, NIOWidgetBackgroundSlot) -> Void
+    ) {
         self._slot = State(initialValue: slot)
         self._workingImage = State(initialValue: NIOWidgetBackgroundStore.prepare(image, maxEdge: 2048))
+        self._initialFocal = State(initialValue: initialFocal)
+        self.allowReplace = allowReplace
         self.onUse = onUse
     }
 
@@ -2231,14 +2317,11 @@ private struct NIOWidgetImageCropSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .onAppear {
                             viewport = vp
-                            reset(vp: vp)
-                            applySalientFocus()
+                            applyInitialFraming(vp: vp)
                         }
                         .onChange(of: vp) { _, newVP in
                             viewport = newVP
-                            reset(vp: newVP)
-                            didApplySalientFocus = false
-                            applySalientFocus()
+                            applyInitialFraming(vp: newVP)
                         }
                 }
 
@@ -2274,6 +2357,10 @@ private struct NIOWidgetImageCropSheet: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 16)
+                .photosPicker(isPresented: Binding(
+                    get: { allowReplace && replaceItem == nil && presentedViaReplaceTap },
+                    set: { presentedViaReplaceTap = $0 }
+                ), selection: $replaceItem, matching: .images)
             }
             .navigationTitle("选择展示区域")
             .navigationBarTitleDisplayMode(.inline)
@@ -2294,8 +2381,63 @@ private struct NIOWidgetImageCropSheet: View {
                         dismiss()
                     }
                 }
+                ToolbarItem(placement: .secondaryAction) {
+                    if allowReplace {
+                        Button {
+                            NIOBootHaptics.impact(.light)
+                            presentedViaReplaceTap = true
+                        } label: {
+                            Label("换一张图", systemImage: "photo.on.rectangle")
+                        }
+                    }
+                }
+            }
+            .onChange(of: replaceItem) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        // 换图后走新图流程：方向归一 + 降采样，重新智能框选
+                        initialFocal = nil
+                        didApplySalientFocus = false
+                        workingImage = NIOWidgetBackgroundStore.prepare(image, maxEdge: 2048)
+                        applyInitialFraming(vp: viewport)
+                    }
+                    replaceItem = nil
+                }
             }
         }
+    }
+
+    @State private var presentedViaReplaceTap = false
+
+    // MARK: 初始取景（已存壁纸还原当前取景；新图走 Vision 智能框选）
+
+    private func applyInitialFraming(vp: CGSize) {
+        if let focal = initialFocal, focal.covW > 0.01, focal.covH > 0.01 {
+            restore(focal: focal, vp: vp)
+        } else {
+            reset(vp: vp)
+            didApplySalientFocus = false
+            applySalientFocus()
+        }
+    }
+
+    /// 把已保存的焦点元数据反解回编辑器缩放/偏移，进入即见当前显示状态
+    private func restore(focal: NIOWidgetBackgroundStore.NIOWidgetBackgroundFocal, vp: CGSize) {
+        let imgW = workingImage.size.width, imgH = workingImage.size.height
+        let fit = Self.fitScale(imageSize: workingImage.size, viewport: vp)
+        // covW = vp.width / (imgW * t) → 反解 t（横向为准；纵向由同一 t 保证）
+        let t = vp.width / (imgW * max(focal.covW, 0.02))
+        let z = min(max(t / fit, Self.minZoom(imageSize: workingImage.size, viewport: vp)), 8)
+        let realT = fit * z
+        let raw = CGSize(width: (imgW / 2 - focal.cx * imgW) * realT,
+                         height: (imgH / 2 - focal.cy * imgH) * realT)
+        let clamped = Self.clampOffset(raw, imageSize: workingImage.size, viewport: vp, zoom: z)
+        zoom = z
+        lastZoom = z
+        offset = clamped
+        lastOffset = clamped
     }
 
     // MARK: 画布

@@ -681,9 +681,18 @@ struct LiveActivityLockScreenView: View {
     /// 主题化背景：自定义图片（焦点填充，App Group 共享）→ 深色主题暗夜辉光 / 浅色主题白卡光晕
     @ViewBuilder
     private var lockScreenBackground: some View {
-        if NIOWidgetBackgroundStore.loadImage(for: .lock) != nil {
+        // 实时活动归档渲染探针：把本次渲染看到的真实状态写入 App Group，
+        // 供设置页"小组件/锁屏卡片背景"区展示，定位真机上壁纸不显示的根因
+        let _ = NIOWidgetBackgroundStore.recordLockRenderDebug(
+            gate: NIOWidgetBackgroundStore.hasRenderableImage(for: .lock),
+            baked: NIOWidgetBackgroundStore.loadImage(for: .lock) != nil,
+            focal: NIOWidgetBackgroundStore.focal(for: .lock) != nil,
+            source: NIOWidgetBackgroundStore.sourceImage(for: .lock) != nil,
+            themeRaw: state.themeRaw
+        )
+        if NIOWidgetBackgroundStore.hasRenderableImage(for: .lock) {
             ZStack {
-                NIOWidgetFocalBackground(slot: .lock, theme: theme)
+                NIOWidgetFocalBackground(slot: .lock, theme: theme, focalEnabled: false)
                 if let scrim = NIOWidgetBackgroundStore.scrimGradient(isDarkTheme: theme.isDark) {
                     scrim
                 }

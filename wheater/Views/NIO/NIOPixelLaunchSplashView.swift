@@ -2,14 +2,11 @@
 //  NIOPixelLaunchSplashView.swift
 //  wheater
 //
-//  蔚来像素风启动动画 · 主题化 v4.8
+//  蔚来像素风启动动画 · 主题化 v5.3
 //  每套主题拥有专属开屏人设（配色 / 像素色板 / 文案 / 徽章 / 辉光强度）：
-//  · 蜜桃兔兔：浅藕荷粉紫小屋 🥕
-//  · 樱夜粉兔：草莓樱夜 🌙
-//  · 抹茶奶盖：晨光抹茶 🌿
-//  · 云石膏 / 曜石灰：极简单色，无辉光克制风
-//  · 赛博霓虹：电光扫描 SYSTEM BOOT ⚡️
-//  · 暮光星野：暮蓝落日 ☁️
+//  · 草莓奶昔 🍓 / 香芋啵啵 🧋 / 云朵软糖 ☁️ / 蜜桃乌龙 🍑（奶甜浅色系）
+//  · 薄荷奶绿 🌿 / 柠檬汽水 🍋（清新浅色系）
+//  · 草莓夜曲 🌙 / 芋泥星球 🪐 / 星云棉花糖 🌌 / 焦糖布丁 🍮（星夜深色系）
 //  省电动效模式下自动跳过逐像素点亮并缩短停留。
 //
 
@@ -248,63 +245,56 @@ struct NIOPixelLaunchSplashView: View {
 
     // MARK: - 主题人设（每个主题一套开屏个性）
 
-    /// 像素色板（4 色循环）
+    /// 像素色板（4 色循环，全部由主题令牌驱动）
     private var pixelPalette: [Color] {
-        switch themeService.currentStyle {
-        case .kawaiiLight: return [gradientStart, gradientEnd, warm, glow]
-        case .kawaii:      return [Color(hex: "FF7597"), Color(hex: "B79CFF"), Color(hex: "FFB703"), Color(hex: "FFB3C6")]
-        case .healing:     return [Color(hex: "5CB46E"), Color(hex: "E8C46A"), accent, warm]
-        case .minimalLight, .minimalDark: return [accent, glow, gradientEnd, accent]
-        case .cyber:       return [Color(hex: "00F0FF"), Color(hex: "FF2E97"), Color(hex: "8B5CF6"), accent]
-        case .makoto:      return [accent, gradientEnd, warm, glow]
-        }
+        [gradientStart, gradientEnd, warm, glow]
     }
 
     /// 顶部小标文案
     private var topLabel: String {
-        switch themeService.currentStyle {
-        case .cyber: return "SYSTEM BOOT"
-        case .minimalLight, .minimalDark: return "YUMIKOTOYS"
-        default: return "YUMIKOTOYS"
-        }
+        "YUMIKOTOYS"
     }
 
     /// 状态副标文案
     private var subtitleText: String {
         switch themeService.currentStyle {
-        case .kawaiiLight:  return "正在唤醒兔可可的粉色小屋…"
-        case .kawaii:       return "樱夜充电桩已就绪，兔兔上线中…"
-        case .healing:      return "抹茶能量注入中，爱车苏醒…"
-        case .minimalLight, .minimalDark: return "正在启动 YumikoToysRR"
-        case .cyber:        return "正在建立 NIO 数据链路…"
-        case .makoto:       return "正在穿越暮光星野接近爱车…"
+        case .strawberryShake:    return "草莓奶昔已摇匀，兔兔上线中…"
+        case .taroBoba:           return "香芋啵啵加料中，爱车吸一口就醒…"
+        case .cloudGummy:         return "云朵软糖充电桩已就绪…"
+        case .peachOolong:        return "蜜桃乌龙回温中，元气蓄满…"
+        case .mintMilk:           return "薄荷奶绿注入中，爱车苏醒…"
+        case .lemonSoda:          return "柠檬汽水冒泡中，电量满格…"
+        case .strawberryNocturne: return "草莓夜曲奏响中，兔兔夜巡上线…"
+        case .taroPlanet:         return "芋泥星球信号锁定，爱车归航…"
+        case .nebulaMarshmallow:  return "星云棉花糖展开中，甜梦续航…"
+        case .caramelPudding:     return "焦糖布丁凝固中，温柔暖夜上线…"
         }
     }
 
     /// 状态表情徽章
     private var statusEmoji: String {
         switch themeService.currentStyle {
-        case .kawaiiLight:  return "🥕"
-        case .kawaii:       return "🌙"
-        case .healing:      return "🌿"
-        case .minimalLight, .minimalDark: return "◦"
-        case .cyber:        return "⚡️"
-        case .makoto:       return "☁️"
+        case .strawberryShake:    return "🍓"
+        case .taroBoba:           return "🧋"
+        case .cloudGummy:         return "☁️"
+        case .peachOolong:        return "🍑"
+        case .mintMilk:           return "🌿"
+        case .lemonSoda:          return "🍋"
+        case .strawberryNocturne: return "🌙"
+        case .taroPlanet:         return "🪐"
+        case .nebulaMarshmallow:  return "🌌"
+        case .caramelPudding:     return "🍮"
         }
     }
 
-    /// 辉光强度：极简主题为零辉光克制风
+    /// 辉光强度（甜品系全主题统一柔和辉光）
     private var glowStrength: Double {
-        switch themeService.currentStyle {
-        case .minimalLight, .minimalDark: return 0.0
-        case .cyber: return 1.3
-        default: return 1.0
-        }
+        1.0
     }
 
-    /// 副标是否使用等宽字体（赛博终端感）
+    /// 副标是否使用等宽字体（甜品系不使用终端感）
     private var subtitleMono: Bool {
-        themeService.currentStyle == .cyber
+        false
     }
 
     // MARK: - 15x15 像素点阵视图
@@ -416,13 +406,21 @@ struct NIOPixelLaunchSplashView: View {
 
     private var logoBadge: LogoBadge? {
         switch themeService.currentStyle {
-        case .kawaiiLight, .kawaii: return .emoji("🐰")
-        case .healing:              return .emoji("🌿")
-        case .minimalLight:         return .pixelCarrot
-        case .minimalDark:          return .pixelBolt
-        case .cyber:                return .emoji("⚡️")
-        case .makoto:               return .emoji("☁️")
+        case .strawberryShake:    return .emoji("🐰")
+        case .taroBoba:           return .emoji("🧋")
+        case .cloudGummy:         return .emoji("☁️")
+        case .peachOolong:        return .emoji("🍑")
+        case .mintMilk:           return .emoji("🌿")
+        case .lemonSoda:          return .emoji("🍋")
+        case .strawberryNocturne: return .emoji("🌙")
+        case .taroPlanet:         return .emoji("🪐")
+        case .nebulaMarshmallow:  return .emoji("🌌")
+        case .caramelPudding:     return .emoji("🍮")
         }
+    }
+
+    private var isMinimalPersona: Bool {
+        false
     }
 
     // 像素徽章点阵（tone: 0 = 主强调色, 1 = 渐变次色）
@@ -466,13 +464,6 @@ struct NIOPixelLaunchSplashView: View {
                     }
                 }
             }
-        }
-    }
-
-    private var isMinimalPersona: Bool {
-        switch themeService.currentStyle {
-        case .minimalLight, .minimalDark: return true
-        default: return false
         }
     }
 

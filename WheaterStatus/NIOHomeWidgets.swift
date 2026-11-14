@@ -102,10 +102,15 @@ func widgetMetaPill(icon: String, text: String, theme: WheaterThemeColors) -> so
 /// 遮罩方向与深浅由主题决定，保证主题文字对比度（可在 App 设置中关闭遮罩）。
 @ViewBuilder
 func nioWidgetBackground(theme: WheaterThemeColors, slot: NIOWidgetBackgroundSlot = .small) -> some View {
+    // 渲染探针：验证扩展进程能写 App Group 诊断（真机排障用）
+    let _ = NIOWidgetBackgroundStore.recordWidgetRenderDebug(
+        slot: slot,
+        baked: NIOWidgetBackgroundStore.loadImage(for: slot) != nil
+    )
     // 焦点填充：按实际容器尺寸重算取景；无焦点时回退烘焙图 / 主题渐变
     NIOWidgetFocalBackground(slot: slot, theme: theme)
         .overlay {
-            if NIOWidgetBackgroundStore.loadImage(for: slot) != nil,
+            if NIOWidgetBackgroundStore.hasRenderableImage(for: slot),
                let scrim = NIOWidgetBackgroundStore.scrimGradient(isDarkTheme: theme.isDark) {
                 scrim
             }

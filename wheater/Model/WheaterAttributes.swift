@@ -191,137 +191,201 @@ public struct AnimeThemeToken: Codable, Sendable, Equatable {
         self.isDark = isDark
     }
 
-    // ── 二次元 ─────────────────────────────────────────────
+    // ── 奶甜系（浅色粉紫蓝橘）────────────────────────────
 
-    /// 蜜桃兔兔 · 浅色（参考 YumikoToys 主站浅藕荷粉紫风）
-    public static let kawaiiLight = AnimeThemeToken(
-        backgroundPrimary:   "EEF1FB",
-        backgroundSecondary: "E4E9F8",
-        accentColor:         "FF6F9F",
-        glowColor:           "7C6CEB",
-        warmAccent:          "F59E42",
-        gradientStart:       "FF7AA8",
-        gradientEnd:         "9A8CF8",
+    /// 草莓奶昔 · 浅色（默认，奶油粉底 + 樱花粉，甜度最高）
+    public static let strawberryShake = AnimeThemeToken(
+        backgroundPrimary:   "FFF4F1",
+        backgroundSecondary: "FFE9E4",
+        accentColor:         "FF7FA5",
+        glowColor:           "C3B8FF",
+        warmAccent:          "FFC94D",
+        gradientStart:       "FFA8C5",
+        gradientEnd:         "C3B8FF",
         cardBackground:      "FFFFFF",
-        cardBorder:          "DFE4F5",
-        textPrimary:         "322B4D",
-        textSecondary:       "6E6795",
+        cardBorder:          "FFE0D9",
+        textPrimary:         "4A2E3A",
+        textSecondary:       "8C5F72",
         isDark:              false
     )
 
-    /// 樱夜粉兔 · 深色（软萌草莓夜）
-    public static let kawaii = AnimeThemeToken(
-        backgroundPrimary:   "1D1220",
-        backgroundSecondary: "28182C",
-        accentColor:         "FF7597",
-        glowColor:           "FFB3C6",
-        warmAccent:          "FFB703",
-        gradientStart:       "FF7597",
-        gradientEnd:         "B79CFF",
-        cardBackground:      "2A1A2E",
-        cardBorder:          "45273F",
-        textPrimary:         "FFF3F6",
-        textSecondary:       "E4B9CD",
-        isDark:              true
-    )
-
-    /// 抹茶奶盖 · 浅色（日系治愈）
-    public static let healing = AnimeThemeToken(
-        backgroundPrimary:   "F2F7EE",
-        backgroundSecondary: "E7F0E0",
-        accentColor:         "3E8E52",
-        glowColor:           "2E8C7A",
-        warmAccent:          "D98E1F",
-        gradientStart:       "5CB46E",
-        gradientEnd:         "E8C46A",
+    /// 香芋啵啵 · 浅色（芋泥紫 + 泡泡糖粉，梦幻软糯）
+    public static let taroBoba = AnimeThemeToken(
+        backgroundPrimary:   "F4F0FB",
+        backgroundSecondary: "EAE3F7",
+        accentColor:         "A97FE8",
+        glowColor:           "FFB3D9",
+        warmAccent:          "FFC48A",
+        gradientStart:       "C3A8F5",
+        gradientEnd:         "FFB3D9",
         cardBackground:      "FFFFFF",
-        cardBorder:          "DCE8D4",
-        textPrimary:         "2C3A26",
-        textSecondary:       "66785C",
+        cardBorder:          "E2DAF2",
+        textPrimary:         "3A2E4D",
+        textSecondary:       "7A6B95",
         isDark:              false
     )
 
-    // ── 简洁 ─────────────────────────────────────────────
-
-    /// 云石膏 · 浅色（极简单色）
-    public static let minimalLight = AnimeThemeToken(
-        backgroundPrimary:   "F6F7F9",
-        backgroundSecondary: "ECEEF2",
-        accentColor:         "3E6DF0",
-        glowColor:           "5E76C9",
-        warmAccent:          "D9822B",
-        gradientStart:       "3E6DF0",
-        gradientEnd:         "7FA8F5",
+    /// 云朵软糖 · 浅色（云朵蓝 + 蜜桃粉，清爽软萌）
+    public static let cloudGummy = AnimeThemeToken(
+        backgroundPrimary:   "F0F6FF",
+        backgroundSecondary: "E2EDFB",
+        accentColor:         "7EB6FF",
+        glowColor:           "FFB3D9",
+        warmAccent:          "FFD37A",
+        gradientStart:       "9CC8FF",
+        gradientEnd:         "FFC2DC",
         cardBackground:      "FFFFFF",
-        cardBorder:          "E3E6EC",
-        textPrimary:         "1B1F2A",
-        textSecondary:       "5F6675",
+        cardBorder:          "DAE7F5",
+        textPrimary:         "2E3D52",
+        textSecondary:       "64798F",
         isDark:              false
     )
 
-    /// 曜石灰 · 深色（极简单色）
-    public static let minimalDark = AnimeThemeToken(
-        backgroundPrimary:   "0F1013",
-        backgroundSecondary: "17181C",
-        accentColor:         "4D9FFF",
-        glowColor:           "9AB0C8",
-        warmAccent:          "E0A34D",
-        gradientStart:       "4D9FFF",
-        gradientEnd:         "7CC4FF",
-        cardBackground:      "191B20",
-        cardBorder:          "2A2D34",
-        textPrimary:         "F2F4F8",
-        textSecondary:       "9AA3B2",
-        isDark:              true
-    )
-
-    // ── 酷 ─────────────────────────────────────────────
-
-    /// 赛博霓虹 · 深色（电光青 × 品红）
-    public static let cyber = AnimeThemeToken(
-        backgroundPrimary:   "07090F",
-        backgroundSecondary: "0E1320",
-        accentColor:         "00F0FF",
-        glowColor:           "FF2E97",
+    /// 蜜桃乌龙 · 浅色（蜜桃橘粉 + 焦糖奶，温暖元气）
+    public static let peachOolong = AnimeThemeToken(
+        backgroundPrimary:   "FFF6EC",
+        backgroundSecondary: "FFEAD6",
+        accentColor:         "FF9D76",
+        glowColor:           "F7C873",
         warmAccent:          "FFB84D",
-        gradientStart:       "00F0FF",
-        gradientEnd:         "8B5CF6",
-        cardBackground:      "10141F",
-        cardBorder:          "26304A",
+        gradientStart:       "FFA97E",
+        gradientEnd:         "F7C873",
+        cardBackground:      "FFFFFF",
+        cardBorder:          "F8E3CE",
+        textPrimary:         "4D3526",
+        textSecondary:       "96755E",
+        isDark:              false
+    )
+
+    // ── 清新系（浅色绿黄）────────────────────────────────
+
+    /// 薄荷奶绿 · 浅色（薄荷绿 + 奶绿渐变，清新治愈）
+    public static let mintMilk = AnimeThemeToken(
+        backgroundPrimary:   "EFFAF2",
+        backgroundSecondary: "DEF2E6",
+        accentColor:         "4FC48F",
+        glowColor:           "8FD8C8",
+        warmAccent:          "FFC48A",
+        gradientStart:       "7FD9A8",
+        gradientEnd:         "BFEFC9",
+        cardBackground:      "FFFFFF",
+        cardBorder:          "D5EBDD",
+        textPrimary:         "263D2F",
+        textSecondary:       "5F7F6C",
+        isDark:              false
+    )
+
+    /// 柠檬汽水 · 浅色（柠檬黄 + 奶黄渐变，活泼气泡）
+    public static let lemonSoda = AnimeThemeToken(
+        backgroundPrimary:   "FFFCEB",
+        backgroundSecondary: "FFF5CC",
+        accentColor:         "F2B737",
+        glowColor:           "FFDF7E",
+        warmAccent:          "FF9D76",
+        gradientStart:       "FFD97A",
+        gradientEnd:         "FFE9A8",
+        cardBackground:      "FFFFFF",
+        cardBorder:          "F3EAC4",
+        textPrimary:         "4A3A1E",
+        textSecondary:       "94805A",
+        isDark:              false
+    )
+
+    // ── 星夜系（深色 · 文字全部高对比提亮）──────────────
+
+    /// 草莓夜曲 · 深色（莓果深夜，软萌不刺眼）
+    public static let strawberryNocturne = AnimeThemeToken(
+        backgroundPrimary:   "1F1219",
+        backgroundSecondary: "2A1822",
+        accentColor:         "FF8FB2",
+        glowColor:           "C99AE8",
+        warmAccent:          "FFC94D",
+        gradientStart:       "FF8FB2",
+        gradientEnd:         "C99AE8",
+        cardBackground:      "2B1A24",
+        cardBorder:          "4A2A3D",
+        textPrimary:         "FFF3F7",
+        textSecondary:       "F0C6D8",
+        isDark:              true
+    )
+
+    /// 芋泥星球 · 深色（芋泥深空，梦幻夜巡）
+    public static let taroPlanet = AnimeThemeToken(
+        backgroundPrimary:   "191227",
+        backgroundSecondary: "241A38",
+        accentColor:         "B78BF0",
+        glowColor:           "E8A0D8",
+        warmAccent:          "FFC48A",
+        gradientStart:       "B78BF5",
+        gradientEnd:         "E8A0D8",
+        cardBackground:      "231836",
+        cardBorder:          "41305E",
+        textPrimary:         "F8F2FF",
+        textSecondary:       "DFC9F5",
+        isDark:              true
+    )
+
+    /// 星云棉花糖 · 深色（星云蓝紫，夜空甜梦）
+    public static let nebulaMarshmallow = AnimeThemeToken(
+        backgroundPrimary:   "121828",
+        backgroundSecondary: "1A2338",
+        accentColor:         "8CC0FF",
+        glowColor:           "D4B8FF",
+        warmAccent:          "FFC48A",
+        gradientStart:       "8CC0FF",
+        gradientEnd:         "D4B8FF",
+        cardBackground:      "1C2542",
+        cardBorder:          "33436B",
         textPrimary:         "F5F9FF",
-        textSecondary:       "8FA1C0",
+        textSecondary:       "C6D6EF",
         isDark:              true
     )
 
-    /// 暮光星野 · 深色（新海诚式暮蓝 × 落日玫瑰）
-    public static let makoto = AnimeThemeToken(
-        backgroundPrimary:   "0D1526",
-        backgroundSecondary: "16233B",
-        accentColor:         "45B8F8",
-        glowColor:           "F96D9C",
-        warmAccent:          "FFB86B",
-        gradientStart:       "45B8F8",
-        gradientEnd:         "F65678",
-        cardBackground:      "18263F",
-        cardBorder:          "2B3D5E",
-        textPrimary:         "F4F8FF",
-        textSecondary:       "93A7C7",
+    /// 焦糖布丁 · 深色（焦糖琥珀，温柔暖夜）
+    public static let caramelPudding = AnimeThemeToken(
+        backgroundPrimary:   "1E1712",
+        backgroundSecondary: "2A2117",
+        accentColor:         "EFB478",
+        glowColor:           "F7CE9E",
+        warmAccent:          "F0B45C",
+        gradientStart:       "EFB478",
+        gradientEnd:         "D98E5A",
+        cardBackground:      "2C2216",
+        cardBorder:          "4C3A24",
+        textPrimary:         "FFF6EA",
+        textSecondary:       "EFD6B8",
         isDark:              true
     )
 
-    public static let defaultToken: AnimeThemeToken = .kawaiiLight
+    public static let defaultToken: AnimeThemeToken = .strawberryShake
 
-    /// 以 rawValue 字符串取预设（未知名回退默认主题）
-    public static func preset(named raw: String?) -> AnimeThemeToken {
+    /// 旧版主题 rawValue → 新主题兼容映射（老用户存档自动落到最接近的新主题）
+    public static func legacyAlias(named raw: String) -> AnimeThemeToken? {
         switch raw {
-        case "kawaiiLight":  return .kawaiiLight
-        case "kawaii":       return .kawaii
-        case "healing":      return .healing
-        case "minimalLight": return .minimalLight
-        case "minimalDark":  return .minimalDark
-        case "cyber":        return .cyber
-        case "makoto":       return .makoto
-        default:             return .defaultToken
+        case "kawaiiLight":  return .strawberryShake       // 蜜桃兔兔 → 草莓奶昔
+        case "kawaii":       return .strawberryNocturne    // 樱夜粉兔 → 草莓夜曲
+        case "healing":      return .mintMilk              // 抹茶奶盖 → 薄荷奶绿
+        case "minimalLight": return .cloudGummy            // 云石膏 → 云朵软糖
+        case "minimalDark", "cyber", "makoto": return .nebulaMarshmallow // 曜石灰/赛博/暮光 → 星云棉花糖
+        default:             return nil
+        }
+    }
+
+    /// 以 rawValue 字符串取预设（未知名先查旧值兼容映射，再回退默认主题）
+    public static func preset(named raw: String?) -> AnimeThemeToken {
+        guard let raw, !raw.isEmpty else { return .defaultToken }
+        switch raw {
+        case "strawberryShake":     return .strawberryShake
+        case "taroBoba":            return .taroBoba
+        case "cloudGummy":          return .cloudGummy
+        case "peachOolong":         return .peachOolong
+        case "mintMilk":            return .mintMilk
+        case "lemonSoda":           return .lemonSoda
+        case "strawberryNocturne":  return .strawberryNocturne
+        case "taroPlanet":          return .taroPlanet
+        case "nebulaMarshmallow":   return .nebulaMarshmallow
+        case "caramelPudding":      return .caramelPudding
+        default:                    return legacyAlias(named: raw) ?? .defaultToken
         }
     }
 }

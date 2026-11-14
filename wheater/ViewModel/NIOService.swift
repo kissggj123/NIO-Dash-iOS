@@ -298,6 +298,40 @@ final class NIOService: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.updateLiveActivity(force: true)
+                self?.hardRefreshLiveActivityIfStale()
+            }
+        }
+    }
+
+    /// 换壁纸后的硬刷新兜底（等同桌面长按抖动的强制重新归档）：
+    /// LA 是归档快照渲染，activity.update 只是请求重新归档，极少数情况系统不执行
+    /// （扩展进程刚被替换、进程繁忙时）。延迟 4 秒用渲染探针核对：锁屏卡渲染探针
+    /// 写入的 stamp 已追上当前 bgStamp → 软更新归档成功，无需动作；未追上 →
+    /// 结束并重建实时活动，强制系统用当前代码/数据完整重新归档一次。
+    private func hardRefreshLiveActivityIfStale() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            guard let self else { return }
+            let expected = NIOWidgetBackgroundStore.backgroundStamp
+            let probe = NIOWidgetBackgroundStore.lockRenderDebug
+            // 探针行尾必跟 " t="，带空格比对避免 stamp=4 误匹配 stamp=42
+            if let probe, probe.contains("stamp=\(expected) ") { return }
+            appendLog(NIOFetchLogEntry(
+                category: "live_activity", level: "info",
+                message: "换壁纸后实时活动未重新归档，执行硬刷新（结束并重建）",
+                detail: "软更新探针 stamp=\(probe ?? "nil")，期望 stamp=\(expected)",
+                timestamp: Date(), requestURL: nil, requestMethod: nil,
+                requestBody: nil, responsePreview: nil, statusCode: nil
+            ))
+            Task { @MainActor in
+                for activity in Activity<WheaterAttributes>.activities {
+                    await activity.end(dismissalPolicy: .immediate)
+                }
+                self.currentActivity = nil
+                self.lastActivityFingerprint = nil
+                // 稍等系统移除旧活动，再走完整上岛流程重建
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    self?.updateLiveActivity(force: true)
+                }
             }
         }
     }
