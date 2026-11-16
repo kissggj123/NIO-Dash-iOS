@@ -350,6 +350,8 @@ struct NIODatingCompositeSnapshot: Codable, Equatable {
     var xiaRounds: Int?
     /// 综合分趋势序列（v4 新增，optional：旧快照 decode 为 nil，从下次提交开始记录；上限 30 点）
     var overallHistory: [NIODatingHistoryPoint]?
+    /// 生成该快照的算法版本（v5 新增：nil 或 <5 的旧快照会在加载时自动用 v5 口径重算迁移）
+    var algorithmVersion: Int?
 
     var loveType: NIODatingLoveType { NIODatingEngine.loveType(forKey: loveTypeKey) }
     var rank: NIODatingRank { NIODatingEngine.rank(forKey: rankKey) }
@@ -365,12 +367,24 @@ struct NIODatingCompositeSnapshot: Codable, Equatable {
     /// 双方轮次合计（稳定度评估用）
     var combinedRounds: Int { (mikanRounds ?? 0) + (xiaRounds ?? 0) }
 
-    /// 趋势斜率（每轮变化量；不足两期时为 nil）
+    /// 趋势斜率（v5：≥4 期用 Theil–Sen 稳健估计，<4 期首尾简单斜率；不足两期时为 nil）
     var trendPerRound: Double? {
         guard let history = overallHistory, history.count >= 2 else { return nil }
-        let first = history.first!.overall
-        let last = history.last!.overall
-        return (last - first) / Double(history.count - 1)
+        return NIODatingEngine.theilSenSlope(values: history.map { $0.overall })
+    }
+
+    /// Mann–Kendall 趋势显著性 z 分数（≥4 期才有意义；|z|>1.96 ≈ p<0.05）
+    var trendZ: Double? {
+        guard let history = overallHistory, history.count >= 4 else { return nil }
+        return NIODatingEngine.mannKendallZ(values: history.map { $0.overall })
+    }
+
+    /// 连续结论信度百分比（v5）：1 − e^(−n/5)，n 为双方轮次合计
+    /// 指数信度增长曲线 —— 5 轮约 63%、10 轮约 86%、15 轮约 95%，平滑取代离散分级
+    var confidencePercent: Int {
+        let n = Double(combinedRounds)
+        guard n > 0 else { return 0 }
+        return Int(round((1 - exp(-n / 5.0)) * 100))
     }
 }
 
@@ -468,20 +482,7 @@ enum NIODatingEngine {
         (mikanEffective + xiaEffective) / 2
     }
 
-    /// 默契指数：双方各维度评分的平均接近程度（按共有维度键计算，阶段无关）
-    /// 默契指数（v4 非线性）：100 × e^(−Δ/30)，Δ 为双方聚合维度均分的平均绝对差
-    /// 人际感知研究中的距离衰减非线性：小差异几乎无损（Δ=5 仍有 85 分），
-    /// 大差异温和收敛而非线性惩罚（Δ=30 → 37 分），比旧线性更符合感知一致性的实际分布
-    static func harmony(mikanMeans: [String: Double], xiaMeans: [String: Double]) -> Double {
-        var diffs: [Double] = []
-        for (key, mikanValue) in mikanMeans {
-            guard let xiaValue = xiaMeans[key] else { continue }
-            diffs.append(abs(mikanValue - xiaValue))
-        }
-        guard !diffs.isEmpty else { return 0 }
-        let meanDiff = diffs.reduce(0, +) / Double(diffs.count)
-        return max(0, min(100, 100 * exp(-meanDiff / 30.0)))
-    }
+    /// 默契指数（v5 加权非线性）：见下方 weighted 版本，等权旧版已并入
 
     /// 维度聚合分级（0=待培育 1=稳定 2=良好 3=极佳）
     /// 分级量化展示：即使知道自己的原始分，也只能把对方分数反推到一个区间
@@ -693,11 +694,80 @@ enum NIODatingEngine {
         }
     }
 
+    /// 相性评级（v5 带滞后缓冲）：距档位边界 < 1.5 分且与上期不同时沿用上期判定，
+    /// 与爱情类型同一思路 —— 评级在边界上的单轮抖动不构成真实的档位迁移
+    static func rank(for overall: Double, previousKey: String?) -> NIODatingRank {
+        let newRank = rank(for: overall)
+        guard let previousKey,
+              let previous = ranks.first(where: { $0.key == previousKey }),
+              previous.key != newRank.key else { return newRank }
+        let boundaries: [Double] = [50, 60, 70, 80, 90]
+        let margin = boundaries.map { abs(overall - $0) }.min() ?? 99
+        return margin < 1.5 ? previous : newRank
+    }
+
     static func rank(forKey key: String) -> NIODatingRank {
         ranks.first { $0.key == key } ?? ranks[3]
     }
 
-    // MARK: 定制建议（基于最弱聚合维度）
+    // MARK: v5 趋势分析（稳健统计）
+
+    /// Theil–Sen 稳健斜率估计：所有两两配对斜率的中位数（Theil, 1950；Sen, 1968）
+    /// 对单轮离群点完全免疫（中位数分解），是时间序列趋势估计的标准稳健方法；
+    /// 序列 < 4 期时退回首尾简单斜率
+    static func theilSenSlope(values: [Double]) -> Double? {
+        guard values.count >= 2 else { return nil }
+        guard values.count >= 4 else {
+            return (values.last! - values.first!) / Double(values.count - 1)
+        }
+        var slopes: [Double] = []
+        for i in 0..<values.count {
+            for j in (i + 1)..<values.count {
+                slopes.append((values[j] - values[i]) / Double(j - i))
+            }
+        }
+        slopes.sort()
+        let n = slopes.count
+        return n % 2 == 1 ? slopes[n / 2] : (slopes[n / 2 - 1] + slopes[n / 2]) / 2
+    }
+
+    /// Mann–Kendall 趋势显著性检验（Mann, 1945）：z 分数，|z| > 1.96 ≈ p < 0.05
+    /// 用于区分「真实趋势」与「随机波动」——趋势线只有在统计显著时才值得当真
+    static func mannKendallZ(values: [Double]) -> Double {
+        guard values.count >= 4 else { return 0 }
+        var s = 0.0
+        for i in 0..<values.count {
+            for j in (i + 1)..<values.count {
+                if values[j] > values[i] { s += 1 }
+                else if values[j] < values[i] { s -= 1 }
+            }
+        }
+        let n = Double(values.count)
+        let variance = n * (n - 1) * (2 * n + 5) / 18.0
+        guard variance > 0 else { return 0 }
+        if s > 0 { return (s - 1) / variance.squareRoot() }
+        if s < 0 { return (s + 1) / variance.squareRoot() }
+        return 0
+    }
+
+    // MARK: v5 加权默契指数
+
+    /// 加权默契指数：按当前阶段维度权重加权平均感知差，再经指数距离衰减映射
+    /// v4 等权版本的前提是各维度感知错位同等致命；实际核心维度（权重高）的错位
+    /// 对关系感知的影响更大，故 Δ 按权重加权（权重体系沿用综合分同一套）
+    static func harmony(mikanMeans: [String: Double], xiaMeans: [String: Double], stage: NIODatingStage) -> Double {
+        let dims = NIODatingPsychology.dimensions(for: stage)
+        var weightedDiffSum = 0.0
+        var weightSum = 0.0
+        for dim in dims {
+            guard let mikanValue = mikanMeans[dim.key], let xiaValue = xiaMeans[dim.key] else { continue }
+            weightedDiffSum += dim.weight * abs(mikanValue - xiaValue)
+            weightSum += dim.weight
+        }
+        guard weightSum > 0 else { return 0 }
+        let meanDiff = weightedDiffSum / weightSum
+        return max(0, min(100, 100 * exp(-meanDiff / 30.0)))
+    }
 
     static func advice(stage: NIODatingStage, weakestDimensionKey: String?, harmony: Double, balance: Double? = nil) -> String {
         var lines: [String] = []
@@ -807,18 +877,23 @@ enum NIODatingEvidence {
 
     /// 默契指数
     static let harmony = """
-    计算式（v4 非线性）：默契指数 = 100 × e^(−Δ/30)，Δ 为双方六维聚合分的平均绝对差。
+    计算式（v5 加权非线性）：默契指数 = 100 × e^(−Δw/30)，Δw 为双方六维聚合分按阶段权重加权的平均绝对差。
 
-    非线性依据：人际感知一致性呈距离衰减分布 —— 微小感知差异几乎不构成代价（Δ=5 仍有 85 分），而大差异的伤害是边际递减而非线性放大的。旧线性公式对中等差距惩罚过重，v4 指数衰减更贴近共情准确性研究的实际分布（Ickes, 1993）。
+    两层专业依据：
+    ① 加权 —— 核心维度（权重高）的感知错位对关系的影响远大于边缘维度，故感知差按综合分同一套权重加权，而非简单平均；
+    ② 非线性 —— 人际感知一致性呈距离衰减分布：微小感知差异几乎不构成代价（Δ=5 仍有 85 分），大差异的伤害是边际递减而非线性放大的（Ickes, 1993）。
 
-    依据：准确感知伴侣内心状态的能力与关系满意度正相关，长期「感知错位」是关系恶化的早期信号（Ickes, 1993）；Gottman 的「爱情地图」表明幸福伴侣对彼此内心世界保有详细且不断更新的认知（Gottman & Silver, 1999）。
+    依据：共情准确性研究显示，准确感知伴侣内心状态的能力与关系满意度正相关，长期「感知错位」是关系恶化的早期信号；Gottman 的「爱情地图」表明幸福伴侣对彼此内心世界保有详细且不断更新的认知（Gottman & Silver, 1999）。
     """
 
     /// 趋势追踪
     static let trend = """
-    计算方式：每次双方提交后记录一期聚合点（综合分 + 默契指数，仅聚合指标不含任何个人原始分），最新斜率 = （末期综合分 − 首期综合分）÷ 期数，按 ±0.3 / ±0.8 分/轮划分平稳 / 温和 / 显著区间。
+    计算方式（v5 稳健统计）：每次双方提交后记录一期聚合点（综合分 + 默契指数，仅聚合指标不含任何个人原始分），上限 30 期。
 
-    依据：纵向追踪设计（longitudinal design）是关系科学的核心方法 —— 单次横断分数无法区分「波动」与「趋势」，而趋势方向是关系满意度变化最直接的行为指标（Karney & Bradbury, 1995 关系满意度轨迹元分析）。温和回落常是新鲜感消退后的均值回归，不必灾难化解读。
+    ① 斜率估计采用 Theil–Sen 稳健估计（Theil, 1950；Sen, 1968）：所有两两配对斜率取中位数 —— 对单轮情绪化离群点完全免疫，是时间序列趋势估计的标准稳健方法；序列不足 4 期时退回首尾简单斜率。
+    ② 显著性采用 Mann–Kendall 检验（Mann, 1945）：|z| > 1.96 ≈ p < 0.05，用于区分「真实趋势」与「随机波动」—— 不显著的趋势线只是噪声，不值得当真。
+
+    依据：纵向追踪设计是关系科学的核心方法，趋势方向是满意度变化最直接的行为指标（Karney & Bradbury, 1995 元分析）；温和回落常是新鲜感消退后的均值回归，不必灾难化解读。
     """
 
     /// 六维聚合分级
@@ -844,8 +919,10 @@ enum NIODatingEvidence {
 
     /// 结果稳定度
     static let stability = """
-    稳定度由双方累计评分轮次决定：0-1 轮为初测期（噪声大）、2-3 轮校准中、4-7 轮稳定追踪、8 轮以上为高信度追踪。
+    结论信度（v5 连续公式）：信度 % = 1 − e^(−n/5)，n 为双方累计评分轮次合计 —— 5 轮约 63%、10 轮约 86%、15 轮约 95%，指数增长平滑取代离散分级。
 
-    依据：纵向研究优于单次横断测量的方法论原则 —— 轮次越多，EMA 平滑（α=0.6）后的结论越能反映关系的真实轨迹而非一时情绪。
+    稳定度分级仍保留作直观参考：0-1 轮初测期（噪声大）、2-3 轮校准中、4-7 轮稳定追踪、8 轮以上高信度追踪。
+
+    依据：纵向研究优于单次横断测量的方法论原则 —— 信度随测量次数按指数曲线累积（Spearman–Brown 预测公式的一般形式），轮次越多，自适应 EMA 平滑后的结论越能反映关系的真实轨迹而非一时情绪。
     """
 }

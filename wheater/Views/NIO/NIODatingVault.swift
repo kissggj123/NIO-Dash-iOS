@@ -148,6 +148,14 @@ final class NIODatingVault: ObservableObject {
         let vault = loadCompositeVault()
         hasMikanRated = vault?.mikan != nil
         hasXiaRated = vault?.xia != nil
+
+        // v5 实时迁移：已呈现的旧算法快照立即按 v5 口径重算
+        // （加权默契 / 稳健趋势 / 滞后评级 / 连续信度），不追加趋势点保持序列干净；
+        // 双方均已评分时才可重建（缺一方无法聚合）
+        if let old = snapshot, (old.algorithmVersion ?? 0) < 5,
+           (old.mikanRounds ?? 0) > 0, (old.xiaRounds ?? 0) > 0 {
+            rebuildSnapshot(from: vault ?? NIODatingCompositeVault(mikan: nil, xia: nil), appendHistory: false)
+        }
     }
 
     /// 切换关系阶段：两套维度体系不同，切换会清空双方评分（密码保留）
@@ -343,7 +351,10 @@ final class NIODatingVault: ObservableObject {
     }
 
     /// 依据聚合金库重算快照（聚合口径，无个人明细泄露）
-    private func rebuildSnapshot(from compositeVault: NIODatingCompositeVault) {
+    /// 重建聚合快照（v5 口径）
+    /// - Parameter appendHistory: 是否向趋势序列追加本期聚合点；
+    ///   常规提交为 true；旧算法快照迁移重算时为 false（保持序列干净，序列为空时注入基线点）
+    private func rebuildSnapshot(from compositeVault: NIODatingCompositeVault, appendHistory: Bool = true) {
         guard let mikan = compositeVault.mikan, let xia = compositeVault.xia else {
             snapshot = nil
             hasMikanRated = compositeVault.mikan != nil
@@ -352,11 +363,10 @@ final class NIODatingVault: ObservableObject {
             return
         }
 
-        let overall = NIODatingEngine.compositeOverall(mikanEffective: mikan.effective, xiaEffective: xia.effective)
-        let harmony = NIODatingEngine.harmony(mikanMeans: mikan.means, xiaMeans: xia.means)
-
-        // 聚合维度均分（仅用于类型判定与分级展示，按当前关系阶段的维度体系）
         let currentStage = stage
+        let overall = NIODatingEngine.compositeOverall(mikanEffective: mikan.effective, xiaEffective: xia.effective)
+        // v5 加权默契：感知差按阶段维度权重加权，再经指数距离衰减映射
+        let harmony = NIODatingEngine.harmony(mikanMeans: mikan.means, xiaMeans: xia.means, stage: currentStage)
         var compositeMeans: [String: Double] = [:]
         var bands: [String: Int] = [:]
         var weakestKey: String?
@@ -379,13 +389,16 @@ final class NIODatingVault: ObservableObject {
             compositeMeans: compositeMeans,
             previousTypeKey: snapshot?.loveTypeKey
         )
-        let rank = NIODatingEngine.rank(for: overall)
+        let rank = NIODatingEngine.rank(for: overall, previousKey: snapshot?.rankKey)
         let balance = NIODatingEngine.balanceScore(compositeMeans: compositeMeans)
 
-        // v4 趋势序列：追加本期聚合点（仅综合分与默契指数，不含个人原始分），上限 30 点
+        // v4/v5 趋势序列：常规提交追加本期聚合点（仅综合分与默契指数，不含个人原始分），上限 30 点；
+        // 迁移重算（appendHistory=false）保持现有序列不动，序列为空时注入基线点
         let newHistory: [NIODatingHistoryPoint] = {
             var history = snapshot?.overallHistory ?? []
-            history.append(NIODatingHistoryPoint(date: Date(), overall: overall, harmony: harmony))
+            if appendHistory || history.isEmpty {
+                history.append(NIODatingHistoryPoint(date: Date(), overall: overall, harmony: harmony))
+            }
             if history.count > 30 {
                 history.removeFirst(history.count - 30)
             }
@@ -407,6 +420,7 @@ final class NIODatingVault: ObservableObject {
             mikanRounds: mikan.rounds,
             xiaRounds: xia.rounds,
             overallHistory: newHistory,
+            algorithmVersion: 5,
             stageKey: currentStage.rawValue
         )
 

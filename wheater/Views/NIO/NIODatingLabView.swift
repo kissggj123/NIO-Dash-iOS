@@ -1728,7 +1728,7 @@ struct NIODatingCompositeCardView: View {
             HStack(spacing: 5) {
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 10, weight: .bold))
-                Text(stability.label)
+                Text("\(stability.label) · 信度 \(snapshot.confidencePercent)%")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
             }
             .foregroundStyle(mintCyan)
@@ -1946,19 +1946,25 @@ struct NIODatingCompositeCardView: View {
         }
     }
 
-    /// 趋势解读文案
+    /// 趋势解读文案（v5：斜率为 Theil–Sen 稳健估计，≥4 期附 Mann–Kendall 显著性）
     private var trendCaption: String {
         let count = snapshot.overallHistory?.count ?? 0
         guard let slope = snapshot.trendPerRound else { return "" }
+        var significance = ""
+        if let z = snapshot.trendZ {
+            significance = abs(z) >= 1.96
+                ? "（Mann–Kendall 检验 |z|=\(String(format: "%.2f", abs(z)))，趋势统计显著 p<0.05）"
+                : "（Mann–Kendall 检验 |z|=\(String(format: "%.2f", abs(z)))，尚未达到统计显著，先别急着当真）"
+        }
         switch slope {
         case 0.8...:
-            return "近 \(count) 期稳定上升（每轮 \(String(format: "%+.1f", slope)) 分）—— 关系处于明显的升温通道，继续保持当前的相处节奏。"
+            return "近 \(count) 期稳定上升（Theil–Sen 稳健斜率 \(String(format: "%+.1f", slope))/轮）\(significance) —— 关系处于明显的升温通道，继续保持当前的相处节奏。"
         case 0.3..<0.8:
-            return "近 \(count) 期温和上行（每轮 \(String(format: "%+.1f", slope)) 分）—— 温水式的渐进升温是长期关系最健康的形态。"
+            return "近 \(count) 期温和上行（Theil–Sen 稳健斜率 \(String(format: "%+.1f", slope))/轮）\(significance) —— 温水式的渐进升温是长期关系最健康的形态。"
         case -0.3..<0.3:
-            return "近 \(count) 期保持平稳（每轮 \(String(format: "%+.1f", slope)) 分）—— 平稳期不代表停滞，是关系进入安全依恋的常见形态。"
+            return "近 \(count) 期保持平稳（Theil–Sen 稳健斜率 \(String(format: "%+.1f", slope))/轮）\(significance) —— 平稳期不代表停滞，是关系进入安全依恋的常见形态。"
         default:
-            return "近 \(count) 期温和回落（每轮 \(String(format: "%+.1f", slope)) 分）—— 别慌，这常是新鲜感自然消退后的均值回归，参考经营建议主动创造新体验。"
+            return "近 \(count) 期温和回落（Theil–Sen 稳健斜率 \(String(format: "%+.1f", slope))/轮）\(significance) —— 别慌，这常是新鲜感自然消退后的均值回归，参考经营建议主动创造新体验。"
         }
     }
 
