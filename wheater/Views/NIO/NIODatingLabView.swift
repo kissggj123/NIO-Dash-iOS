@@ -174,13 +174,31 @@ struct NIODatingLabView: View {
 
     private var introSection: some View {
         VStack(spacing: 16) {
-            TabView(selection: $introPage) {
-                introWelcomePage.tag(0)
-                introRulesPage.tag(1)
-                introPrivacyPage.tag(2)
+            // 固定翻页容器：高度取最高一页，切换时布局稳定不跳动；无滚动，自适应内容
+            ZStack {
+                switch introPage {
+                case 0: introWelcomePage.transition(introPageTransition)
+                case 1: introRulesPage.transition(introPageTransition)
+                default: introPrivacyPage.transition(introPageTransition)
+                }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(minHeight: 460)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 28)
+                    .onEnded { value in
+                        let horizontal = value.translation.width
+                        let vertical = abs(value.translation.height)
+                        guard abs(horizontal) > vertical else { return }
+                        withAnimation(NIOThemeMotion.themeSpring) {
+                            if horizontal < 0, introPage < 2 {
+                                introPage += 1
+                            } else if horizontal > 0, introPage > 0 {
+                                introPage -= 1
+                            }
+                        }
+                    }
+            )
 
             // 页点指示器
             HStack(spacing: 8) {
@@ -196,7 +214,7 @@ struct NIODatingLabView: View {
                 let impact = UIImpactFeedbackGenerator(style: .medium)
                 impact.impactOccurred()
                 if introPage < 2 {
-                    withAnimation(NIOThemeMotion.easeSmooth) { introPage += 1 }
+                    withAnimation(NIOThemeMotion.themeSpring) { introPage += 1 }
                 } else {
                     startSetupFlow()
                 }
@@ -214,6 +232,14 @@ struct NIODatingLabView: View {
             .buttonStyle(NIOPressableButtonStyle())
             .padding(.top, 2)
         }
+    }
+
+    /// 翻页过渡：旧页左移淡出、新页右侧微缩进入
+    private var introPageTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.94)),
+            removal: .move(edge: .leading).combined(with: .opacity)
+        )
     }
 
     /// 跳过引导直接进入设置（断点续设：优先未配置密码的一方）
@@ -332,55 +358,51 @@ struct NIODatingLabView: View {
     }
 
     private var introRulesPage: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 12) {
-                Text("🎮 怎么玩")
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.text)
-                    .padding(.top, 12)
+        VStack(spacing: 12) {
+            Text("🎮 怎么玩")
+                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .foregroundStyle(NIOThemePaint.text)
+                .padding(.top, 10)
 
-                ruleCard(
-                    number: "01", icon: "🔐", title: "第一步 · 双人密码",
-                    text: "各自设置一个 6 位专属密码。轮到你评分时输入自己的密码解锁专属评分台 —— 同一台手机上，谁的分数谁做主。"
-                )
-                ruleCard(
-                    number: "02", icon: "🖊", title: "第二步 · 盲评对方",
-                    text: "对六项心理学维度打分（0-100 滑条），还可以写下仅心理引擎可见的心动留言。支持无限次重写，每次提交即连载新的一章。"
-                )
-                ruleCard(
-                    number: "03", icon: "✨", title: "第三步 · 解封结论",
-                    text: "双方各完成一轮评分后自动解封：综合好感度、心动火花等级（初识）或爱情类型（稳定期）、默契指数与相性评级 —— 只见结论，不见彼此的原始分。"
-                )
-            }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 16)
+            ruleCard(
+                number: "01", icon: "🔐", title: "第一步 · 双人密码",
+                text: "各自设置一个 6 位专属密码。轮到你评分时输入自己的密码解锁专属评分台 —— 同一台手机上，谁的分数谁做主。"
+            )
+            ruleCard(
+                number: "02", icon: "🖊", title: "第二步 · 盲评对方",
+                text: "对六项心理学维度打分（0-100 滑条），还可以写下仅心理引擎可见的心动留言。支持无限次重写，每次提交即连载新的一章。"
+            )
+            ruleCard(
+                number: "03", icon: "✨", title: "第三步 · 解封结论",
+                text: "双方各完成一轮评分后自动解封：综合好感度、心动火花等级（初识）或爱情类型（稳定期）、默契指数与相性评级 —— 只见结论，不见彼此的原始分。"
+            )
         }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 10)
     }
 
     private var introPrivacyPage: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 12) {
-                Text("🛡 隐私与专业性")
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.text)
-                    .padding(.top, 12)
+        VStack(spacing: 12) {
+            Text("🛡 隐私与专业性")
+                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .foregroundStyle(NIOThemePaint.text)
+                .padding(.top, 10)
 
-                ruleCard(
-                    icon: "🙈", title: "军事级加密",
-                    text: "你对 TA 打的每一项原始分与心动留言，都以 AES-256-GCM 认证加密存储，密钥由你的密码经 2 万轮拉伸派生 —— 没有你的密码，任何人都无法解密（包括 TA）。"
-                )
-                ruleCard(
-                    icon: "🧠", title: "循证心理学引擎",
-                    text: "初识心动期采用人际吸引研究维度（Aron 亲近感实验、Byrne 相似-吸引效应）；深度关系期采用 Sternberg 爱情三角 + Gottman 婚姻研究 + 依恋理论。留言情绪由 Apple NaturalLanguage 端内模型实时演算，零上传。"
-                )
-                ruleCard(
-                    icon: "📐", title: "每一项数据都有依据",
-                    text: "看板上综合分、评级、默契指数等每一项数据都附带可展开的「📐 依据」，写明计算式与文献出处；多轮评分按指数平滑聚合，越评越准。"
-                )
-            }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 16)
+            ruleCard(
+                icon: "🙈", title: "军事级加密",
+                text: "原始分与心动留言以 AES-256-GCM 认证加密存储，密钥由你的密码经 2 万轮拉伸派生 —— 没有你的密码，任何人都无法解密（包括 TA）。"
+            )
+            ruleCard(
+                icon: "🧠", title: "循证心理学引擎",
+                text: "初识心动期采用人际吸引研究维度（Aron / Byrne）；深度关系期采用 Sternberg 三角 + Gottman + 依恋理论。留言情绪由 NaturalLanguage 端内模型实时演算，零上传。"
+            )
+            ruleCard(
+                icon: "📐", title: "每一项数据都有依据",
+                text: "看板每项数据都附带「📐 依据」展开：计算式 + 文献出处；多轮评分按指数平滑聚合，越评越准。"
+            )
         }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 10)
     }
 
     private func ruleCard(number: String? = nil, icon: String, title: String, text: String) -> some View {
@@ -1638,33 +1660,31 @@ struct NIODatingCompositeCardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(NIOPressableButtonStyle())
-            .sheet(isPresented: $showShareSheet) {
-                if let image = renderedShareImage {
-                    VStack(spacing: 16) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 420)
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-                            .shadow(color: .black.opacity(0.15), radius: 12)
-                        ShareLink(
-                            item: Image(uiImage: image),
-                            preview: SharePreview("恋爱好感度实验室 · 结论卡", image: Image(uiImage: image))
-                        ) {
-                            Label("保存 / 分享", systemImage: "square.and.arrow.up")
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 13)
-                                .background(sakuraPink)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                        }
-                        .padding(.horizontal, 8)
+            .sheet(item: $shareItem) { item in
+                VStack(spacing: 16) {
+                    Image(uiImage: item.image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 420)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .shadow(color: .black.opacity(0.15), radius: 12)
+                    ShareLink(
+                        item: Image(uiImage: item.image),
+                        preview: SharePreview("恋爱好感度实验室 · 结论卡", image: Image(uiImage: item.image))
+                    ) {
+                        Label("保存 / 分享", systemImage: "square.and.arrow.up")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(sakuraPink)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
-                    .padding(20)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                    .padding(.horizontal, 8)
                 }
+                .padding(20)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
         .padding(14)
@@ -1997,114 +2017,171 @@ struct NIODatingCompositeCardView: View {
 
     // MARK: 分享结论卡
 
-    @State private var renderedShareImage: UIImage?
-    @State private var showShareSheet = false
+    /// item-based sheet：内容闭包直接接收渲染结果，避免首次呈现时 state 未就绪的白屏
+    private struct ShareImageItem: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
+
+    @State private var shareItem: ShareImageItem?
 
     /// 将看板结论渲染为可分享的图片卡（仅聚合信息，不含个人原始分）
     private func renderShareImage() {
         let renderer = ImageRenderer(content: NIODatingShareCardView(snapshot: snapshot))
         renderer.scale = 3
-        renderedShareImage = renderer.uiImage
-        if renderedShareImage != nil {
-            showShareSheet = true
-        }
+        guard let image = renderer.uiImage else { return }
+        shareItem = ShareImageItem(image: image)
     }
 }
 
-// MARK: - 可分享结论卡（固定浅色设计，渲染为图片）
+// MARK: - 可分享结论卡（小册子风：暖粉纸底 + 白卡分区，固定配色渲染为图片）
 
 struct NIODatingShareCardView: View {
     let snapshot: NIODatingCompositeSnapshot
 
+    // 小册子固定配色（不随主题，保证渲染结果稳定）
+    private let paper = Color(red: 0.996, green: 0.941, blue: 0.929)      // 暖粉纸底
+    private let ink = Color(red: 0.23, green: 0.20, blue: 0.21)           // 墨色正文
+    private let rose = Color(red: 0.906, green: 0.302, blue: 0.478)       // 玫红强调
+    private let periwinkle = Color(red: 0.58, green: 0.64, blue: 0.90)    // 雾蓝点缀
+
     var body: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("💞 恋爱好感度实验室")
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    Text(snapshot.stage.displayName)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .opacity(0.85)
-                }
-                .foregroundStyle(.white)
-                Spacer()
-                Text(snapshot.generatedAt.formatted(.dateTime.year().month().day()))
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.8))
+        VStack(spacing: 14) {
+            // 顶部胶囊标题条
+            HStack(spacing: 6) {
+                Text("✨").font(.system(size: 11))
+                Text("恋爱好感度实验室 · 心动档案")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .foregroundStyle(rose)
+                Text("💞").font(.system(size: 11))
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Color.white))
+            .overlay(Capsule().stroke(rose.opacity(0.22), lineWidth: 1))
+            .shadow(color: rose.opacity(0.12), radius: 8, y: 3)
 
-            HStack(spacing: 24) {
-                VStack(spacing: 2) {
-                    Text("\(Int(snapshot.overall))")
-                        .font(.system(size: 44, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                    Text("综合好感度")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .opacity(0.85)
+            // 品牌区白卡：双头像 + 字标 + 日期徽章
+            VStack(spacing: 8) {
+                HStack(spacing: -12) {
+                    avatarBadge(emoji: "🍊", tint: rose)
+                    avatarBadge(emoji: "🫧", tint: periwinkle)
                 }
-                .foregroundStyle(.white)
+                Text("心动档案")
+                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .foregroundStyle(ink)
+                Text("蜜柑 × 夏老师 · \(snapshot.stage.displayName)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(ink.opacity(0.55))
+                Text(snapshot.generatedAt.formatted(.dateTime.year().month().day()))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(rose)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(paper))
+            }
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
+            .background(bookCard)
+            .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
 
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(.white.opacity(0.35))
-                    .frame(width: 1, height: 54)
+            // 结论主卡
+            VStack(spacing: 6) {
+                Text("综合好感度")
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .foregroundStyle(ink.opacity(0.55))
+                Text("\(Int(snapshot.overall))")
+                    .font(.system(size: 46, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(rose)
+                    .shadow(color: rose.opacity(0.22), radius: 10)
 
-                VStack(spacing: 4) {
+                Group {
                     if let spark = snapshot.sparkLevel {
                         Text("\(spark.emoji) \(spark.title)")
-                            .font(.system(size: 16, weight: .heavy, design: .rounded))
+                            .font(.system(size: 15, weight: .heavy, design: .rounded))
+                            .foregroundStyle(ink)
                         Text("心动火花")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .opacity(0.85)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(ink.opacity(0.5))
                     } else {
                         Text("\(snapshot.loveType.emoji) \(snapshot.loveType.title)")
-                            .font(.system(size: 16, weight: .heavy, design: .rounded))
+                            .font(.system(size: 15, weight: .heavy, design: .rounded))
+                            .foregroundStyle(ink)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
                         Text("Sternberg 爱情类型")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .opacity(0.85)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(ink.opacity(0.5))
                     }
                 }
-                .foregroundStyle(.white)
+                .padding(.top, 4)
+
+                Rectangle()
+                    .fill(ink.opacity(0.08))
+                    .frame(height: 1)
+                    .padding(.vertical, 4)
+
+                HStack(spacing: 8) {
+                    statPill(text: "🤝 默契 \(Int(snapshot.harmony))", tint: periwinkle)
+                    statPill(text: "\(snapshot.rank.emoji) \(snapshot.rank.title)", tint: rose)
+                }
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
             .frame(maxWidth: .infinity)
+            .background(bookCard)
+            .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
 
-            HStack(spacing: 10) {
-                shareBadge(text: "🤝 默契 \(Int(snapshot.harmony))")
-                shareBadge(text: "\(snapshot.rank.emoji) \(snapshot.rank.title)")
-            }
-
-            Text("蜜柑 🍊 × 夏老师 🫧 · 循证心理学引擎 · 只见结论不见原始分")
+            // 底部 footer 胶囊
+            Text("Made with 💞 · 循证心理学引擎 · 只见结论不见原始分")
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(ink.opacity(0.5))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.white.opacity(0.85)))
         }
-        .padding(22)
+        .padding(18)
         .frame(width: 340)
         .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 1.0, green: 0.55, blue: 0.64),
-                    Color(red: 0.64, green: 0.5, blue: 0.96)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            RoundedRectangle(cornerRadius: 26)
+                .fill(paper)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 26))
         .overlay(
             RoundedRectangle(cornerRadius: 26)
-                .stroke(.white.opacity(0.35), lineWidth: 1.5)
+                .stroke(Color.white, lineWidth: 3)
         )
+        .shadow(color: ink.opacity(0.14), radius: 18, y: 8)
     }
 
-    private func shareBadge(text: String) -> some View {
+    /// 叠放头像圆徽章
+    private func avatarBadge(emoji: String, tint: Color) -> some View {
+        Text(emoji)
+            .font(.system(size: 26))
+            .frame(width: 46, height: 46)
+            .background(Circle().fill(Color.white))
+            .overlay(Circle().stroke(tint.opacity(0.45), lineWidth: 2))
+            .shadow(color: ink.opacity(0.08), radius: 5, y: 2)
+    }
+
+    private func statPill(text: String, tint: Color) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
+            .foregroundStyle(tint)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(.white.opacity(0.18))
-            .clipShape(Capsule())
+            .background(Capsule().fill(tint.opacity(0.1)))
+            .overlay(Capsule().stroke(tint.opacity(0.3), lineWidth: 1))
+    }
+
+    /// 白色册页卡片
+    private var bookCard: some View {
+        RoundedRectangle(cornerRadius: 18)
+            .fill(Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(ink.opacity(0.05), lineWidth: 1)
+            )
     }
 }
 

@@ -38,8 +38,13 @@ struct IOSAboutView: View {
     @State private var showReleaseNotesSheet = false
     @State private var showDatingLab = false
 
-    @State private var aboutShareImage: UIImage?
-    @State private var showAboutShareSheet = false
+    /// item-based sheet：内容闭包直接接收渲染结果，避免首次呈现时 state 未就绪的白屏
+    private struct AboutShareImageItem: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
+
+    @State private var aboutShareItem: AboutShareImageItem?
 
     /// 渲染关于页分享长图（品牌头部 + 全量版本日志 + 署名）
     /// 全量版本日志高度可达数千 pt，2.5 倍缩放下位图高度会超过 GPU 单张纹理上限（约 8192px），
@@ -58,10 +63,8 @@ struct IOSAboutView: View {
             // 测量失败时退回一次性渲染（兜底）
             let renderer = ImageRenderer(content: content)
             renderer.scale = 2.5
-            aboutShareImage = renderer.uiImage
-            if aboutShareImage != nil {
-                showAboutShareSheet = true
-            }
+            guard let image = renderer.uiImage else { return }
+            aboutShareItem = AboutShareImageItem(image: image)
             return
         }
 
@@ -106,10 +109,7 @@ struct IOSAboutView: View {
         }
 
         guard let stitched = canvas.makeImage() else { return }
-        aboutShareImage = UIImage(cgImage: stitched)
-        if aboutShareImage != nil {
-            showAboutShareSheet = true
-        }
+        aboutShareItem = AboutShareImageItem(image: UIImage(cgImage: stitched))
     }
 
     var body: some View {
@@ -171,37 +171,35 @@ struct IOSAboutView: View {
                     .accessibilityLabel("分享长图")
                 }
             }
-            .sheet(isPresented: $showAboutShareSheet) {
-                if let image = aboutShareImage {
-                    VStack(spacing: 16) {
-                        Text("关于页长图已生成")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(NIOThemePaint.text)
-                        ScrollView(showsIndicators: true) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .shadow(color: .black.opacity(0.12), radius: 10)
-                                .padding(.horizontal, 4)
-                        }
-                        ShareLink(
-                            item: Image(uiImage: image),
-                            preview: SharePreview("YumikoToysRR · 关于长图", image: Image(uiImage: image))
-                        ) {
-                            Label("保存 / 分享长图", systemImage: "square.and.arrow.up")
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 13)
-                                .background(sakuraPink)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                        }
+            .sheet(item: $aboutShareItem) { item in
+                VStack(spacing: 16) {
+                    Text("关于页长图已生成")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text)
+                    ScrollView(showsIndicators: true) {
+                        Image(uiImage: item.image)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: .black.opacity(0.12), radius: 10)
+                            .padding(.horizontal, 4)
                     }
-                    .padding(20)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                    ShareLink(
+                        item: Image(uiImage: item.image),
+                        preview: SharePreview("YumikoToysRR · 关于长图", image: Image(uiImage: item.image))
+                    ) {
+                        Label("保存 / 分享长图", systemImage: "square.and.arrow.up")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(sakuraPink)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
                 }
+                .padding(20)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
@@ -676,68 +674,107 @@ struct IOSAboutView: View {
 
 // MARK: - 独立更新日志视图 (Release Notes)
 
-// MARK: - 关于页分享长图
+// MARK: - 关于页分享长图（小册子风：暖粉纸底 + 白卡分区）
 
 /// 将关于页核心内容（品牌头部 + 全量版本日志 + 署名）渲染为一张可分享长图
 struct NIOAboutLongShareView: View {
     @ObservedObject private var themeService = AnimeThemeService.shared
 
     private var sakuraPink: Color { themeService.accentColor() }
-    private var lavenderDream: Color { Color(hex: themeService.currentToken.gradientEnd) }
+
+    // 小册子固定配色（容器固定，日志区跟随当前主题保证可读）
+    private let paper = Color(red: 0.996, green: 0.941, blue: 0.929)      // 暖粉纸底
+    private let ink = Color(red: 0.23, green: 0.20, blue: 0.21)           // 墨色正文
+    private let rose = Color(red: 0.906, green: 0.302, blue: 0.478)       // 玫红强调
 
     var body: some View {
-        VStack(spacing: 22) {
-            // 品牌头部
-            VStack(spacing: 10) {
-                Text("💞")
-                    .font(.system(size: 58))
-                Text("YumikoToysRR")
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
-                    )
-                Text("蔚来车况 · 萌系伴侣 App")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(sakuraPink)
-                Text("版本更新全记录 · v4.6.5 → v5.3.0")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+        VStack(spacing: 16) {
+            // 顶部胶囊标题条
+            HStack(spacing: 6) {
+                Text("✨").font(.system(size: 12))
+                Text("YumikoToysRR · 版本更新全记录")
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .foregroundStyle(rose)
+                Text("✨").font(.system(size: 12))
             }
-            .padding(.vertical, 30)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(NIOThemePaint.fill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(
-                                LinearGradient(colors: [sakuraPink.opacity(0.5), lavenderDream.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                lineWidth: 1.5
-                            )
-                    )
-            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Color.white))
+            .overlay(Capsule().stroke(rose.opacity(0.22), lineWidth: 1))
+            .shadow(color: rose.opacity(0.12), radius: 8, y: 3)
 
-            // 全量版本日志（复用更新日志页内容）
+            // 品牌区白卡
+            VStack(spacing: 8) {
+                Text("💞")
+                    .font(.system(size: 54))
+                    .shadow(color: rose.opacity(0.22), radius: 10)
+                Text("YumikoToysRR")
+                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .foregroundStyle(ink)
+                Text("蔚来车况 · 萌系伴侣 App")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(rose)
+                Text("v4.6.5 → v5.3.0")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(ink.opacity(0.6))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(paper))
+                    .overlay(Capsule().stroke(rose.opacity(0.2), lineWidth: 1))
+            }
+            .padding(.vertical, 22)
+            .frame(maxWidth: .infinity)
+            .background(bookCard)
+            .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
+
+            // 全量版本日志（复用更新日志页内容，跟随主题保证可读）
             IOSReleaseNotesView().releaseNotesContent
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NIOThemePaint.fill)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .background(
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(NIOThemePaint.fill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(rose.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
 
-            // 底部署名
-            VStack(spacing: 4) {
-                Text("YumikoToysRR · 持续更新中")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.text.opacity(0.8))
+            // 底部 footer 胶囊
+            VStack(spacing: 6) {
+                Text("Made with 💞 · YumikoToysRR · 持续更新中")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(ink.opacity(0.7))
                 Text("生成于 \(Date().formatted(.dateTime.year().month().day()))")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(ink.opacity(0.45))
             }
-            .padding(.top, 4)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Color.white.opacity(0.9)))
         }
-        .padding(26)
+        .padding(20)
         .frame(width: 420)
-        .background(themeService.backgroundPrimary())
+        .background(
+            RoundedRectangle(cornerRadius: 26)
+                .fill(paper)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26)
+                .stroke(Color.white, lineWidth: 3)
+        )
+        .shadow(color: ink.opacity(0.14), radius: 18, y: 8)
+    }
+
+    /// 白色册页卡片
+    private var bookCard: some View {
+        RoundedRectangle(cornerRadius: 18)
+            .fill(Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(ink.opacity(0.05), lineWidth: 1)
+            )
     }
 }
 
