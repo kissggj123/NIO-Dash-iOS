@@ -249,6 +249,8 @@ struct IOSAboutView: View {
             }
             .sheet(isPresented: $showDatingLab) {
                 NIODatingLabView()
+                    // 实验室含评分与看板流程，禁用下滑误关，走左上角"关闭"按钮退出
+                    .interactiveDismissDisabled(true)
             }
         }
     }

@@ -221,7 +221,7 @@ final class NIODatingVault: ObservableObject {
     func verifyPassword(_ code: String, for member: NIODatingMember, registerFailure: Bool) -> Bool {
         guard let verifier = loadVerifier(for: member) else { return false }
 
-        let stretched = NIODatingCrypto.stretch(password: code, salt: verifier.stretchSalt)
+        let stretched = Self.stretchedKey(password: code, salt: verifier.stretchSalt)
         let digest = NIODatingCrypto.checkDigest(stretched: stretched, checkSalt: verifier.checkSalt)
         let ok = digest == verifier.digest
 
@@ -239,6 +239,111 @@ final class NIODatingVault: ObservableObject {
         return ok
     }
 
+    /// 后台执行密码验证（异步包装）
+    /// 2 万轮 SHA256 拉伸属百毫秒级 CPU 密集操作，主线程同步执行会让
+    /// 第 6 位按下后的圆点动画与键盘瞬时冻结（输入"滞后感"）——
+    /// MainActor 先取 Keychain 验证器（微秒级），拉伸与比对放入后台纯函数，
+    /// 完成后回主线程登记成败并回调
+    func verifyPasswordAsync(
+        _ code: String,
+        for member: NIODatingMember,
+        registerFailure: Bool,
+        completion: @escaping @MainActor (Bool) -> Void
+    ) {
+        let verifier = loadVerifier(for: member)
+        Task.detached(priority: .userInitiated) {
+            let ok = verifier.map { Self.verifyDigest(code, verifier: $0) } ?? false
+            await MainActor.run {
+                Self.shared.finishVerification(ok, for: member, registerFailure: registerFailure)
+                completion(ok)
+            }
+        }
+    }
+
+    /// 后台执行密码设置（异步包装，理由同上）
+    func configurePasswordAsync(
+        _ code: String,
+        for member: NIODatingMember,
+        completion: @escaping @MainActor (Bool) -> Void
+    ) {
+        guard loadVerifier(for: member) == nil else {
+            completion(false)
+            return
+        }
+        Task.detached(priority: .userInitiated) {
+            let verifier = Self.buildVerifier(for: code)
+            await MainActor.run {
+                completion(Self.shared.storeVerifier(verifier, for: member))
+            }
+        }
+    }
+
+    /// 后台执行评分解封（异步包装）：拉伸在后台完成，解封本身毫秒级
+    func loadScoresAsync(
+        for member: NIODatingMember,
+        code: String,
+        completion: @escaping @MainActor (NIODatingScores?) -> Void
+    ) {
+        let verifier = loadVerifier(for: member)
+        let sealedBase64 = defaults.string(forKey: StoreKey.sealedScores(member))
+        Task.detached(priority: .userInitiated) {
+            var scores: NIODatingScores?
+            if let verifier, let sealedBase64,
+               let sealed = Data(base64Encoded: sealedBase64) {
+                let key = Self.stretchedKey(password: code, salt: verifier.stretchSalt)
+                if let plain = NIODatingCrypto.open(sealed: sealed, using: key) {
+                    scores = try? JSONDecoder().decode(NIODatingScores.self, from: plain)
+                }
+            }
+            await MainActor.run { completion(scores) }
+        }
+    }
+
+    // MARK: 纯 CPU 密码学操作（nonisolated：可在后台线程直接执行，不触碰任何共享状态）
+
+    /// 拉伸 + 摘要比对（纯函数：2 万轮 SHA256，经会话缓存复用）
+    nonisolated static func verifyDigest(_ code: String, verifier: NIODatingPasswordVerifier) -> Bool {
+        let stretched = stretchedKey(password: code, salt: verifier.stretchSalt)
+        let digest = NIODatingCrypto.checkDigest(stretched: stretched, checkSalt: verifier.checkSalt)
+        return digest == verifier.digest
+    }
+
+    /// 构建新验证器（纯函数：随机盐 + 2 万轮拉伸）
+    nonisolated static func buildVerifier(for code: String) -> NIODatingPasswordVerifier? {
+        guard code.count == 6, code.allSatisfy({ $0.isNumber }) else { return nil }
+        let stretchSalt = NIODatingCrypto.randomBytes(16)
+        let checkSalt = NIODatingCrypto.randomBytes(16)
+        let stretched = NIODatingCrypto.stretch(password: code, salt: stretchSalt)
+        let digest = NIODatingCrypto.checkDigest(stretched: stretched, checkSalt: checkSalt)
+        return NIODatingPasswordVerifier(stretchSalt: stretchSalt, checkSalt: checkSalt, digest: digest)
+    }
+
+    /// 验证成败登记（MainActor：失败计数 / 冷却写入）
+    @MainActor
+    private func finishVerification(_ ok: Bool, for member: NIODatingMember, registerFailure: Bool) {
+        if ok {
+            clearFailures(for: member)
+        } else if registerFailure {
+            let key = StoreKey.failedCount(member)
+            let fails = defaults.integer(forKey: key) + 1
+            defaults.set(fails, forKey: key)
+            if let rule = Self.lockoutSchedule.last(where: { fails >= $0.fails }) {
+                let until = Date().timeIntervalSince1970 + rule.seconds
+                defaults.set(until, forKey: StoreKey.lockUntil(member))
+            }
+        }
+    }
+
+    /// 验证器落盘（MainActor）
+    @MainActor
+    private func storeVerifier(_ verifier: NIODatingPasswordVerifier?, for member: NIODatingMember) -> Bool {
+        guard let verifier, let data = try? JSONEncoder().encode(verifier) else { return false }
+        defaults.set(data, forKey: StoreKey.verifier(member))
+        clearFailures(for: member)
+        isConfigured = loadVerifier(for: .mikan) != nil && loadVerifier(for: .xia) != nil
+        return true
+    }
+
     private func clearFailures(for member: NIODatingMember) {
         defaults.removeObject(forKey: StoreKey.failedCount(member))
         defaults.removeObject(forKey: StoreKey.lockUntil(member))
@@ -249,7 +354,7 @@ final class NIODatingVault: ObservableObject {
     /// 用密码解封本人上次的评分（含留言）。密码错误或无记录返回 nil。
     func loadScores(for member: NIODatingMember, code: String) -> NIODatingScores? {
         guard let verifier = loadVerifier(for: member) else { return nil }
-        let key = NIODatingCrypto.stretch(password: code, salt: verifier.stretchSalt)
+        let key = Self.stretchedKey(password: code, salt: verifier.stretchSalt)
         guard let sealedBase64 = defaults.string(forKey: StoreKey.sealedScores(member)),
               let sealed = Data(base64Encoded: sealedBase64),
               let plain = NIODatingCrypto.open(sealed: sealed, using: key) else { return nil }
@@ -295,7 +400,11 @@ final class NIODatingVault: ObservableObject {
                     lowVariability: lowVariability
                 )
             } else {
-                smoothedMeans[dim.key] = newValue
+                // v5.1 首测先验收缩（shrinkage toward the prior）：
+                // 聚合起点 = 0.8 × 本轮 + 0.2 × 中性先验 70 分
+                // 首测均值回归（regression to the mean）—— 单轮的极端印象（光环效应或首因晕轮）
+                // 不应直接成为长期聚合的锚点，第二轮起由自适应 EMA 接管
+                smoothedMeans[dim.key] = newValue * 0.8 + 70.0 * 0.2
             }
         }
 
@@ -311,7 +420,7 @@ final class NIODatingVault: ObservableObject {
             lastSubmitOutcome = .storageFailure
             return .storageFailure
         }
-        let key = NIODatingCrypto.stretch(password: code, salt: verifier.stretchSalt)
+        let key = Self.stretchedKey(password: code, salt: verifier.stretchSalt)
         guard let plain = try? JSONEncoder().encode(scores),
               let sealed = NIODatingCrypto.seal(plain, using: key) else {
             lastSubmitOutcome = .storageFailure
@@ -390,6 +499,8 @@ final class NIODatingVault: ObservableObject {
             previousTypeKey: snapshot?.loveTypeKey
         )
         let rank = NIODatingEngine.rank(for: overall, previousKey: snapshot?.rankKey)
+        // v5.1 火花等级滞后判定（仅初识心动期生效，深度期 key 存占位）
+        let sparkLevel = NIODatingEngine.sparkLevel(for: overall, previousKey: snapshot?.sparkKey)
         let balance = NIODatingEngine.balanceScore(compositeMeans: compositeMeans)
 
         // v4/v5 趋势序列：常规提交追加本期聚合点（仅综合分与默契指数，不含个人原始分），上限 30 点；
@@ -421,6 +532,7 @@ final class NIODatingVault: ObservableObject {
             xiaRounds: xia.rounds,
             overallHistory: newHistory,
             algorithmVersion: 5,
+            sparkKey: sparkLevel.key,
             stageKey: currentStage.rawValue
         )
 
@@ -454,6 +566,28 @@ final class NIODatingVault: ObservableObject {
     }
 
     // MARK: - 私有读写
+
+    /// 会话级拉伸密钥缓存（密码派生密钥复用）
+    /// 一次完整评分流程（Entry 验证 → 解封上轮 → 提交复核 → 重新密封）原本要做
+    /// 3-4 次 2 万轮拉伸（每次 ~100ms），缓存后仅首次付出真实 CPU，其余全部 ~0ms 命中；
+    /// 键 = SHA256(盐 + 密码) 前缀（不存明文密码与原盐），容量 4 条（双人 × 密码更换余量）
+    nonisolated static func stretchedKey(password: String, salt: Data) -> SymmetricKey {
+        struct Box {
+            static let lock = NSLock()
+            static var cache: [String: SymmetricKey] = [:]
+        }
+        var digest = SHA256.hash(data: salt + Data(password.utf8))
+        let cacheKey = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+        Box.lock.lock()
+        defer { Box.lock.unlock() }
+        if let hit = Box.cache[cacheKey] { return hit }
+        let key = NIODatingCrypto.stretch(password: password, salt: salt)
+        Box.cache[cacheKey] = key
+        if Box.cache.count > 4 {
+            Box.cache.removeValue(forKey: Box.cache.keys.first!)
+        }
+        return key
+    }
 
     private func loadVerifier(for member: NIODatingMember) -> NIODatingPasswordVerifier? {
         guard let data = defaults.data(forKey: StoreKey.verifier(member)) else { return nil }

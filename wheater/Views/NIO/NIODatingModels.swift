@@ -352,6 +352,8 @@ struct NIODatingCompositeSnapshot: Codable, Equatable {
     var overallHistory: [NIODatingHistoryPoint]?
     /// 生成该快照的算法版本（v5 新增：nil 或 <5 的旧快照会在加载时自动用 v5 口径重算迁移）
     var algorithmVersion: Int?
+    /// 初识心动期火花等级缓存 key（v5.1 滞后判定用；旧快照 nil → 实时按分数计算）
+    var sparkKey: String?
 
     var loveType: NIODatingLoveType { NIODatingEngine.loveType(forKey: loveTypeKey) }
     var rank: NIODatingRank { NIODatingEngine.rank(forKey: rankKey) }
@@ -360,8 +362,13 @@ struct NIODatingCompositeSnapshot: Codable, Equatable {
     var stageKey: String?
     var stage: NIODatingStage { NIODatingStage.from(key: stageKey) }
     /// 初识心动期的火花等级（深度关系期为 nil，使用爱情类型）
+    /// v5.1：优先读滞后缓存 sparkKey；旧快照无缓存时实时按分数计算
     var sparkLevel: NIODatingSparkLevel? {
-        stage == .firstSpark ? NIODatingEngine.sparkLevel(for: overall) : nil
+        guard stage == .firstSpark else { return nil }
+        if let key = sparkKey {
+            return NIODatingEngine.sparkLevel(forKey: key)
+        }
+        return NIODatingEngine.sparkLevel(for: overall)
     }
 
     /// 双方轮次合计（稳定度评估用）
@@ -549,6 +556,23 @@ enum NIODatingEngine {
         case 50..<60: return sparkLevels[4]
         default: return sparkLevels[5]
         }
+    }
+
+    /// 按缓存 key 查询火花等级（滞后判定用）
+    static func sparkLevel(forKey key: String) -> NIODatingSparkLevel {
+        sparkLevels.first { $0.key == key } ?? sparkLevels[5]
+    }
+
+    /// 火花等级判定（v5.1 带滞后缓冲）：距档位边界 < 1.5 分且与上期不同时沿用上期判定，
+    /// 与评级/爱情类型同一防抖原则 —— 火花在边界上的单轮闪烁不构成真实的等级迁移
+    static func sparkLevel(for overall: Double, previousKey: String?) -> NIODatingSparkLevel {
+        let newLevel = sparkLevel(for: overall)
+        guard let previousKey,
+              let previous = sparkLevels.first(where: { $0.key == previousKey }),
+              previous.key != newLevel.key else { return newLevel }
+        let boundaries: [Double] = [50, 60, 70, 80, 90]
+        let margin = boundaries.map { abs(overall - $0) }.min() ?? 99
+        return margin < 1.5 ? previous : newLevel
     }
 
     // MARK: 爱情类型判定
@@ -846,6 +870,8 @@ enum NIODatingEvidence {
     纵向平滑（v4 自适应 EMA）：多轮提交时各维度分按指数移动平均聚合，α 随轮次递减 —— α = max(0.40, 0.70 − 0.05×(n−1))，即第 1 轮 α=0.70（快速吸收）、第 5 轮起 α=0.50、之后稳定在 0.40-0.50。依据：追踪研究的信度累积曲线 —— 早期证据少应快速吸纳，长期证据充足后结论应趋稳而非被单轮波动牵引。
 
     数据质量过滤（默许偏差 / acquiescence bias）：当单轮各维度几乎同分（轮内标准差 < 5）时判定为「未做真实区分」，该轮 α 额外降权 0.1 并提示。依据：问卷方法学中默许偏差是自评量表的主要效度威胁（Paulhus, 1991），低区分度数据应降权处理。
+
+    首测先验收缩（v5.1）：首轮聚合起点 = 0.8 × 本轮 + 0.2 × 中性先验 70 分 —— 首测均值回归（regression to the mean）：单轮极端印象（光环效应或首因晕轮）不应直接成为长期聚合的锚点，第二轮起由自适应 EMA 接管。
     """
 
     /// 心动火花等级（初识心动期专用）
@@ -855,6 +881,8 @@ enum NIODatingEvidence {
     火花等级由综合分映射：≥90 烟花级 / ≥80 强火花 / ≥70 明显火花 / ≥60 小火苗 / ≥50 微光 / ＜50 火花未燃。依据：初识期三大信号（吸引 / 畅聊 / 再见意愿）同时高企时，关系发展概率最高；「再接触意愿」是关系启动最强前置预测指标。
 
     初识期的单次评分噪声大（首因光环效应），建议多轮评分让自适应 EMA 平滑给出更稳定的读数。
+
+    v5.1 滞后缓冲（hysteresis）：距火花档位边界 < 1.5 分且与上期不同时沿用上期判定 —— 火花在边界上的单轮闪烁不构成真实的等级迁移，与评级 / 爱情类型共用同一防抖原则。
     """
 
     /// 相性评级

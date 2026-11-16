@@ -136,9 +136,8 @@ struct NIODatingLabView: View {
     }
 
     private func handlePasscodeVerified(member: NIODatingMember, code: String) {
-        guard vault.lockoutRemaining(for: member) <= 0 else { return }
-        guard vault.verifyPassword(code, for: member, registerFailure: true) else { return }
-
+        // 密码已在密码页后台验证通过（attemptVerify），此处直接信任回传的 code；
+        // 拉伸密钥已进入会话缓存，解封上轮评分（同盐同密码）~0ms 命中，同步执行无卡顿
         let previous = vault.loadScores(for: member, code: code)
         var scores = previous ?? NIODatingScores()
         scores.chapter = (previous?.chapter ?? 0) + 1
@@ -149,6 +148,7 @@ struct NIODatingLabView: View {
     }
 
     private func handleSubmit(member: NIODatingMember) {
+        // 提交复核用的拉伸密钥已在缓存中（同盐同密码命中），聚合与写盘为毫秒级同步操作
         let outcome = vault.submit(scores: ratingScores, for: member, code: ratingCode)
         if case .success(let title, let delta, let lowVariability) = outcome {
             let generator = UINotificationFeedbackGenerator()
@@ -756,6 +756,8 @@ struct NIODatingLabView: View {
             .buttonStyle(NIOPressableButtonStyle())
             .sheet(isPresented: $showResetFlow) {
                 NIODatingResetFlowView()
+                    // 重置向导含销毁流程，禁用下滑误关，必须走内部出口
+                    .interactiveDismissDisabled(true)
             }
         }
         .padding(12)
@@ -945,6 +947,7 @@ struct NIODatingPasscodeSetupView: View {
     @State private var phase: SetupPhase = .enter
     @State private var isError = false
     @State private var shakeTrigger = 0
+    @State private var isSetting = false
 
     private var isConfirmPhase: Bool { phase == .confirm }
 
@@ -997,7 +1000,7 @@ struct NIODatingPasscodeSetupView: View {
     }
 
     private func handleDigit(_ digit: String) {
-        guard !isError else { return }
+        guard !isError, !isSetting else { return }
         if !isConfirmPhase {
             guard firstCode.count < 6 else { return }
             firstCode += digit
@@ -1021,7 +1024,7 @@ struct NIODatingPasscodeSetupView: View {
     }
 
     private func handleDelete() {
-        guard !isError else { return }
+        guard !isError, !isSetting else { return }
         if isConfirmPhase {
             if confirmCode.isEmpty {
                 // 确认阶段删空后允许返回修改首次输入
@@ -1047,10 +1050,15 @@ struct NIODatingPasscodeSetupView: View {
             return
         }
 
-        if NIODatingVault.shared.configurePassword(for: member, code: confirmCode) {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
-            onFinished()
+        // 拉伸与写入（2 万轮 SHA256）放后台线程，设置阶段同样不冻结键盘
+        isSetting = true
+        NIODatingVault.shared.configurePasswordAsync(confirmCode, for: member) { ok in
+            isSetting = false
+            if ok {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                onFinished()
+            }
         }
     }
 }
@@ -1067,6 +1075,7 @@ struct NIODatingPasscodeEntryView: View {
     @State private var isError = false
     @State private var shakeTrigger = 0
     @State private var failedCount = 0
+    @State private var isVerifying = false
 
     private var lockRemaining: TimeInterval {
         NIODatingVault.shared.lockoutRemaining(for: member)
@@ -1090,7 +1099,11 @@ struct NIODatingPasscodeEntryView: View {
             NIODatingPasscodeDots(filled: code.count, isError: isError, accent: accent)
                 .modifier(ShakeEffect(animatableData: CGFloat(shakeTrigger)))
 
-            if lockRemaining > 0 {
+            if isVerifying {
+                Text("验证中…")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+            } else if lockRemaining > 0 {
                 TimelineView(.periodic(from: .now, by: 1)) { _ in
                     let remaining = NIODatingVault.shared.lockoutRemaining(for: member)
                     Text(remaining > 0
@@ -1125,7 +1138,7 @@ struct NIODatingPasscodeEntryView: View {
     }
 
     private func handleDigit(_ digit: String) {
-        guard !isError, code.count < 6 else { return }
+        guard !isError, !isVerifying, code.count < 6 else { return }
         code += digit
         if code.count == 6 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -1136,24 +1149,29 @@ struct NIODatingPasscodeEntryView: View {
 
     private func attemptVerify() {
         let candidate = code
-        guard NIODatingVault.shared.lockoutRemaining(for: member) <= 0 else {
+        guard !isVerifying, NIODatingVault.shared.lockoutRemaining(for: member) <= 0 else {
             code = ""
             return
         }
 
-        if NIODatingVault.shared.verifyPassword(candidate, for: member, registerFailure: true) {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
-            onVerified(candidate)
-        } else {
-            isError = true
-            failedCount += 1
-            shakeTrigger += 1
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.error)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                code = ""
-                withAnimation { isError = false }
+        // 拉伸与比对在后台线程执行，主线程仅展示"验证中"状态——键盘与圆点动画不冻结
+        isVerifying = true
+        NIODatingVault.shared.verifyPasswordAsync(candidate, for: member, registerFailure: true) { ok in
+            isVerifying = false
+            if ok {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                onVerified(candidate)
+            } else {
+                isError = true
+                failedCount += 1
+                shakeTrigger += 1
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                    code = ""
+                    withAnimation { isError = false }
+                }
             }
         }
     }
@@ -2385,6 +2403,7 @@ struct NIODatingResetFlowView: View {
     @State private var isError = false
     @State private var shakeTrigger = 0
     @State private var cooldownTask: Task<Void, Never>?
+    @State private var isVerifyingAuth = false
 
     var body: some View {
         NavigationStack {
@@ -2529,7 +2548,7 @@ struct NIODatingResetFlowView: View {
     }
 
     private func handleAuthDigit(_ digit: String) {
-        guard !isError, code.count < 6 else { return }
+        guard !isError, !isVerifyingAuth, code.count < 6 else { return }
         code += digit
         if code.count == 6 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -2544,18 +2563,23 @@ struct NIODatingResetFlowView: View {
             code = ""
             return
         }
-        if vault.verifyPassword(candidate, for: selectedMember, registerFailure: true) {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
-            withAnimation(NIOThemeMotion.themeSpring) { step = .execute }
-        } else {
-            isError = true
-            shakeTrigger += 1
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.error)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                code = ""
-                withAnimation { isError = false }
+        // 拉伸在后台线程执行，重置授权页键盘不冻结
+        isVerifyingAuth = true
+        vault.verifyPasswordAsync(candidate, for: selectedMember, registerFailure: true) { ok in
+            isVerifyingAuth = false
+            if ok {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                withAnimation(NIOThemeMotion.themeSpring) { step = .execute }
+            } else {
+                isError = true
+                shakeTrigger += 1
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                    code = ""
+                    withAnimation { isError = false }
+                }
             }
         }
     }

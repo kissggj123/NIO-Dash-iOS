@@ -214,6 +214,8 @@ struct IOSNIOConfigView: View {
             }
             .sheet(isPresented: $showDatingLabSheet) {
                 NIODatingLabView()
+                    // 实验室含评分与看板流程，禁用下滑误关，走左上角"关闭"按钮退出
+                    .interactiveDismissDisabled(true)
             }
             .adaptivePresentation(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
