@@ -1677,22 +1677,46 @@ struct NIODatingCompositeCardView: View {
             updateTimeFooter
 
             // 分享结论卡（仅聚合信息）
-            Button {
-                renderShareImage()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("分享结论卡")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+            HStack(spacing: 10) {
+                Button {
+                    renderShareImage()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("分享结论卡")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(sakuraPink)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(sakuraPink.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-                .foregroundStyle(sakuraPink)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(sakuraPink.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .buttonStyle(NIOPressableButtonStyle())
+
+                Button {
+                    showTheoryPage = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "books.vertical")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("理论依据")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(lavenderDream)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(lavenderDream.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(NIOPressableButtonStyle())
             }
-            .buttonStyle(NIOPressableButtonStyle())
+            .sheet(isPresented: $showTheoryPage) {
+                NIODatingTheoryView()
+                    // 长文档阅读页禁下滑误关，走"关闭"按钮退出
+                    .interactiveDismissDisabled(true)
+            }
             .sheet(item: $shareItem) { item in
                 VStack(spacing: 16) {
                     Image(uiImage: item.image)
@@ -2172,6 +2196,7 @@ struct NIODatingCompositeCardView: View {
     }
 
     @State private var shareItem: ShareImageItem?
+    @State private var showTheoryPage = false
 
     /// 将看板结论渲染为可分享的图片卡（仅聚合信息，不含个人原始分）
     private func renderShareImage() {
