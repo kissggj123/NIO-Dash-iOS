@@ -84,8 +84,9 @@ struct NIODatingCompositeVault: Codable {
 // MARK: - 提交结果
 
 enum NIODatingSubmitOutcome: Equatable {
-    /// 提交成功：chapterTitle 为本章标题；deltaFromPrevious 为有效分较上一轮的变化量（首轮为 nil）
-    case success(chapterTitle: String, deltaFromPrevious: Double?)
+    /// 提交成功：chapterTitle 为本章标题；deltaFromPrevious 为有效分较上一轮的变化量（首轮为 nil）；
+    /// lowVariability 为 true 表示本轮各维度几乎同分（默许偏差），该轮证据已降权
+    case success(chapterTitle: String, deltaFromPrevious: Double?, lowVariability: Bool)
     case wrongPassword
     case locked(remainingSeconds: TimeInterval)
     case storageFailure
@@ -268,15 +269,23 @@ final class NIODatingVault: ObservableObject {
         // 2. NaturalLanguage 端内实时情感演算
         let sentiment = NIODatingSentiment.score(of: scores.note) ?? 0
 
-        // 3. EMA 纵向平滑：本轮占 60%、历史占 40%，降低单次情绪噪声
+        // 3. EMA 纵向平滑（v4 自适应）：α 随已有轮次递减（早期吸收快、后期趋稳）；
+        //    本轮区分度过低（默许偏差，σ<5）时降权 0.1
         //    （个人密封区仍保存本轮原始分，聚合金库只存平滑后的聚合摘要）
         let currentStage = stage
         let previousSummary = loadCompositeVault()?.side(for: member)
+        let existingRounds = previousSummary?.rounds ?? 0
+        let lowVariability = NIODatingEngine.isLowVariability(scores: scores.values)
         var smoothedMeans: [String: Double] = [:]
         for dim in NIODatingPsychology.dimensions(for: currentStage) {
             let newValue = scores.value(forKey: dim.key)
             if let oldValue = previousSummary?.means[dim.key] {
-                smoothedMeans[dim.key] = NIODatingEngine.emaSmoothed(previous: oldValue, new: newValue)
+                smoothedMeans[dim.key] = NIODatingEngine.emaSmoothed(
+                    previous: oldValue,
+                    new: newValue,
+                    round: existingRounds,
+                    lowVariability: lowVariability
+                )
             } else {
                 smoothedMeans[dim.key] = newValue
             }
@@ -324,7 +333,11 @@ final class NIODatingVault: ObservableObject {
         let chapterTitle = NIODatingChapters.title(forChapter: summary.chapters)
         // EMA 语义透明化：展示有效分较上一轮的变化量（首轮无对比基准）
         let deltaFromPrevious = previousSummary.map { effective - $0.effective }
-        let outcome = NIODatingSubmitOutcome.success(chapterTitle: chapterTitle, deltaFromPrevious: deltaFromPrevious)
+        let outcome = NIODatingSubmitOutcome.success(
+            chapterTitle: chapterTitle,
+            deltaFromPrevious: deltaFromPrevious,
+            lowVariability: lowVariability
+        )
         lastSubmitOutcome = outcome
         return outcome
     }
@@ -360,10 +373,24 @@ final class NIODatingVault: ObservableObject {
             }
         }
 
-        // 深度关系期做 Sternberg 类型判定；初识心动期 loveTypeKey 仅存占位（UI 用火花等级）
-        let loveType = NIODatingEngine.classifyLoveType(compositeMeans: compositeMeans)
+        // 深度关系期做 Sternberg 类型判定（v4 带滞后缓冲防抖，读取上一期判定）；
+        // 初识心动期 loveTypeKey 仅存占位（UI 用火花等级）
+        let loveType = NIODatingEngine.classifyLoveType(
+            compositeMeans: compositeMeans,
+            previousTypeKey: snapshot?.loveTypeKey
+        )
         let rank = NIODatingEngine.rank(for: overall)
         let balance = NIODatingEngine.balanceScore(compositeMeans: compositeMeans)
+
+        // v4 趋势序列：追加本期聚合点（仅综合分与默契指数，不含个人原始分），上限 30 点
+        let newHistory: [NIODatingHistoryPoint] = {
+            var history = snapshot?.overallHistory ?? []
+            history.append(NIODatingHistoryPoint(date: Date(), overall: overall, harmony: harmony))
+            if history.count > 30 {
+                history.removeFirst(history.count - 30)
+            }
+            return history
+        }()
 
         let newSnapshot = NIODatingCompositeSnapshot(
             overall: overall,
@@ -379,6 +406,7 @@ final class NIODatingVault: ObservableObject {
             balance: balance,
             mikanRounds: mikan.rounds,
             xiaRounds: xia.rounds,
+            overallHistory: newHistory,
             stageKey: currentStage.rawValue
         )
 

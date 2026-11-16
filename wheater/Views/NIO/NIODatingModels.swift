@@ -348,6 +348,8 @@ struct NIODatingCompositeSnapshot: Codable, Equatable {
     var mikanRounds: Int?
     /// 夏老师累计评分轮次
     var xiaRounds: Int?
+    /// 综合分趋势序列（v4 新增，optional：旧快照 decode 为 nil，从下次提交开始记录；上限 30 点）
+    var overallHistory: [NIODatingHistoryPoint]?
 
     var loveType: NIODatingLoveType { NIODatingEngine.loveType(forKey: loveTypeKey) }
     var rank: NIODatingRank { NIODatingEngine.rank(forKey: rankKey) }
@@ -362,6 +364,21 @@ struct NIODatingCompositeSnapshot: Codable, Equatable {
 
     /// 双方轮次合计（稳定度评估用）
     var combinedRounds: Int { (mikanRounds ?? 0) + (xiaRounds ?? 0) }
+
+    /// 趋势斜率（每轮变化量；不足两期时为 nil）
+    var trendPerRound: Double? {
+        guard let history = overallHistory, history.count >= 2 else { return nil }
+        let first = history.first!.overall
+        let last = history.last!.overall
+        return (last - first) / Double(history.count - 1)
+    }
+}
+
+/// 趋势序列单点（仅记录聚合指标，不含个人原始分）
+struct NIODatingHistoryPoint: Codable, Equatable {
+    var date: Date
+    var overall: Double
+    var harmony: Double
 }
 
 // MARK: - 评分引擎（纯函数）
@@ -370,8 +387,29 @@ enum NIODatingEngine {
 
     /// 指数移动平均（EMA）平滑：多轮评分纵向聚合，α=0.6 让本轮占主导、历史做缓冲，
     /// 降低单次情绪噪声对聚合结果的冲击（纵向追踪优于单次横断的方法学原则）
-    static func emaSmoothed(previous: Double, new: Double, alpha: Double = 0.6) -> Double {
-        previous + alpha * (new - previous)
+    /// 自适应 EMA 纵向平滑（v4）：α 随已有轮次递减 —— 早期快速吸收新证据，后期结论趋稳
+    /// 追踪研究的信度累积曲线：n 轮后 α = max(0.40, 0.70 − 0.05 × (n − 1))
+    /// - Parameters:
+    ///   - previous: 历史聚合值
+    ///   - new: 本轮新值
+    ///   - round: 本次提交前已积累的轮次（≥1）
+    ///   - lowVariability: 本轮区分度过低（默许偏差）时 true，额外降权 0.1
+    static func emaSmoothed(previous: Double, new: Double, round: Int, lowVariability: Bool = false) -> Double {
+        var alpha = max(0.40, 0.70 - 0.05 * Double(max(0, round - 1)))
+        if lowVariability {
+            alpha = max(0.40, alpha - 0.10)
+        }
+        return previous + alpha * (new - previous)
+    }
+
+    /// 轮内区分度检测：标准差 < 5 视为默许偏差（acquiescence bias）——
+    /// 各维度几乎同分意味着填答者未做真实区分，该轮证据降权（专业追踪研究的数据质量过滤）
+    static func isLowVariability(scores: [String: Double]) -> Bool {
+        let values = Array(scores.values)
+        guard values.count >= 3 else { return false }
+        let mean = values.reduce(0, +) / Double(values.count)
+        let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(values.count)
+        return variance.squareRoot() < 5.0
     }
 
     /// 依据六维聚合均分计算均衡度：100 − 2.2 × 维度总体标准差（按所有维度值直接计算，阶段无关）
@@ -431,6 +469,9 @@ enum NIODatingEngine {
     }
 
     /// 默契指数：双方各维度评分的平均接近程度（按共有维度键计算，阶段无关）
+    /// 默契指数（v4 非线性）：100 × e^(−Δ/30)，Δ 为双方聚合维度均分的平均绝对差
+    /// 人际感知研究中的距离衰减非线性：小差异几乎无损（Δ=5 仍有 85 分），
+    /// 大差异温和收敛而非线性惩罚（Δ=30 → 37 分），比旧线性更符合感知一致性的实际分布
     static func harmony(mikanMeans: [String: Double], xiaMeans: [String: Double]) -> Double {
         var diffs: [Double] = []
         for (key, mikanValue) in mikanMeans {
@@ -439,7 +480,7 @@ enum NIODatingEngine {
         }
         guard !diffs.isEmpty else { return 0 }
         let meanDiff = diffs.reduce(0, +) / Double(diffs.count)
-        return max(0, 100 - meanDiff)
+        return max(0, min(100, 100 * exp(-meanDiff / 30.0)))
     }
 
     /// 维度聚合分级（0=待培育 1=稳定 2=良好 3=极佳）
@@ -562,23 +603,44 @@ enum NIODatingEngine {
         )
     ]
 
-    /// 依据聚合后的三维均分判定爱情类型（仅使用聚合值，不泄露个人原始分）
-    static func classifyLoveType(compositeMeans: [String: Double]) -> NIODatingLoveType {
+    /// Sternberg 爱情类型判定（v4 带滞后缓冲 / hysteresis）
+    /// 判定在阈值边缘抖动是追踪研究的经典噪声：当某个三成分与 65 阈值的距离 < 3 分
+    /// （临界成分）且新旧判定不同时，沿用上一期判定，避免单轮波动导致类型反复横跳
+    /// - Parameters:
+    ///   - compositeMeans: 聚合维度均分
+    ///   - previousTypeKey: 上一期快照的类型 key（旧数据可能为 nil，首次判定无滞后）
+    static func classifyLoveType(compositeMeans: [String: Double], previousTypeKey: String? = nil) -> NIODatingLoveType {
         func mean(_ key: String) -> Double { compositeMeans[key] ?? 0 }
-        let intimacy = mean("intimacy") >= NIODatingLoveType.threshold
-        let passion = mean("passion") >= NIODatingLoveType.threshold
-        let commitment = mean("commitment") >= NIODatingLoveType.threshold
+        let threshold = NIODatingLoveType.threshold
+        let intimacy = mean("intimacy")
+        let passion = mean("passion")
+        let commitment = mean("commitment")
 
-        switch (intimacy, passion, commitment) {
-        case (true, true, true): return loveType(forKey: "consummate")
-        case (true, true, false): return loveType(forKey: "romantic")
-        case (true, false, true): return loveType(forKey: "companionate")
-        case (false, true, true): return loveType(forKey: "fatuous")
-        case (true, false, false): return loveType(forKey: "liking")
-        case (false, true, false): return loveType(forKey: "infatuated")
-        case (false, false, true): return loveType(forKey: "empty")
-        default: return loveType(forKey: "growing")
+        func flags(_ value: Double) -> Bool { value >= threshold }
+        let newType = flags(intimacy) && flags(passion) && flags(commitment)
+            ? loveType(forKey: "consummate")
+            : flags(intimacy) && flags(passion)
+            ? loveType(forKey: "romantic")
+            : flags(intimacy) && flags(commitment)
+            ? loveType(forKey: "companionate")
+            : flags(passion) && flags(commitment)
+            ? loveType(forKey: "fatuous")
+            : flags(intimacy)
+            ? loveType(forKey: "liking")
+            : flags(passion)
+            ? loveType(forKey: "infatuated")
+            : flags(commitment)
+            ? loveType(forKey: "empty")
+            : loveType(forKey: "growing")
+
+        // 滞后缓冲：新判定与上期不同，且存在与阈值距离 < 3 的临界成分 → 保持上期判定
+        if let previousKey = previousTypeKey, newType.key != previousKey {
+            let margins = [abs(intimacy - threshold), abs(passion - threshold), abs(commitment - threshold)]
+            if margins.min()! < 3.0, let previous = loveTypes.first(where: { $0.key == previousKey }) {
+                return previous
+            }
         }
+        return newType
     }
 
     static func loveType(forKey key: String) -> NIODatingLoveType {
@@ -711,7 +773,9 @@ enum NIODatingEvidence {
 
     情绪加成：留言情绪由 Apple NaturalLanguage 端内情感分析模型实时演算（-1 ~ +1），×6 计入有效分。依据表达性写作研究（Pennebaker, 1997）；幅度限制在 6%，让结构性评估不被一时情绪淹没。
 
-    纵向平滑：多轮提交时，各维度分按指数移动平均（EMA, α=0.6）平滑 —— 本轮占 60%、历史占 40%，降低单次情绪噪声。
+    纵向平滑（v4 自适应 EMA）：多轮提交时各维度分按指数移动平均聚合，α 随轮次递减 —— α = max(0.40, 0.70 − 0.05×(n−1))，即第 1 轮 α=0.70（快速吸收）、第 5 轮起 α=0.50、之后稳定在 0.40-0.50。依据：追踪研究的信度累积曲线 —— 早期证据少应快速吸纳，长期证据充足后结论应趋稳而非被单轮波动牵引。
+
+    数据质量过滤（默许偏差 / acquiescence bias）：当单轮各维度几乎同分（轮内标准差 < 5）时判定为「未做真实区分」，该轮 α 额外降权 0.1 并提示。依据：问卷方法学中默许偏差是自评量表的主要效度威胁（Paulhus, 1991），低区分度数据应降权处理。
     """
 
     /// 心动火花等级（初识心动期专用）
@@ -720,7 +784,7 @@ enum NIODatingEvidence {
 
     火花等级由综合分映射：≥90 烟花级 / ≥80 强火花 / ≥70 明显火花 / ≥60 小火苗 / ≥50 微光 / ＜50 火花未燃。依据：初识期三大信号（吸引 / 畅聊 / 再见意愿）同时高企时，关系发展概率最高；「再接触意愿」是关系启动最强前置预测指标。
 
-    初识期的单次评分噪声大（首因光环效应），建议多轮评分让 EMA 平滑给出更稳定的读数。
+    初识期的单次评分噪声大（首因光环效应），建议多轮评分让自适应 EMA 平滑给出更稳定的读数。
     """
 
     /// 相性评级
@@ -736,14 +800,25 @@ enum NIODatingEvidence {
 
     初识心动期不进行此项判定（第一次见面谈承诺无心理学意义），改用「心动火花等级」（见火花区依据）。
 
+    v4 滞后缓冲（hysteresis）：当新判定与上一期不同、且某个三成分与 65 阈值的距离不足 3 分（临界成分）时，沿用上一期判定 —— 防止类型在阈值边缘随单轮波动反复横跳，这是追踪研究处理分类变量噪声的标准做法。
+
     使用聚合值而非任何一方原始分，既保证结论反映关系整体，也保护双方原始分的私密性。
     """
 
     /// 默契指数
     static let harmony = """
-    计算式：默契指数 = 100 − 双方六维评分的平均绝对差。互评越接近，指数越高。
+    计算式（v4 非线性）：默契指数 = 100 × e^(−Δ/30)，Δ 为双方六维聚合分的平均绝对差。
 
-    依据：共情准确性研究显示，准确感知伴侣内心状态的能力与关系满意度正相关，长期「感知错位」是关系恶化的早期信号（Ickes, 1993）；Gottman 的「爱情地图」表明幸福伴侣对彼此内心世界保有详细且不断更新的认知（Gottman & Silver, 1999）。
+    非线性依据：人际感知一致性呈距离衰减分布 —— 微小感知差异几乎不构成代价（Δ=5 仍有 85 分），而大差异的伤害是边际递减而非线性放大的。旧线性公式对中等差距惩罚过重，v4 指数衰减更贴近共情准确性研究的实际分布（Ickes, 1993）。
+
+    依据：准确感知伴侣内心状态的能力与关系满意度正相关，长期「感知错位」是关系恶化的早期信号（Ickes, 1993）；Gottman 的「爱情地图」表明幸福伴侣对彼此内心世界保有详细且不断更新的认知（Gottman & Silver, 1999）。
+    """
+
+    /// 趋势追踪
+    static let trend = """
+    计算方式：每次双方提交后记录一期聚合点（综合分 + 默契指数，仅聚合指标不含任何个人原始分），最新斜率 = （末期综合分 − 首期综合分）÷ 期数，按 ±0.3 / ±0.8 分/轮划分平稳 / 温和 / 显著区间。
+
+    依据：纵向追踪设计（longitudinal design）是关系科学的核心方法 —— 单次横断分数无法区分「波动」与「趋势」，而趋势方向是关系满意度变化最直接的行为指标（Karney & Bradbury, 1995 关系满意度轨迹元分析）。温和回落常是新鲜感消退后的均值回归，不必灾难化解读。
     """
 
     /// 六维聚合分级

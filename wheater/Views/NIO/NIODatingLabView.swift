@@ -42,6 +42,7 @@ struct NIODatingLabView: View {
     /// 存档成功横幅
     @State private var archivedChapter: String?
     @State private var archivedDelta: Double?
+    @State private var archivedLowVariability = false
     @State private var previousScores: NIODatingScores?
     @State private var archiveWork = NIOScheduledWork()
 
@@ -149,17 +150,19 @@ struct NIODatingLabView: View {
 
     private func handleSubmit(member: NIODatingMember) {
         let outcome = vault.submit(scores: ratingScores, for: member, code: ratingCode)
-        if case .success(let title, let delta) = outcome {
+        if case .success(let title, let delta, let lowVariability) = outcome {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
             withAnimation(NIOThemeMotion.themeSpring) {
                 archivedChapter = title
                 archivedDelta = delta
+                archivedLowVariability = lowVariability
             }
-            archiveWork.scheduleReplacing(after: 2.4) {
+            archiveWork.scheduleReplacing(after: lowVariability ? 3.2 : 2.4) {
                 withAnimation(NIOThemeMotion.themeSpring) {
                     archivedChapter = nil
                     archivedDelta = nil
+                    archivedLowVariability = false
                     flow = .dashboard
                 }
             }
@@ -781,6 +784,11 @@ struct NIODatingLabView: View {
                     Text("有效分较上一轮 \(arrow) \(String(format: "%.1f", abs(delta)))")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(color)
+                }
+                if archivedLowVariability {
+                    Text("ℹ️ 本轮各维度几乎同分，已按默许偏差自动降权")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.55))
                 }
                 Text("加密封存中，对方无法查看")
                     .font(.system(size: 10))
@@ -1627,6 +1635,13 @@ struct NIODatingCompositeCardView: View {
 
             Divider().background(NIOThemePaint.stroke)
 
+            // 趋势追踪（≥2 期后显示）
+            trendSection
+
+            if trendSectionVisible {
+                Divider().background(NIOThemePaint.stroke)
+            }
+
             // 六维均衡度
             balanceSection
 
@@ -1835,6 +1850,115 @@ struct NIODatingCompositeCardView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             withAnimation(NIOThemeMotion.themeSpring) { isTypeExpanded.toggle() }
+        }
+    }
+
+    /// 趋势追踪区（v4：综合分历史序列 ≥2 期后显示迷你趋势线与斜率解读）
+    private var trendSectionVisible: Bool {
+        (snapshot.overallHistory?.count ?? 0) >= 2
+    }
+
+    @ViewBuilder
+    private var trendSection: some View {
+        if trendSectionVisible, let history = snapshot.overallHistory {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("📈 趋势追踪")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Spacer()
+                    if let slope = snapshot.trendPerRound {
+                        let arrow = slope >= 0.3 ? "↗" : (slope <= -0.3 ? "↘" : "→")
+                        let color: Color = slope >= 0.3 ? .pink : (slope <= -0.3 ? .orange : mintCyan)
+                        Text("\(arrow) \(String(format: "%+.1f", slope))/轮")
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            .foregroundStyle(color)
+                            .monospacedDigit()
+                    }
+                }
+
+                // 迷你趋势线（Canvas，综合分 0-100 归一化）
+                Canvas { context, size in
+                    guard history.count >= 2 else { return }
+                    let values = history.map { $0.overall }
+                    let minV = max(0, (values.min() ?? 0) - 5)
+                    let maxV = min(100, (values.max() ?? 100) + 5)
+                    let range = max(10, maxV - minV)
+                    let stepX = size.width / CGFloat(values.count - 1)
+
+                    func point(_ index: Int) -> CGPoint {
+                        CGPoint(
+                            x: CGFloat(index) * stepX,
+                            y: (1 - (values[index] - minV) / range) * size.height
+                        )
+                    }
+
+                    // 渐变填充区域
+                    var fillPath = Path()
+                    fillPath.move(to: CGPoint(x: 0, y: size.height))
+                    for index in 0..<values.count {
+                        fillPath.addLine(to: point(index))
+                    }
+                    fillPath.addLine(to: CGPoint(x: size.width, y: size.height))
+                    fillPath.closeSubpath()
+                    context.fill(
+                        fillPath,
+                        with: .linearGradient(
+                            Gradient(colors: [sakuraPink.opacity(0.22), .clear]),
+                            startPoint: CGPoint(x: 0, y: 0),
+                            endPoint: CGPoint(x: 0, y: size.height)
+                        )
+                    )
+
+                    // 主折线
+                    var linePath = Path()
+                    linePath.move(to: point(0))
+                    for index in 1..<values.count {
+                        linePath.addLine(to: point(index))
+                    }
+                    context.stroke(
+                        linePath,
+                        with: .color(sakuraPink),
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                    )
+
+                    // 各期数据点 + 最新点高亮
+                    for index in 0..<values.count {
+                        let p = point(index)
+                        let isLast = index == values.count - 1
+                        let radius: CGFloat = isLast ? 4 : 2.5
+                        context.fill(
+                            Path(ellipseIn: CGRect(x: p.x - radius, y: p.y - radius, width: radius * 2, height: radius * 2)),
+                            with: .color(isLast ? sakuraPink : sakuraPink.opacity(0.5))
+                        )
+                    }
+                }
+                .frame(height: 56)
+
+                Text(trendCaption)
+                    .font(.system(size: 10))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                NIODatingEvidenceDisclosure(text: NIODatingEvidence.trend)
+            }
+        }
+    }
+
+    /// 趋势解读文案
+    private var trendCaption: String {
+        let count = snapshot.overallHistory?.count ?? 0
+        guard let slope = snapshot.trendPerRound else { return "" }
+        switch slope {
+        case 0.8...:
+            return "近 \(count) 期稳定上升（每轮 \(String(format: "%+.1f", slope)) 分）—— 关系处于明显的升温通道，继续保持当前的相处节奏。"
+        case 0.3..<0.8:
+            return "近 \(count) 期温和上行（每轮 \(String(format: "%+.1f", slope)) 分）—— 温水式的渐进升温是长期关系最健康的形态。"
+        case -0.3..<0.3:
+            return "近 \(count) 期保持平稳（每轮 \(String(format: "%+.1f", slope)) 分）—— 平稳期不代表停滞，是关系进入安全依恋的常见形态。"
+        default:
+            return "近 \(count) 期温和回落（每轮 \(String(format: "%+.1f", slope)) 分）—— 别慌，这常是新鲜感自然消退后的均值回归，参考经营建议主动创造新体验。"
         }
     }
 
