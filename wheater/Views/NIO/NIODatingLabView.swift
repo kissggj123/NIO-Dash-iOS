@@ -170,6 +170,7 @@ struct NIODatingLabView: View {
 
     /// 引导页：三页分步轮播（欢迎 → 玩法规则 → 隐私与理论）
     @State private var introPage = 0
+    @State private var welcomePulse = false
 
     private var introSection: some View {
         VStack(spacing: 16) {
@@ -227,36 +228,107 @@ struct NIODatingLabView: View {
     }
 
     private var introWelcomePage: some View {
-        VStack(spacing: 14) {
-            Text("💞")
-                .font(.system(size: 64))
-                .padding(.top, 24)
-            Text("恋爱好感度实验室")
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
-                .foregroundStyle(NIOThemePaint.text)
-            Text("为你们二人打造的心理测评游戏")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(lavenderDream)
-            Text("蜜柑 🍊 与夏老师 🫧 基于专业心理学维度的双向好感度互评，适合从初识心动到稳定交往的每一个阶段。")
-                .font(.system(size: 12))
-                .foregroundStyle(NIOThemePaint.text.opacity(0.7))
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .padding(.horizontal, 10)
-            HStack(spacing: 8) {
-                ForEach(NIODatingStage.allCases) { stage in
-                    Text(stage.displayName)
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(stage == vault.stage ? .white : NIOThemePaint.text.opacity(0.6))
+        ZStack {
+            // 漂浮装饰（各自不同节奏的上下浮动）
+            NIODatingFloatingDecor(emoji: "✨", size: 20, xOffset: -118, yOffset: -168, opacity: 0.32, delay: 0)
+            NIODatingFloatingDecor(emoji: "🌸", size: 22, xOffset: 112, yOffset: -142, opacity: 0.28, delay: 0.4)
+            NIODatingFloatingDecor(emoji: "💫", size: 16, xOffset: 98, yOffset: 158, opacity: 0.26, delay: 0.8)
+            NIODatingFloatingDecor(emoji: "🫧", size: 18, xOffset: -102, yOffset: 148, opacity: 0.3, delay: 1.2)
+            NIODatingFloatingDecor(emoji: "🍊", size: 15, xOffset: 132, yOffset: -30, opacity: 0.22, delay: 0.2)
+            NIODatingFloatingDecor(emoji: "💕", size: 14, xOffset: -134, yOffset: 20, opacity: 0.24, delay: 1.0)
+
+            // 与规则页 / 隐私页一致：内容超高时可滚动，避免文本被压缩出省略号
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+                    // 💞 脉冲光环
+                    ZStack {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [sakuraPink.opacity(0.32), sakuraPink.opacity(0.08), .clear],
+                                    center: .center,
+                                    startRadius: 20,
+                                    endRadius: 100
+                                )
+                            )
+                            .frame(width: welcomePulse ? 196 : 142, height: welcomePulse ? 196 : 142)
+                        Text("💞")
+                            .font(.system(size: 66))
+                            .shadow(color: sakuraPink.opacity(0.4), radius: 12)
+                    }
+                    .padding(.top, 26)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 1.7).repeatForever(autoreverses: true)) {
+                            welcomePulse = true
+                        }
+                    }
+
+                    Text("恋爱好感度实验室")
+                        .font(.system(size: 24, weight: .heavy, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("为你们二人打造的心理测评游戏")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(lavenderDream)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("基于专业心理学维度的双向好感度互评，适合从初识心动到稳定交往的每一个阶段。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(stage == vault.stage ? sakuraPink.opacity(0.85) : NIOThemePaint.stroke)
-                        .clipShape(Capsule())
+
+                    // 双成员卡
+                    HStack(spacing: 10) {
+                        memberIntroCard(.mikan, accent: Self.mikanAccent)
+                        Text("×")
+                            .font(.system(size: 16, weight: .heavy, design: .rounded))
+                            .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+                        memberIntroCard(.xia, accent: Self.xiaAccent)
+                    }
+                    .padding(.top, 4)
+
+                    HStack(spacing: 8) {
+                        ForEach(NIODatingStage.allCases) { stage in
+                            Text(stage.displayName)
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .fixedSize()
+                                .foregroundStyle(stage == vault.stage ? .white : NIOThemePaint.text.opacity(0.6))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(stage == vault.stage ? sakuraPink.opacity(0.85) : NIOThemePaint.stroke)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .padding(.top, 6)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
             }
-            .padding(.top, 6)
-            Spacer(minLength: 0)
         }
+    }
+
+    /// 引导页成员介绍卡
+    private func memberIntroCard(_ member: NIODatingMember, accent: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(member.emoji)
+                .font(.system(size: 32))
+            Text(member.displayName)
+                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                .foregroundStyle(NIOThemePaint.text)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(NIOThemePaint.fill)
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(accent.opacity(0.5), lineWidth: 1.5))
+        )
     }
 
     private var introRulesPage: some View {
@@ -268,15 +340,15 @@ struct NIODatingLabView: View {
                     .padding(.top, 12)
 
                 ruleCard(
-                    icon: "🔐", title: "第一步 · 双人密码",
+                    number: "01", icon: "🔐", title: "第一步 · 双人密码",
                     text: "各自设置一个 6 位专属密码。轮到你评分时输入自己的密码解锁专属评分台 —— 同一台手机上，谁的分数谁做主。"
                 )
                 ruleCard(
-                    icon: "🖊", title: "第二步 · 盲评对方",
+                    number: "02", icon: "🖊", title: "第二步 · 盲评对方",
                     text: "对六项心理学维度打分（0-100 滑条），还可以写下仅心理引擎可见的心动留言。支持无限次重写，每次提交即连载新的一章。"
                 )
                 ruleCard(
-                    icon: "✨", title: "第三步 · 解封结论",
+                    number: "03", icon: "✨", title: "第三步 · 解封结论",
                     text: "双方各完成一轮评分后自动解封：综合好感度、心动火花等级（初识）或爱情类型（稳定期）、默契指数与相性评级 —— 只见结论，不见彼此的原始分。"
                 )
             }
@@ -311,24 +383,52 @@ struct NIODatingLabView: View {
         }
     }
 
-    private func ruleCard(icon: String, title: String, text: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(icon).font(.system(size: 15))
-                Text(title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.text)
+    private func ruleCard(number: String? = nil, icon: String, title: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            // 渐变图标徽章
+            Text(icon)
+                .font(.system(size: 17))
+                .frame(width: 42, height: 42)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [sakuraPink.opacity(0.16), lavenderDream.opacity(0.16)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(sakuraPink.opacity(0.28), lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    if let number {
+                        Text(number)
+                            .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                            .foregroundStyle(sakuraPink)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(sakuraPink.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                    Text(title)
+                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text)
+                }
+                Text(text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.72))
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text(text)
-                .font(.system(size: 11))
-                .foregroundStyle(NIOThemePaint.text.opacity(0.75))
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(NIOThemePaint.fill)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(NIOThemePaint.fill)
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(NIOThemePaint.stroke, lineWidth: 1))
+        )
     }
 
     // MARK: - 交接屏
@@ -2358,6 +2458,31 @@ struct NIODatingResetFlowView: View {
             }
             .buttonStyle(NIOPressableButtonStyle())
         }
+    }
+}
+
+// MARK: - 引导页漂浮装饰（各自节奏的上下浮动）
+
+struct NIODatingFloatingDecor: View {
+    let emoji: String
+    let size: CGFloat
+    let xOffset: CGFloat
+    let yOffset: CGFloat
+    let opacity: Double
+    let delay: Double
+
+    @State private var floatUp = false
+
+    var body: some View {
+        Text(emoji)
+            .font(.system(size: size))
+            .opacity(opacity)
+            .offset(x: xOffset, y: yOffset + (floatUp ? -9 : 9))
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2.3).repeatForever(autoreverses: true).delay(delay)) {
+                    floatUp = true
+                }
+            }
     }
 }
 

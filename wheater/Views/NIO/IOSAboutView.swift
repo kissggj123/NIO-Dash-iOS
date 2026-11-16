@@ -38,6 +38,80 @@ struct IOSAboutView: View {
     @State private var showReleaseNotesSheet = false
     @State private var showDatingLab = false
 
+    @State private var aboutShareImage: UIImage?
+    @State private var showAboutShareSheet = false
+
+    /// 渲染关于页分享长图（品牌头部 + 全量版本日志 + 署名）
+    /// 全量版本日志高度可达数千 pt，2.5 倍缩放下位图高度会超过 GPU 单张纹理上限（约 8192px），
+    /// 一次性渲染会白屏/失败；因此先离线测量总高，再分片渲染并用 CGContext 拼接成完整长图。
+    private func renderAboutShareImage() {
+        let contentWidth: CGFloat = 420
+        let content = NIOAboutLongShareView()
+
+        // 1. 离屏测量整图真实高度
+        let host = UIHostingController(rootView: content)
+        let measuredHeight = host.view.sizeThatFits(
+            CGSize(width: contentWidth, height: .greatestFiniteMagnitude)
+        ).height
+
+        guard measuredHeight > 0 else {
+            // 测量失败时退回一次性渲染（兜底）
+            let renderer = ImageRenderer(content: content)
+            renderer.scale = 2.5
+            aboutShareImage = renderer.uiImage
+            if aboutShareImage != nil {
+                showAboutShareSheet = true
+            }
+            return
+        }
+
+        // 2. 内容越高整体分辨率越保守，控制拼接位图的内存占用
+        let scale: CGFloat = measuredHeight > 4800 ? 2.0 : 2.5
+        let tileHeightPt = min(2200, (8192 / scale).rounded(.down)) // 单片 px 高度远低于纹理上限
+
+        let canvasWidthPx = Int((contentWidth * scale).rounded(.up))
+        let canvasHeightPx = Int((measuredHeight * scale).rounded(.up))
+        guard
+            let canvas = CGContext(
+                data: nil,
+                width: canvasWidthPx,
+                height: canvasHeightPx,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+            )
+        else { return }
+
+        // 3. 分片渲染：偏移内容后裁出对应窗口，逐片绘制进画布
+        let tileCount = Int(ceil(measuredHeight / tileHeightPt))
+        for index in 0..<tileCount {
+            let offset = CGFloat(index) * tileHeightPt
+            let sliceHeight = min(tileHeightPt, measuredHeight - offset)
+
+            let tile = content
+                .offset(y: -offset)
+                .frame(width: contentWidth, height: sliceHeight, alignment: .top)
+                .clipped()
+            let renderer = ImageRenderer(content: tile)
+            renderer.scale = scale
+            guard let tileImage = renderer.uiImage?.cgImage else { continue }
+
+            // CGContext 原点在左下角：第 index 片位于 UIKit 坐标系顶部，需翻转 y
+            let yInCanvas = CGFloat(canvasHeightPx) - (offset + sliceHeight) * scale
+            canvas.draw(
+                tileImage,
+                in: CGRect(x: 0, y: yInCanvas, width: contentWidth * scale, height: sliceHeight * scale)
+            )
+        }
+
+        guard let stitched = canvas.makeImage() else { return }
+        aboutShareImage = UIImage(cgImage: stitched)
+        if aboutShareImage != nil {
+            showAboutShareSheet = true
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -85,6 +159,48 @@ struct IOSAboutView: View {
                     Button("关闭") { dismiss() }
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(sakuraPink)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        renderAboutShareImage()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(sakuraPink)
+                    }
+                    .accessibilityLabel("分享长图")
+                }
+            }
+            .sheet(isPresented: $showAboutShareSheet) {
+                if let image = aboutShareImage {
+                    VStack(spacing: 16) {
+                        Text("关于页长图已生成")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(NIOThemePaint.text)
+                        ScrollView(showsIndicators: true) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .shadow(color: .black.opacity(0.12), radius: 10)
+                                .padding(.horizontal, 4)
+                        }
+                        ShareLink(
+                            item: Image(uiImage: image),
+                            preview: SharePreview("YumikoToysRR · 关于长图", image: Image(uiImage: image))
+                        ) {
+                            Label("保存 / 分享长图", systemImage: "square.and.arrow.up")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 13)
+                                .background(sakuraPink)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                    }
+                    .padding(20)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
                 }
             }
             .sheet(isPresented: $showReleaseNotesSheet) {
@@ -560,6 +676,71 @@ struct IOSAboutView: View {
 
 // MARK: - 独立更新日志视图 (Release Notes)
 
+// MARK: - 关于页分享长图
+
+/// 将关于页核心内容（品牌头部 + 全量版本日志 + 署名）渲染为一张可分享长图
+struct NIOAboutLongShareView: View {
+    @ObservedObject private var themeService = AnimeThemeService.shared
+
+    private var sakuraPink: Color { themeService.accentColor() }
+    private var lavenderDream: Color { Color(hex: themeService.currentToken.gradientEnd) }
+
+    var body: some View {
+        VStack(spacing: 22) {
+            // 品牌头部
+            VStack(spacing: 10) {
+                Text("💞")
+                    .font(.system(size: 58))
+                Text("YumikoToysRR")
+                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
+                    )
+                Text("蔚来车况 · 萌系伴侣 App")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(sakuraPink)
+                Text("版本更新全记录 · v4.6.5 → v5.3.0")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+            }
+            .padding(.vertical, 30)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(NIOThemePaint.fill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(
+                                LinearGradient(colors: [sakuraPink.opacity(0.5), lavenderDream.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                lineWidth: 1.5
+                            )
+                    )
+            )
+
+            // 全量版本日志（复用更新日志页内容）
+            IOSReleaseNotesView().releaseNotesContent
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(NIOThemePaint.fill)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+            // 底部署名
+            VStack(spacing: 4) {
+                Text("YumikoToysRR · 持续更新中")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.8))
+                Text("生成于 \(Date().formatted(.dateTime.year().month().day()))")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+            }
+            .padding(.top, 4)
+        }
+        .padding(26)
+        .frame(width: 420)
+        .background(themeService.backgroundPrimary())
+    }
+}
+
 struct IOSReleaseNotesView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var themeService = AnimeThemeService.shared
@@ -575,7 +756,29 @@ struct IOSReleaseNotesView: View {
                 themeService.backgroundPrimary().ignoresSafeArea()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    releaseNotesContent
+                        .padding(16)
+                        // 全屏呈现时限宽居中
+                        .frame(maxWidth: 720)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .navigationTitle("版本更新日志")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(themeService.backgroundPrimary(), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                        .foregroundStyle(sakuraPink)
+                }
+            }
+        }
+    }
+
+    /// 版本日志完整内容（不含滚动容器，供分享长图渲染复用）
+    var releaseNotesContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
                         // v5.3.0
                         versionSection(
                             version: "v5.3.0 (Build 2811)",
@@ -895,23 +1098,6 @@ struct IOSReleaseNotesView: View {
                                 ])
                             ]
                         )
-                    }
-                    .padding(16)
-                    // 全屏呈现时限宽居中
-                    .frame(maxWidth: 720)
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            .navigationTitle("版本更新日志")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(themeService.backgroundPrimary(), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
-                        .foregroundStyle(sakuraPink)
-                }
-            }
         }
     }
 
