@@ -46,70 +46,88 @@ struct IOSAboutView: View {
 
     @State private var aboutShareItem: AboutShareImageItem?
 
-    /// 渲染关于页分享长图（品牌头部 + 全量版本日志 + 署名）
-    /// 全量版本日志高度可达数千 pt，2.5 倍缩放下位图高度会超过 GPU 单张纹理上限（约 8192px），
-    /// 一次性渲染会白屏/失败；因此先离线测量总高，再分片渲染并用 CGContext 拼接成完整长图。
+    @State private var isRenderingShare = false
+    @State private var renderProgress: Double = 0
+
+    /// 渲染关于页分享长图（横版：左栏品牌+最新版日志 / 右栏功勋名录）
+    /// 渲染期间显示进度缓冲 HUD；分片循环之间让出主线程刷新进度
     private func renderAboutShareImage() {
-        let contentWidth: CGFloat = 420
-        let content = NIOAboutLongShareView()
+        guard !isRenderingShare else { return }
+        isRenderingShare = true
+        renderProgress = 0
+        Task { @MainActor in
+            defer { isRenderingShare = false }
 
-        // 1. 离屏测量整图真实高度
-        let host = UIHostingController(rootView: content)
-        let measuredHeight = host.view.sizeThatFits(
-            CGSize(width: contentWidth, height: .greatestFiniteMagnitude)
-        ).height
+            let contentWidth: CGFloat = 1010
+            let content = NIOAboutLongShareView()
 
-        guard measuredHeight > 0 else {
-            // 测量失败时退回一次性渲染（兜底）
-            let renderer = ImageRenderer(content: content)
-            renderer.scale = 2.5
-            guard let image = renderer.uiImage else { return }
-            aboutShareItem = AboutShareImageItem(image: image)
-            return
+            // 1. 离屏测量整图真实高度
+            let host = UIHostingController(rootView: content)
+            let measuredHeight = host.view.sizeThatFits(
+                CGSize(width: contentWidth, height: .greatestFiniteMagnitude)
+            ).height
+            await Task.yield()
+            renderProgress = 0.15
+
+            guard measuredHeight > 0 else {
+                // 测量失败时退回一次性渲染（兜底）
+                let renderer = ImageRenderer(content: content)
+                renderer.scale = 2.5
+                guard let image = renderer.uiImage else { return }
+                renderProgress = 1
+                aboutShareItem = AboutShareImageItem(image: image)
+                return
+            }
+
+            // 2. 内容越高整体分辨率越保守，控制拼接位图的内存占用
+            let scale: CGFloat = measuredHeight > 4800 ? 2.0 : 2.5
+            let tileHeightPt = min(2200, (8192 / scale).rounded(.down)) // 单片 px 高度远低于纹理上限
+
+            let canvasWidthPx = Int((contentWidth * scale).rounded(.up))
+            let canvasHeightPx = Int((measuredHeight * scale).rounded(.up))
+            guard
+                let canvas = CGContext(
+                    data: nil,
+                    width: canvasWidthPx,
+                    height: canvasHeightPx,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpace(name: CGColorSpace.sRGB),
+                    bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+                )
+            else { return }
+            renderProgress = 0.25
+
+            // 3. 分片渲染：偏移内容后裁出对应窗口，逐片绘制进画布
+            let tileCount = Int(ceil(measuredHeight / tileHeightPt))
+            for index in 0..<tileCount {
+                let offset = CGFloat(index) * tileHeightPt
+                let sliceHeight = min(tileHeightPt, measuredHeight - offset)
+
+                let tile = content
+                    .offset(y: -offset)
+                    .frame(width: contentWidth, height: sliceHeight, alignment: .top)
+                    .clipped()
+                let renderer = ImageRenderer(content: tile)
+                renderer.scale = scale
+                guard let tileImage = renderer.uiImage?.cgImage else { continue }
+
+                // CGContext 原点在左下角：第 index 片位于 UIKit 坐标系顶部，需翻转 y
+                let yInCanvas = CGFloat(canvasHeightPx) - (offset + sliceHeight) * scale
+                canvas.draw(
+                    tileImage,
+                    in: CGRect(x: 0, y: yInCanvas, width: contentWidth * scale, height: sliceHeight * scale)
+                )
+
+                // 分片之间让出主线程，刷新进度 HUD
+                renderProgress = 0.25 + 0.7 * Double(index + 1) / Double(tileCount)
+                await Task.yield()
+            }
+
+            guard let stitched = canvas.makeImage() else { return }
+            renderProgress = 1
+            aboutShareItem = AboutShareImageItem(image: UIImage(cgImage: stitched))
         }
-
-        // 2. 内容越高整体分辨率越保守，控制拼接位图的内存占用
-        let scale: CGFloat = measuredHeight > 4800 ? 2.0 : 2.5
-        let tileHeightPt = min(2200, (8192 / scale).rounded(.down)) // 单片 px 高度远低于纹理上限
-
-        let canvasWidthPx = Int((contentWidth * scale).rounded(.up))
-        let canvasHeightPx = Int((measuredHeight * scale).rounded(.up))
-        guard
-            let canvas = CGContext(
-                data: nil,
-                width: canvasWidthPx,
-                height: canvasHeightPx,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: CGColorSpace(name: CGColorSpace.sRGB),
-                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
-            )
-        else { return }
-
-        // 3. 分片渲染：偏移内容后裁出对应窗口，逐片绘制进画布
-        let tileCount = Int(ceil(measuredHeight / tileHeightPt))
-        for index in 0..<tileCount {
-            let offset = CGFloat(index) * tileHeightPt
-            let sliceHeight = min(tileHeightPt, measuredHeight - offset)
-
-            let tile = content
-                .offset(y: -offset)
-                .frame(width: contentWidth, height: sliceHeight, alignment: .top)
-                .clipped()
-            let renderer = ImageRenderer(content: tile)
-            renderer.scale = scale
-            guard let tileImage = renderer.uiImage?.cgImage else { continue }
-
-            // CGContext 原点在左下角：第 index 片位于 UIKit 坐标系顶部，需翻转 y
-            let yInCanvas = CGFloat(canvasHeightPx) - (offset + sliceHeight) * scale
-            canvas.draw(
-                tileImage,
-                in: CGRect(x: 0, y: yInCanvas, width: contentWidth * scale, height: sliceHeight * scale)
-            )
-        }
-
-        guard let stitched = canvas.makeImage() else { return }
-        aboutShareItem = AboutShareImageItem(image: UIImage(cgImage: stitched))
     }
 
     var body: some View {
@@ -200,6 +218,31 @@ struct IOSAboutView: View {
                 .padding(20)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+            }
+            // 渲染进度缓冲 HUD
+            .overlay {
+                if isRenderingShare {
+                    ZStack {
+                        Color.black.opacity(0.25).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            ProgressView(value: renderProgress)
+                                .progressViewStyle(.linear)
+                                .tint(sakuraPink)
+                                .frame(width: 220)
+                            Text("正在渲染分享长图… \(Int(renderProgress * 100))%")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(NIOThemePaint.text)
+                        }
+                        .padding(.vertical, 20)
+                        .padding(.horizontal, 26)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(NIOThemePaint.fillStrong)
+                                .shadow(color: .black.opacity(0.2), radius: 16)
+                        )
+                    }
+                    .transition(.opacity)
+                }
             }
             .sheet(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
@@ -397,51 +440,9 @@ struct IOSAboutView: View {
             }
 
             VStack(spacing: 10) {
-                creditRow(
-                    roleKey: "artificer",
-                    roleName: "The Grand Artificer",
-                    roleCn: "伟大之工匠",
-                    author: "@🍊蜜柑工具人",
-                    tagline: "“以铁血铸就逻辑城邦，夜以继日斩尽千百 Bug，使车况高塔永不倒塌。”",
-                    allusion: "《麦克白》第一幕第二场：‘Brave Macbeth — well he deserves that name!’（勇敢的麦克白——他当得起这个称号！）"
-                )
-
-                creditRow(
-                    roleKey: "undying_wave",
-                    roleName: "Muse of the Undying Wave",
-                    roleCn: "电波缪斯·杏坛信使",
-                    author: "@🫧夏无隅",
-                    tagline: "“素缎墨兰立于庭前，以粉笔为电键、诗书为长码；落笔成波，声声不逝——长河无声奔去，唯爱与信念永存。”",
-                    allusionLabel: "电波典籍溯源：",
-                    allusion: "舞剧《永不消逝的电波》剧铭：‘长河无声奔去，唯爱与信念永存。’；1958 电影版李侠绝笔电文：‘同志们，永别了，我想念你们。’其名‘无隅’亦出自《道德经》——‘大方无隅，大器晚成。’"
-                )
-
-                creditRow(
-                    roleKey: "limner",
-                    roleName: "The Limner of the Sigil",
-                    roleCn: "徽记描绘者",
-                    author: "@会拧头的ruarua怪",
-                    tagline: "“洗不净手中极彩墨迹，以神笔抹去世间平庸，赐予蔚来看板华美绝伦之霓裳。”",
-                    allusion: "《麦克白》第五幕第一场：‘Out, damned spot!... All the perfumes of Arabia will not sweeten this little hand.’（洗掉，该死墨迹！阿拉伯所有香料都洗不净这只手。）"
-                )
-
-                creditRow(
-                    roleKey: "chronomancer",
-                    roleName: "The Chronomancer",
-                    roleCn: "星象守时者",
-                    author: "@🐰兔可可",
-                    tagline: "“恪守星辰之轨，使时间与车况分秒必争，灵动岛与锁屏活动永无毫厘差池。”",
-                    allusion: "《麦克白》第二幕第一场：‘The moon is down; I have not heard the clock.’（月已下沉，我未闻钟响。）"
-                )
-
-                creditRow(
-                    roleKey: "cleanpark_leopard",
-                    roleName: "The Sovereign of Clean Park",
-                    roleCn: "净泊雪原领主",
-                    author: "@Clean Park里的雪豹",
-                    tagline: "“驾驭 2026款 ET5 自然奇境穿梭于 Clean Park 净界雪原，执掌超能电能与灵动车况，令千里征途风驰电掣、永不止息。”",
-                    allusion: "《麦克白》第一幕第二场：‘Like valour\'s minion carved out his passage.’（宛如英勇之化身，斩开前进之路！）"
-                )
+                ForEach(NIOAboutCredits.all, id: \.roleKey) { credit in
+                    creditRow(credit)
+                }
             }
         }
         .padding(14)
@@ -455,34 +456,26 @@ struct IOSAboutView: View {
         )
     }
 
-    private func creditRow(
-        roleKey: String,
-        roleName: String,
-        roleCn: String,
-        author: String,
-        tagline: String,
-        allusionLabel: String = "📖 莎翁典籍溯源：",
-        allusion: String
-    ) -> some View {
-        let isExpanded = expandedCredit == roleKey
+    private func creditRow(_ credit: NIOAboutCredit) -> some View {
+        let isExpanded = expandedCredit == credit.roleKey
 
         return VStack(alignment: .leading, spacing: 6) {
             Button(action: {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                    expandedCredit = isExpanded ? nil : roleKey
+                    expandedCredit = isExpanded ? nil : credit.roleKey
                 }
             }) {
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(roleName)
+                            Text(credit.roleName)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(mintCyan)
-                            Text("(\(roleCn))")
+                            Text("(\(credit.roleCn))")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(NIOThemePaint.text.opacity(0.6))
                         }
-                        Text(author)
+                        Text(credit.author)
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundStyle(sakuraPink)
                     }
@@ -496,17 +489,17 @@ struct IOSAboutView: View {
             }
             .buttonStyle(.plain)
 
-            Text(tagline)
+            Text(credit.tagline)
                 .font(.system(size: 11))
                 .foregroundStyle(NIOThemePaint.text.opacity(0.75))
                 .lineSpacing(2)
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(allusionLabel)
+                    Text(credit.allusionLabel)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(pastelYellow)
-                    Text(allusion)
+                    Text(credit.allusion)
                         .font(.system(size: 10, design: .serif))
                         .foregroundStyle(NIOThemePaint.text.opacity(0.6))
                         .italic()
@@ -672,27 +665,425 @@ struct IOSAboutView: View {
     }
 }
 
+// MARK: - 关于页数据源（版本日志与功勋名录，关于页 / 更新日志页 / 分享长图三处共用）
+
+struct NIOAboutRelease {
+    let version: String
+    let date: String
+    let isLatest: Bool
+    let items: [(category: String, points: [String])]
+}
+
+enum NIOAboutReleases {
+    static let all: [NIOAboutRelease] = [
+        // v5.3.0
+        NIOAboutRelease(
+            version: "v5.3.0 (Build 2811)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("💞 恋爱好感度实验室", [
+                    "🐰 关于页点击兔子头像进入：蜜柑 🍊 × 夏老师 🫧 双人密码盲评互评游戏",
+                    "🔦 双阶段心理学体系：初识心动期（Aron 亲近感实验 / Byrne 相似-吸引）/ 深度关系期（Sternberg 三角 + Gottman + 依恋理论），看板可切换",
+                    "🙈 军事级加密：AES-256-GCM 密封原始评分与留言，密钥由本人密码 2 万轮拉伸派生，对方只见聚合结论不见原始分"
+                ]),
+                ("🧠 循证心理学引擎", [
+                    "📐 看板每项数据均附「依据」展开：完整计算式 + 文献出处（14 篇实证研究）",
+                    "📈 指数移动平均（EMA α=0.6）纵向平滑多轮评分，留言情绪由 NaturalLanguage 端内模型实时演算（±6 分加成）",
+                    "⚖️ 新增六维均衡度与结果稳定度分级：轮次越多结论越可信",
+                    "✨ 判定体系：心动火花等级（初识期）/ Sternberg 八种爱情类型（稳定期）+ 默契指数 + 相性评级 SSS-C"
+                ]),
+                ("🎮 玩法与体验", [
+                    "📖 三页分步引导轮播：欢迎 → 玩法规则 → 隐私与理论",
+                    "🔁 无限次重写评分即连载新章节，本人可见「上次评分」对照与轮间变化量",
+                    "📤 分享结论卡：结论渲染为高清分享图，严格不含任何个人原始分",
+                    "🛡 独立重置向导：任一方密码授权，或忘记密码恢复路径（确认短语 + 冷静期）",
+                    "📍 触发彩蛋后设置页出现常驻入口"
+                ])
+            ]
+        ),
+        // v5.2.1
+        NIOAboutRelease(
+            version: "v5.2.1 (Build 2810)",
+            date: "2026-11",
+            isLatest: false,
+            items: [
+                ("🖼 自定义背景全面升级", [
+                    "📐 小 / 中 / 锁屏三个展示位独立裁剪与存储，只设一个尺寸其余自动补图",
+                    "🧠 Vision 智能选区：自动识别画面主体并框进取景口",
+                    "🎯 焦点填充：取景随实际容器尺寸自适应，任何比例下与裁剪所见一致",
+                    "✂️ 裁剪编辑器：拖动 / 双指缩放 / 手动旋转 90°，修复 Live Photo 方向颠倒"
+                ]),
+                ("🎨 遮罩上帝模式", [
+                    "🎚️ 遮罩风格（跟随主题 / 压暗 / 提亮）+ 起止浓度滑条自由调节",
+                    "🔤 文字色调随遮罩明暗自动翻转，深浅遮罩下都清晰可读",
+                    "💾 三个背景保存方案：整套配置一键存取切换"
+                ]),
+                ("🏝 灵动岛与锁屏", [
+                    "👆 点击灵动岛 / 锁屏卡片深链进 App：立即刷新车况 + 主卡片弹性入场动画",
+                    "🩹 修复扩展进程内存峰值导致的背景加载失败"
+                ]),
+                ("🌸 全局主题动效", [
+                    "✨ 统一动效曲线与控件按压手感，主题切换弹簧过渡",
+                    "🎭 文字色调跟随遮罩模式自适应（压暗浅字 / 提亮深字）"
+                ]),
+                ("🔬 诊断与抓包", [
+                    "🧬 诊断页新增「原始数据块查看器」：RVS status 全块语义分组 + 键值复制",
+                    "🚀 小火箭模块 v3.3：快捷场景请求捕获；RVS 自动追加 field=exterior 重签",
+                    "➖ 看板移除暂无法显示的车速行"
+                ]),
+                ("🏅 功勋名录", [
+                    "🌊 新增：夏无隅（电波缪斯·杏坛信使）"
+                ])
+            ]
+        ),
+        // v5.2.0
+        NIOAboutRelease(
+            version: "v5.2.0 (Build 2809)",
+            date: "2026-11",
+            isLatest: false,
+            items: [
+                ("📥 凭证收件箱", [
+                    "📦 Shadowrocket 直推的每一个字段（车级/用户级 Token、VehicleID、设备指纹…）集中展示",
+                    "👁️ Token 默认打码显示，点击「显示明文」再查看，旁人窥屏不尴尬",
+                    "📋 点任意行一键复制单项，或「复制全部 JSON」整包带走",
+                    "📤⬇️ 支持导出整包 JSON 存到「文件」App，也可从文件导入回填（换机迁移凭证）",
+                    "🎯 官方车控样本 / 🔬 扫码授权链路样本独立分区，展开查看原文 + 一键复制",
+                    "💾 收件箱持久化：重启 App 内容不丢，右上角一键清空"
+                ]),
+                ("🚀 Shadowrocket 模块 v3.1", [
+                    "🎟️ 新增用户级 Token 捕获（主 App 会话，车控/蓝牙钥匙/RVS 必需）",
+                    "🎯 官方 App 点车控按钮自动捕获指令原文（端点 + body），App 诊断页可查",
+                    "🔬 新增车机扫码授权链路（poseidon）响应捕获：工程模式扫码的服务端权限判定原文直接抓给你看",
+                    "📡 捕获到车控/扫码样本时系统通知即时提醒"
+                ]),
+                ("🧹 智能识别净化", [
+                    "✂️ 剪贴板智能识别自动过滤抓包样本字段：车控/扫码样本里的 URL 与 Token 不再误填进凭证",
+                    "🏷️ 过滤动作在解析备注中明示，填入内容干净可审计"
+                ]),
+                ("🌸 横幅改进", [
+                    "🩹 修复凭证回填从不弹应用内横幅的问题（此前走静默刷新路径）",
+                    "🏠 设置页停留时也能看到横幅（此前只有主页能看到）",
+                    "👆 横幅点击任意位置提前关闭，停留时长 2.8s → 3.5s，文案支持两行不截断"
+                ]),
+                ("🔐 安全加固", [
+                    "🗝️ 签名密钥移出代码仓库：本地以 gitignore 的私有文件分发，公开仓库不再含真实密钥",
+                    "🧾 手动更新安装不受影响；新环境需在设置页填入签名密钥"
+                ]),
+                ("🛠 车控与状态修复", [
+                    "⏱️ 修复剩余充电充满时间不准：优先采用服务端 estimate_charge_end_time",
+                    "🔋 修复限充上限恒显 90%：剔除 max_soc 误兜底",
+                    "🚙 修复行驶中车速不显示（speed 字符串解码兜底）",
+                    "🗺️ 修复停车后地图不实时刷新（相机跟随坐标更新）",
+                    "🏝️ 修复灵动岛充电布局错位 + 强制下岛后无法再次上岛（自愈机制）",
+                    "⚠️ 充电中充电口盖打开不再误报「注意」",
+                    "♨️ 新增强化干燥 / 极速除霜 / 座舱过热保护特殊模式显示（灵动岛 / Widget / 看板）",
+                    "🔋 省电模式小组件：充电期预生成预测电量时间线，刷新延迟显著降低",
+                    "🎛️ 车控面板扩至 16 项指令（座垫加热/电池预热/遮阳帘/V2L 放电等）+ WebSocket 实时指令流 + 蓝牙钥匙面板"
+                ])
+            ]
+        ),
+
+        // v5.1.7
+        NIOAboutRelease(
+            version: "v5.1.7 (Build 2808)",
+            date: "2026-11",
+            isLatest: false,
+            items: [
+                ("🔄 智能刷新策略", [
+                    "🌙 进入后台立即刷新一轮车况：亮屏切走聊天 / 锁屏都即时同步",
+                    "🌞 回到前台自动刷新（与上次拉取间隔 ≥ 1 分钟）",
+                    "📰 刷新结果横幅：「数据已更新 / 无数据更新 / 拉取失败」，自动消失不打扰",
+                    "⏱️ 只有数据真实变化才推进主界面更新时间（显著内容指纹比对，无变化不伪装成刚刚刷新）"
+                ]),
+                ("📱 Widget 与实时活动", [
+                    "🏷️ 桌面小组件（小 / 中）与锁屏实时活动新增刷新结果标签「已更新 / 无数据更新」",
+                    "💚 已更新为绿色高亮，无数据更新弱化显示，与主 App 判定同源"
+                ]),
+                ("🚗 同行智能监测", [
+                    "📍 手机接近爱车且快速移动时自动进入高频同步（30 秒 / 次）",
+                    "🚦 智能识别行驶中 / 等灯低速 / 到达目的地，状态变化横幅提示",
+                    "🔒 到达目的地后自动确认落锁状态，未上锁立即警示提醒",
+                    "🛡 位置仅本地比对车辆坐标，不存储、不上传"
+                ])
+            ]
+        ),
+
+        // v5.1.5
+        NIOAboutRelease(
+            version: "v5.1.5 (Build 2807)",
+            date: "2026-10",
+            isLatest: false,
+            items: [
+                ("🏠 桌面小组件", [
+                    "🚗 「蔚来车况」小 / 中尺寸桌面 Widget：电量、续航、充电状态一目了然",
+                    "⚡️ 充电功率 / 限充上限 / 车内外温度 / 特殊模式徽章（中尺寸）",
+                    "🔄 主 App 每次刷新车况自动同步快照，主题色跟随 App 主题"
+                ]),
+                ("🏝 灵动岛开关胶囊", [
+                    "🎛️ 控制中心 / 锁屏新增「灵动岛车况」控制胶囊（iOS 18+）",
+                    "👆 被强制下岛后一键重新上岛，立即重建实时活动",
+                    "🩹 修复失效引用导致的永久下岛：任何数据刷新自动自愈回岛"
+                ]),
+                ("🔋 充电显示修复", [
+                    "✅ 修复充电状态可能不显示：充电功率兜底判定（数据缺 charge_state 也可识别）",
+                    "🎯 修复充电上限显示错误：优先 target_soc_percentage（用户设定限充），不再误用满电 CLTC 字段"
+                ]),
+                ("🌙 后台刷新", [
+                    "🌙 BGTaskScheduler 后台任务：退到后台仍定期拉取车况并刷新灵动岛",
+                    "🔁 刷新链自动续期，车况与实时活动后台保持新鲜"
+                ]),
+                ("🚗 CarPlay 支持", [
+                    "🖥️ 连接 CarPlay 自动显示车况列表：电量 / 续航 / 充电功率 / 车锁 / 温度 / 总里程",
+                    "📋 一级详情页：限充、胎压、充电桩类型、12V 电瓶等全维状态",
+                    "🔄 数据自动刷新 + 一键手动刷新"
+                ]),
+                ("🔔 Token 过期提醒", [
+                    "🩹 修复 Token 失效（HTTP 401/403）完全静默：之前只写诊断日志，界面毫无提示",
+                    "🚨 看板顶部新增红色警示横幅 + 错误触感，「凭证失效」红点同步点亮",
+                    "👆 点击横幅直达配置页；重新配置拉取成功后自动复位，轮询恢复正常频率",
+                    "🐢 修复 15 分钟降频退避永不生效的问题：Token 失效时不再疯狂重试撞接口"
+                ]),
+                ("⚡️ 性能优化", [
+                    "🔋 桌面 Widget 仅在车况真实变化时刷新时间线，不再每轮轮询唤醒 Widget 进程白耗电",
+                    "🏝 灵动岛系统活动查询合并降频，减少跨进程开销"
+                ]),
+                ("✨ 启动动画 v5.3 · 星流汇聚", [
+                    "🌌 极光漂移背景：三团主题色柔光缓慢游移",
+                    "💫 向心星流：40 颗光尘螺旋吸入充能环，越近越快；充能光头亮斑跑在进度环前端",
+                    "💥 完成瞬间粒子爆发 + 三重冲击波扩散",
+                    "🪪 Logo 3D 翻转入场 + 主标题「蔚来 · 兔可可」逐字上浮",
+                    "🔌 全部粒子层 Canvas 单层绘制（30fps 上限），华丽但省电"
+                ])
+            ]
+        ),
+
+        // v5.1.0
+        NIOAboutRelease(
+            version: "v5.1.0 (Build 2701)",
+            date: "2026-10",
+            isLatest: false,
+            items: [
+                ("🪞 灵动岛适配（Duo / 全机型）", [
+                    "🔋 紧凑区重构：左图标 + 右 SOC 数字，告别挖孔裁切（旧版「2 / 11…」）",
+                    "⚡️ 充电闪电 / 低电橙 / 主题色电量图形，未锁车橙色警示点",
+                    "📖 续航与充满倒计时保留在长按展开态"
+                ]),
+                ("📱 Duo 折叠屏与 iPad 全面适配", [
+                    "🧭 特斯拉式侧边栏：8 大功能分类 + hero 车图常驻主区",
+                    "🌗 折叠↔展开形态自适应：≥780pt 自动双列（看板与设置）",
+                    "🖥️ 设置页大屏全屏呈现：个性化左列 / 连接配置右列",
+                    "🎨 自定义折叠按钮与淡色标题条，替换系统玻璃钮",
+                    "📐 侧栏图标统一宽度间距，multicolor 红车图标归入主题色"
+                ]),
+                ("🛠 修复与优化", [
+                    "🧩 特殊模式识别修复：宠物 / 露营 / 不下电键名对齐真实 RVS 字段",
+                    "🧊 智能外设卡语义化开关解析，不再显示原始遥测键名",
+                    "📍 车辆位置卡文字叠印修复",
+                    "🖼️ 主页车型标题跟随设置（特别版名称映射）+ Vision 抠图车图展台光",
+                    "⌨️ 设置页首页名称输入框溢出修复",
+                    "🔑 统一设备指纹（User-Guid / app_ver / UA），防服务器多端误判踢线",
+                    "🛰 抓包脚本与 App 解析全链路同步新指纹字段"
+                ])
+            ]
+        ),
+
+        // v5.0.0
+        NIOAboutRelease(
+            version: "v5.0.0 (Build 2700)",
+            date: "2026-10",
+            isLatest: false,
+            items: [
+                ("🚀 启动动画系统 · 多风格可选", [
+                    "⚡️ 能量充能（默认）：电池环 0→100% 充能 + 电弧凝聚高清 Logo",
+                    "🕹️ 像素重制 v5：15x15 点阵波次点亮，复古像素美学",
+                    "🐇 极简快启：Logo 淡入 + 细进度线，≤1.1s 直达看板",
+                    "🎛️ 设置页新增启动动画卡片：风格 / 节奏（标准·疾速）/ 每日仅首次 / 触感开关 / 一键预览",
+                    "🔋 省电动效模式下自动切换极简快启"
+                ]),
+                ("📊 看板六大增强卡（参考 ha-nio / NIO-Dash）", [
+                    "🛡️ 特殊模式卡：守卫 / 宠物 / 露营 / 不下电保持 / V2L 对外放电",
+                    "🧊 智能外设卡：12V 低压电瓶 · 车载冰箱 · 座舱加热 · 车灯照明",
+                    "🏆 能耗评分卡：CLTC 续航达成率 S/A/B/C 评级 + 推算百公里电耗",
+                    "📈 历史趋势卡：近 7 日 SOC 电量曲线 + 每日行驶里程柱状图（Swift Charts）",
+                    "🔧 维保追踪卡：整车健康分 · 五项耗材寿命进度 · 累计保养花费",
+                    "🗺️ 行驶轨迹卡：当日 GPS 采样路径地图回放"
+                ]),
+                ("⚙️ 平台与底层", [
+                    "📱 最低系统要求提升至 iOS 26，全面拥抱现代 API",
+                    "💾 服务订单本地持久化（orders.json），冷启动即刻可用",
+                    "🏷️ 版本号升级至 5.0.0"
+                ])
+            ]
+        ),
+
+        // v4.8.0
+        NIOAboutRelease(
+            version: "v4.8.0 (Build 2700)",
+            date: "2026-08",
+            isLatest: false,
+            items: [
+                ("🎨 主题系统 v2 · 全新三系七主题", [
+                    "🐰 二次元系：蜜桃兔兔（浅）、樱夜粉兔（深）、抹茶奶盖（浅）",
+                    "◻️ 简洁系：云石膏（浅）、曜石灰（深），单色克制极简",
+                    "⚡️ 酷系：赛博霓虹（深）、暮光星野（深）",
+                    "🌗 全新浅色主题支持：看板 / 设置 / 关于 / 日志全页面墨字白卡自适应",
+                    "🎨 灵动岛与锁屏实时活动同步跟随主题配色"
+                ]),
+                ("🏝️ 灵动岛与实时活动重做", [
+                    "⚡️ 充电时展示实时功率与免刷新充满倒计时",
+                    "🚨 车窗/车门未关好时锁屏卡片顶部告警条提示",
+                    "🛞 胎压四轮同显并新增 12V 电瓶与冰箱 / V2L 放电状态",
+                    "🎯 展开态重排：电量实估 / 续航双数字 + 模式状态 + 电量进度条"
+                ]),
+                ("🚀 性能优化", [
+                    "📉 灵动岛数据无显著变化时跳过更新，降低系统功耗",
+                    "🧵 轨迹历史 JSON 编码与持久化全部移出主线程",
+                    "⏱️ 缓存全局 DateFormatter，消除高频刷新下的重复创建开销",
+                    "🔋 新增省电动效开关，一键关闭流光与浮动等常驻动画"
+                ])
+            ]
+        ),
+
+        // v4.7.0
+        NIOAboutRelease(
+            version: "v4.7.0 (Build 2620)",
+            date: "2026-08",
+            isLatest: false,
+            items: [
+                ("🚀 NIO-Dash & ha-nio 全面功能大移植", [
+                    "💻 车机系统与固件 FOTA 版本展示（零件号、上一版本与升级状态）",
+                    "🔋 动力电池全维诊断（实时充电功率 kW、达成率、充电上限、锁电量、V2L 对外放电）",
+                    "⚡️ 低压 12V 蓄电池监控（12V 小电瓶 SOC % 与实时电压监测）",
+                    "🧊 车载智能冰箱（开关状态、当前与目标温度）与 PM2.5 空气质量健康",
+                    "💡 车外灯光与照明系统监测（近光灯、远光灯、示宽灯、双闪警报）",
+                    "📍 停车位置高精度纠偏寻车（WGS-84/GCJ-02、苹果地图/高德地图一键导航寻车）",
+                    "♨️ 暖风座舱超强干燥（高温超强干燥模式、极速除霜、极速制冷制热、座舱过热保护）",
+                    "📑 换电站足迹与财务大屏（累计换电次数、总花费、单次均价、Top 换电站打卡排行榜）"
+                ]),
+                ("🔐 动态 Widget 签名与稳定性", [
+                    "⚡️ 新增 Widget 动态签名模式，每次拉取动态生成时间戳与 MD5 校验码，长期运行永不失效",
+                    "🛠️ 彻底修复了 iOS 报文渲染引发的 EXC_BAD_ACCESS (code=2) 闪退问题",
+                    "🪄 全新升级一键抓包嗅探插件，车况、换电、签到全量一次性一键截取导入"
+                ]),
+                ("🎨 视觉与体验全面进阶", [
+                    "🌸 保留 2026款 ET5 自然奇境特别版，并开放全系 9 大车型与全车漆涂装自由选择",
+                    "✨ 5 大动漫主题系统移植（深空霓虹、日系治愈、赛博二次元、软萌可爱、新海诚）",
+                    "🏝️ 灵动岛与锁屏实时活动毫秒级同步联动",
+                    "⏱️ 优化开屏像素绘制动画时序，更方便截屏分享与后台资源初始化"
+                ])
+            ]
+        ),
+
+        // v4.6.5
+        NIOAboutRelease(
+            version: "v4.6.5 (Build 2612)",
+            date: "2026-08",
+            isLatest: false,
+            items: [
+                ("⚡️ 蔚来核心数据看板", [
+                    "⚡️ 萌动超能双色电量能量流光槽",
+                    "🚪 雪豹与海獭可爱守护结界（7门车锁动态状态）",
+                    "🛞 4 轮萌爪胎压与温度网格矩阵监测",
+                    "📅 蔚来每日签到与连续连击天数统计",
+                    "🏝️ 首次引入 Live Activity 灵动岛与锁屏实时车况监控"
+                ])
+            ]
+        )
+    ]
+
+    static var latest: NIOAboutRelease {
+        all.first { $0.isLatest } ?? all[0]
+    }
+}
+
+/// 功勋名录单条记录
+struct NIOAboutCredit {
+    let roleKey: String
+    let roleName: String
+    let roleCn: String
+    let author: String
+    let tagline: String
+    let allusionLabel: String
+    let allusion: String
+}
+
+enum NIOAboutCredits {
+    static let all: [NIOAboutCredit] = [
+        NIOAboutCredit(
+            roleKey: "artificer",
+            roleName: "The Grand Artificer",
+            roleCn: "伟大之工匠",
+            author: "@🍊蜜柑工具人",
+            tagline: "“以铁血铸就逻辑城邦，夜以继日斩尽千百 Bug，使车况高塔永不倒塌。”",
+            allusionLabel: "📖 莎翁典籍溯源：",
+            allusion: "《麦克白》第一幕第二场：‘Brave Macbeth — well he deserves that name!’（勇敢的麦克白——他当得起这个称号！）"
+        ),
+        NIOAboutCredit(
+            roleKey: "undying_wave",
+            roleName: "Muse of the Undying Wave",
+            roleCn: "电波缪斯·杏坛信使",
+            author: "@🫧夏无隅",
+            tagline: "“素缎墨兰立于庭前，以粉笔为电键、诗书为长码；落笔成波，声声不逝——长河无声奔去，唯爱与信念永存。”",
+            allusionLabel: "电波典籍溯源：",
+            allusion: "舞剧《永不消逝的电波》剧铭：‘长河无声奔去，唯爱与信念永存。’；1958 电影版李侠绝笔电文：‘同志们，永别了，我想念你们。’其名‘无隅’亦出自《道德经》——‘大方无隅，大器晚成。’"
+        ),
+        NIOAboutCredit(
+            roleKey: "limner",
+            roleName: "The Limner of the Sigil",
+            roleCn: "徽记描绘者",
+            author: "@会拧头的ruarua怪",
+            tagline: "“洗不净手中极彩墨迹，以神笔抹去世间平庸，赐予蔚来看板华美绝伦之霓裳。”",
+            allusionLabel: "📖 莎翁典籍溯源：",
+            allusion: "《麦克白》第五幕第一场：‘Out, damned spot!... All the perfumes of Arabia will not sweeten this little hand.’（洗掉，该死墨迹！阿拉伯所有香料都洗不净这只手。）"
+        ),
+        NIOAboutCredit(
+            roleKey: "chronomancer",
+            roleName: "The Chronomancer",
+            roleCn: "星象守时者",
+            author: "@🐰兔可可",
+            tagline: "“恪守星辰之轨，使时间与车况分秒必争，灵动岛与锁屏活动永无毫厘差池。”",
+            allusionLabel: "📖 莎翁典籍溯源：",
+            allusion: "《麦克白》第二幕第一场：‘The moon is down; I have not heard the clock.’（月已下沉，我未闻钟响。）"
+        ),
+        NIOAboutCredit(
+            roleKey: "cleanpark_leopard",
+            roleName: "The Sovereign of Clean Park",
+            roleCn: "净泊雪原领主",
+            author: "@Clean Park里的雪豹",
+            tagline: "“驾驭 2026款 ET5 自然奇境穿梭于 Clean Park 净界雪原，执掌超能电能与灵动车况，令千里征途风驰电掣、永不止息。”",
+            allusionLabel: "📖 莎翁典籍溯源：",
+            allusion: "《麦克白》第一幕第二场：‘Like valour\'s minion carved out his passage.’（宛如英勇之化身，斩开前进之路！）"
+        )
+    ]
+}
+
 // MARK: - 独立更新日志视图 (Release Notes)
 
-// MARK: - 关于页分享长图（小册子风：暖粉纸底 + 白卡分区）
+// MARK: - 关于页分享长图（横版小册子：左栏品牌+最新版日志 / 右栏功勋名录）
 
-/// 将关于页核心内容（品牌头部 + 全量版本日志 + 署名）渲染为一张可分享长图
+/// 横版可分享长图：左栏为品牌头部与最新版本更新日志，右栏为功勋名录；
+/// 名单与日志实时取自关于页共享数据源（NIOAboutReleases / NIOAboutCredits）
 struct NIOAboutLongShareView: View {
     @ObservedObject private var themeService = AnimeThemeService.shared
 
     private var sakuraPink: Color { themeService.accentColor() }
+    private var mintCyan: Color { themeService.glowColor() }
+    private var lavenderDream: Color { Color(hex: themeService.currentToken.gradientEnd) }
 
-    // 小册子固定配色（容器固定，日志区跟随当前主题保证可读）
+    // 小册子固定配色（容器固定，内容区跟随当前主题保证可读）
     private let paper = Color(red: 0.996, green: 0.941, blue: 0.929)      // 暖粉纸底
     private let ink = Color(red: 0.23, green: 0.20, blue: 0.21)           // 墨色正文
     private let rose = Color(red: 0.906, green: 0.302, blue: 0.478)       // 玫红强调
 
+    private let latest = NIOAboutReleases.latest
+
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             // 顶部胶囊标题条
             HStack(spacing: 6) {
                 Text("✨").font(.system(size: 12))
-                Text("YumikoToysRR · 版本更新全记录")
+                Text("YumikoToysRR · 关于本作 · 定制分享卡")
                     .font(.system(size: 12, weight: .heavy, design: .rounded))
                     .foregroundStyle(rose)
                 Text("✨").font(.system(size: 12))
@@ -703,59 +1094,133 @@ struct NIOAboutLongShareView: View {
             .overlay(Capsule().stroke(rose.opacity(0.22), lineWidth: 1))
             .shadow(color: rose.opacity(0.12), radius: 8, y: 3)
 
-            // 品牌区白卡
-            VStack(spacing: 8) {
-                Text("💞")
-                    .font(.system(size: 54))
-                    .shadow(color: rose.opacity(0.22), radius: 10)
-                Text("YumikoToysRR")
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
-                    .foregroundStyle(ink)
-                Text("蔚来车况 · 萌系伴侣 App")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(rose)
-                Text("v4.6.5 → v5.3.0")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(ink.opacity(0.6))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(paper))
-                    .overlay(Capsule().stroke(rose.opacity(0.2), lineWidth: 1))
-            }
-            .padding(.vertical, 22)
-            .frame(maxWidth: .infinity)
-            .background(bookCard)
-            .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
+            HStack(alignment: .top, spacing: 14) {
+                // ── 左栏：品牌头部 + 最新版本更新日志 ──
+                VStack(spacing: 12) {
+                    // 品牌 hero 白卡（参考关于页头部样式）
+                    VStack(spacing: 8) {
+                        Text("💞")
+                            .font(.system(size: 44))
+                            .shadow(color: rose.opacity(0.22), radius: 10)
+                        Text("YumikoToysRR")
+                            .font(.system(size: 26, weight: .heavy, design: .rounded))
+                            .foregroundStyle(ink)
+                        Text("蔚来萌动智能车况看板 & 灵动岛实时助理")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(rose)
+                        Text("v4.6.5 → \(NIOAboutReleases.latest.version.split(separator: " ").first.map(String.init) ?? "")")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(ink.opacity(0.6))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(paper))
+                            .overlay(Capsule().stroke(rose.opacity(0.2), lineWidth: 1))
+                    }
+                    .padding(.vertical, 18)
+                    .frame(maxWidth: .infinity)
+                    .background(bookCard)
+                    .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
 
-            // 全量版本日志（复用更新日志页内容，跟随主题保证可读）
-            IOSReleaseNotesView().releaseNotesContent
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(NIOThemePaint.fill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(rose.opacity(0.18), lineWidth: 1)
-                )
-                .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
+                    // 最新版本更新日志（原麦克白彩蛋区位置）
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("📖 最新版本更新日志")
+                                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                .foregroundStyle(ink)
+                            Spacer()
+                            Text(latest.version)
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(rose))
+                        }
+
+                        ForEach(latest.items, id: \.category) { item in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.category)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(mintCyan)
+                                ForEach(item.points, id: \.self) { pt in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Text("•")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(lavenderDream)
+                                        Text(pt)
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(ink.opacity(0.82))
+                                            .lineSpacing(2)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            }
+                            .padding(9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(paper.opacity(0.7))
+                            )
+                        }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(bookCard)
+                    .shadow(color: ink.opacity(0.07), radius: 10, y: 4)
+                }
+                .frame(width: 545)
+
+                // ── 右栏：功勋名录（实时取自关于页数据源）──
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("🎭 Dramatis Personae")
+                            .font(.system(size: 14, weight: .heavy, design: .rounded))
+                            .foregroundStyle(ink)
+                        Spacer()
+                        Text("功勋名录")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(rose)
+                    }
+                    .padding(.bottom, 2)
+
+                    ForEach(NIOAboutCredits.all, id: \.roleKey) { credit in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(credit.roleName)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(mintCyan)
+                            Text("\(credit.roleCn) · \(credit.author)")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(rose)
+                            Text(credit.tagline)
+                                .font(.system(size: 9))
+                                .foregroundStyle(ink.opacity(0.72))
+                                .lineSpacing(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.white)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(ink.opacity(0.05), lineWidth: 1)
+                        )
+                    }
+                }
+                .frame(width: 400)
+            }
 
             // 底部 footer 胶囊
-            VStack(spacing: 6) {
-                Text("Made with 💞 · YumikoToysRR · 持续更新中")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(ink.opacity(0.7))
-                Text("生成于 \(Date().formatted(.dateTime.year().month().day()))")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(ink.opacity(0.45))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(Capsule().fill(Color.white.opacity(0.9)))
+            Text("Made with 💞 · YumikoToysRR · 持续更新中 · \(Date().formatted(.dateTime.year().month().day()))")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(ink.opacity(0.55))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(Color.white.opacity(0.9)))
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(width: 1010)
         .background(
             RoundedRectangle(cornerRadius: 26)
                 .fill(paper)
@@ -816,335 +1281,20 @@ struct IOSReleaseNotesView: View {
     /// 版本日志完整内容（不含滚动容器，供分享长图渲染复用）
     var releaseNotesContent: some View {
         VStack(alignment: .leading, spacing: 20) {
-                        // v5.3.0
-                        versionSection(
-                            version: "v5.3.0 (Build 2811)",
-                            date: "2026-11",
-                            isLatest: true,
-                            items: [
-                                ("💞 恋爱好感度实验室", [
-                                    "🐰 关于页点击兔子头像进入：蜜柑 🍊 × 夏老师 🫧 双人密码盲评互评游戏",
-                                    "🔦 双阶段心理学体系：初识心动期（Aron 亲近感实验 / Byrne 相似-吸引）/ 深度关系期（Sternberg 三角 + Gottman + 依恋理论），看板可切换",
-                                    "🙈 军事级加密：AES-256-GCM 密封原始评分与留言，密钥由本人密码 2 万轮拉伸派生，对方只见聚合结论不见原始分"
-                                ]),
-                                ("🧠 循证心理学引擎", [
-                                    "📐 看板每项数据均附「依据」展开：完整计算式 + 文献出处（14 篇实证研究）",
-                                    "📈 指数移动平均（EMA α=0.6）纵向平滑多轮评分，留言情绪由 NaturalLanguage 端内模型实时演算（±6 分加成）",
-                                    "⚖️ 新增六维均衡度与结果稳定度分级：轮次越多结论越可信",
-                                    "✨ 判定体系：心动火花等级（初识期）/ Sternberg 八种爱情类型（稳定期）+ 默契指数 + 相性评级 SSS-C"
-                                ]),
-                                ("🎮 玩法与体验", [
-                                    "📖 三页分步引导轮播：欢迎 → 玩法规则 → 隐私与理论",
-                                    "🔁 无限次重写评分即连载新章节，本人可见「上次评分」对照与轮间变化量",
-                                    "📤 分享结论卡：结论渲染为高清分享图，严格不含任何个人原始分",
-                                    "🛡 独立重置向导：任一方密码授权，或忘记密码恢复路径（确认短语 + 冷静期）",
-                                    "📍 触发彩蛋后设置页出现常驻入口"
-                                ])
-                            ]
-                        )
-                        // v5.2.1
-                        versionSection(
-                            version: "v5.2.1 (Build 2810)",
-                            date: "2026-11",
-                            isLatest: false,
-                            items: [
-                                ("🖼 自定义背景全面升级", [
-                                    "📐 小 / 中 / 锁屏三个展示位独立裁剪与存储，只设一个尺寸其余自动补图",
-                                    "🧠 Vision 智能选区：自动识别画面主体并框进取景口",
-                                    "🎯 焦点填充：取景随实际容器尺寸自适应，任何比例下与裁剪所见一致",
-                                    "✂️ 裁剪编辑器：拖动 / 双指缩放 / 手动旋转 90°，修复 Live Photo 方向颠倒"
-                                ]),
-                                ("🎨 遮罩上帝模式", [
-                                    "🎚️ 遮罩风格（跟随主题 / 压暗 / 提亮）+ 起止浓度滑条自由调节",
-                                    "🔤 文字色调随遮罩明暗自动翻转，深浅遮罩下都清晰可读",
-                                    "💾 三个背景保存方案：整套配置一键存取切换"
-                                ]),
-                                ("🏝 灵动岛与锁屏", [
-                                    "👆 点击灵动岛 / 锁屏卡片深链进 App：立即刷新车况 + 主卡片弹性入场动画",
-                                    "🩹 修复扩展进程内存峰值导致的背景加载失败"
-                                ]),
-                                ("🌸 全局主题动效", [
-                                    "✨ 统一动效曲线与控件按压手感，主题切换弹簧过渡",
-                                    "🎭 文字色调跟随遮罩模式自适应（压暗浅字 / 提亮深字）"
-                                ]),
-                                ("🔬 诊断与抓包", [
-                                    "🧬 诊断页新增「原始数据块查看器」：RVS status 全块语义分组 + 键值复制",
-                                    "🚀 小火箭模块 v3.3：快捷场景请求捕获；RVS 自动追加 field=exterior 重签",
-                                    "➖ 看板移除暂无法显示的车速行"
-                                ]),
-                                ("🏅 功勋名录", [
-                                    "🌊 新增：夏无隅（电波缪斯·杏坛信使）"
-                                ])
-                            ]
-                        )
-                        // v5.2.0
-                        versionSection(
-                            version: "v5.2.0 (Build 2809)",
-                            date: "2026-11",
-                            isLatest: false,
-                            items: [
-                                ("📥 凭证收件箱", [
-                                    "📦 Shadowrocket 直推的每一个字段（车级/用户级 Token、VehicleID、设备指纹…）集中展示",
-                                    "👁️ Token 默认打码显示，点击「显示明文」再查看，旁人窥屏不尴尬",
-                                    "📋 点任意行一键复制单项，或「复制全部 JSON」整包带走",
-                                    "📤⬇️ 支持导出整包 JSON 存到「文件」App，也可从文件导入回填（换机迁移凭证）",
-                                    "🎯 官方车控样本 / 🔬 扫码授权链路样本独立分区，展开查看原文 + 一键复制",
-                                    "💾 收件箱持久化：重启 App 内容不丢，右上角一键清空"
-                                ]),
-                                ("🚀 Shadowrocket 模块 v3.1", [
-                                    "🎟️ 新增用户级 Token 捕获（主 App 会话，车控/蓝牙钥匙/RVS 必需）",
-                                    "🎯 官方 App 点车控按钮自动捕获指令原文（端点 + body），App 诊断页可查",
-                                    "🔬 新增车机扫码授权链路（poseidon）响应捕获：工程模式扫码的服务端权限判定原文直接抓给你看",
-                                    "📡 捕获到车控/扫码样本时系统通知即时提醒"
-                                ]),
-                                ("🧹 智能识别净化", [
-                                    "✂️ 剪贴板智能识别自动过滤抓包样本字段：车控/扫码样本里的 URL 与 Token 不再误填进凭证",
-                                    "🏷️ 过滤动作在解析备注中明示，填入内容干净可审计"
-                                ]),
-                                ("🌸 横幅改进", [
-                                    "🩹 修复凭证回填从不弹应用内横幅的问题（此前走静默刷新路径）",
-                                    "🏠 设置页停留时也能看到横幅（此前只有主页能看到）",
-                                    "👆 横幅点击任意位置提前关闭，停留时长 2.8s → 3.5s，文案支持两行不截断"
-                                ]),
-                                ("🔐 安全加固", [
-                                    "🗝️ 签名密钥移出代码仓库：本地以 gitignore 的私有文件分发，公开仓库不再含真实密钥",
-                                    "🧾 手动更新安装不受影响；新环境需在设置页填入签名密钥"
-                                ]),
-                                ("🛠 车控与状态修复", [
-                                    "⏱️ 修复剩余充电充满时间不准：优先采用服务端 estimate_charge_end_time",
-                                    "🔋 修复限充上限恒显 90%：剔除 max_soc 误兜底",
-                                    "🚙 修复行驶中车速不显示（speed 字符串解码兜底）",
-                                    "🗺️ 修复停车后地图不实时刷新（相机跟随坐标更新）",
-                                    "🏝️ 修复灵动岛充电布局错位 + 强制下岛后无法再次上岛（自愈机制）",
-                                    "⚠️ 充电中充电口盖打开不再误报「注意」",
-                                    "♨️ 新增强化干燥 / 极速除霜 / 座舱过热保护特殊模式显示（灵动岛 / Widget / 看板）",
-                                    "🔋 省电模式小组件：充电期预生成预测电量时间线，刷新延迟显著降低",
-                                    "🎛️ 车控面板扩至 16 项指令（座垫加热/电池预热/遮阳帘/V2L 放电等）+ WebSocket 实时指令流 + 蓝牙钥匙面板"
-                                ])
-                            ]
-                        )
-                        .transition(.opacity)
+        ForEach(Array(NIOAboutReleases.all.enumerated()), id: \.offset) { _, release in
+            versionSection(release)
+                .transition(.opacity)
+        }
 
-                        // v5.1.7
-                        versionSection(
-                            version: "v5.1.7 (Build 2808)",
-                            date: "2026-11",
-                            isLatest: false,
-                            items: [
-                                ("🔄 智能刷新策略", [
-                                    "🌙 进入后台立即刷新一轮车况：亮屏切走聊天 / 锁屏都即时同步",
-                                    "🌞 回到前台自动刷新（与上次拉取间隔 ≥ 1 分钟）",
-                                    "📰 刷新结果横幅：「数据已更新 / 无数据更新 / 拉取失败」，自动消失不打扰",
-                                    "⏱️ 只有数据真实变化才推进主界面更新时间（显著内容指纹比对，无变化不伪装成刚刚刷新）"
-                                ]),
-                                ("📱 Widget 与实时活动", [
-                                    "🏷️ 桌面小组件（小 / 中）与锁屏实时活动新增刷新结果标签「已更新 / 无数据更新」",
-                                    "💚 已更新为绿色高亮，无数据更新弱化显示，与主 App 判定同源"
-                                ]),
-                                ("🚗 同行智能监测", [
-                                    "📍 手机接近爱车且快速移动时自动进入高频同步（30 秒 / 次）",
-                                    "🚦 智能识别行驶中 / 等灯低速 / 到达目的地，状态变化横幅提示",
-                                    "🔒 到达目的地后自动确认落锁状态，未上锁立即警示提醒",
-                                    "🛡 位置仅本地比对车辆坐标，不存储、不上传"
-                                ])
-                            ]
-                        )
-                        .transition(.opacity)
-
-                        // v5.1.5
-                        versionSection(
-                            version: "v5.1.5 (Build 2807)",
-                            date: "2026-10",
-                            isLatest: false,
-                            items: [
-                                ("🏠 桌面小组件", [
-                                    "🚗 「蔚来车况」小 / 中尺寸桌面 Widget：电量、续航、充电状态一目了然",
-                                    "⚡️ 充电功率 / 限充上限 / 车内外温度 / 特殊模式徽章（中尺寸）",
-                                    "🔄 主 App 每次刷新车况自动同步快照，主题色跟随 App 主题"
-                                ]),
-                                ("🏝 灵动岛开关胶囊", [
-                                    "🎛️ 控制中心 / 锁屏新增「灵动岛车况」控制胶囊（iOS 18+）",
-                                    "👆 被强制下岛后一键重新上岛，立即重建实时活动",
-                                    "🩹 修复失效引用导致的永久下岛：任何数据刷新自动自愈回岛"
-                                ]),
-                                ("🔋 充电显示修复", [
-                                    "✅ 修复充电状态可能不显示：充电功率兜底判定（数据缺 charge_state 也可识别）",
-                                    "🎯 修复充电上限显示错误：优先 target_soc_percentage（用户设定限充），不再误用满电 CLTC 字段"
-                                ]),
-                                ("🌙 后台刷新", [
-                                    "🌙 BGTaskScheduler 后台任务：退到后台仍定期拉取车况并刷新灵动岛",
-                                    "🔁 刷新链自动续期，车况与实时活动后台保持新鲜"
-                                ]),
-                                ("🚗 CarPlay 支持", [
-                                    "🖥️ 连接 CarPlay 自动显示车况列表：电量 / 续航 / 充电功率 / 车锁 / 温度 / 总里程",
-                                    "📋 一级详情页：限充、胎压、充电桩类型、12V 电瓶等全维状态",
-                                    "🔄 数据自动刷新 + 一键手动刷新"
-                                ]),
-                                ("🔔 Token 过期提醒", [
-                                    "🩹 修复 Token 失效（HTTP 401/403）完全静默：之前只写诊断日志，界面毫无提示",
-                                    "🚨 看板顶部新增红色警示横幅 + 错误触感，「凭证失效」红点同步点亮",
-                                    "👆 点击横幅直达配置页；重新配置拉取成功后自动复位，轮询恢复正常频率",
-                                    "🐢 修复 15 分钟降频退避永不生效的问题：Token 失效时不再疯狂重试撞接口"
-                                ]),
-                                ("⚡️ 性能优化", [
-                                    "🔋 桌面 Widget 仅在车况真实变化时刷新时间线，不再每轮轮询唤醒 Widget 进程白耗电",
-                                    "🏝 灵动岛系统活动查询合并降频，减少跨进程开销"
-                                ]),
-                                ("✨ 启动动画 v5.3 · 星流汇聚", [
-                                    "🌌 极光漂移背景：三团主题色柔光缓慢游移",
-                                    "💫 向心星流：40 颗光尘螺旋吸入充能环，越近越快；充能光头亮斑跑在进度环前端",
-                                    "💥 完成瞬间粒子爆发 + 三重冲击波扩散",
-                                    "🪪 Logo 3D 翻转入场 + 主标题「蔚来 · 兔可可」逐字上浮",
-                                    "🔌 全部粒子层 Canvas 单层绘制（30fps 上限），华丽但省电"
-                                ])
-                            ]
-                        )
-                        .transition(.opacity)
-
-                        // v5.1.0
-                        versionSection(
-                            version: "v5.1.0 (Build 2701)",
-                            date: "2026-10",
-                            isLatest: false,
-                            items: [
-                                ("🪞 灵动岛适配（Duo / 全机型）", [
-                                    "🔋 紧凑区重构：左图标 + 右 SOC 数字，告别挖孔裁切（旧版「2 / 11…」）",
-                                    "⚡️ 充电闪电 / 低电橙 / 主题色电量图形，未锁车橙色警示点",
-                                    "📖 续航与充满倒计时保留在长按展开态"
-                                ]),
-                                ("📱 Duo 折叠屏与 iPad 全面适配", [
-                                    "🧭 特斯拉式侧边栏：8 大功能分类 + hero 车图常驻主区",
-                                    "🌗 折叠↔展开形态自适应：≥780pt 自动双列（看板与设置）",
-                                    "🖥️ 设置页大屏全屏呈现：个性化左列 / 连接配置右列",
-                                    "🎨 自定义折叠按钮与淡色标题条，替换系统玻璃钮",
-                                    "📐 侧栏图标统一宽度间距，multicolor 红车图标归入主题色"
-                                ]),
-                                ("🛠 修复与优化", [
-                                    "🧩 特殊模式识别修复：宠物 / 露营 / 不下电键名对齐真实 RVS 字段",
-                                    "🧊 智能外设卡语义化开关解析，不再显示原始遥测键名",
-                                    "📍 车辆位置卡文字叠印修复",
-                                    "🖼️ 主页车型标题跟随设置（特别版名称映射）+ Vision 抠图车图展台光",
-                                    "⌨️ 设置页首页名称输入框溢出修复",
-                                    "🔑 统一设备指纹（User-Guid / app_ver / UA），防服务器多端误判踢线",
-                                    "🛰 抓包脚本与 App 解析全链路同步新指纹字段"
-                                ])
-                            ]
-                        )
-                        .transition(.opacity)
-
-                        // v5.0.0
-                        versionSection(
-                            version: "v5.0.0 (Build 2700)",
-                            date: "2026-10",
-                            isLatest: false,
-                            items: [
-                                ("🚀 启动动画系统 · 多风格可选", [
-                                    "⚡️ 能量充能（默认）：电池环 0→100% 充能 + 电弧凝聚高清 Logo",
-                                    "🕹️ 像素重制 v5：15x15 点阵波次点亮，复古像素美学",
-                                    "🐇 极简快启：Logo 淡入 + 细进度线，≤1.1s 直达看板",
-                                    "🎛️ 设置页新增启动动画卡片：风格 / 节奏（标准·疾速）/ 每日仅首次 / 触感开关 / 一键预览",
-                                    "🔋 省电动效模式下自动切换极简快启"
-                                ]),
-                                ("📊 看板六大增强卡（参考 ha-nio / NIO-Dash）", [
-                                    "🛡️ 特殊模式卡：守卫 / 宠物 / 露营 / 不下电保持 / V2L 对外放电",
-                                    "🧊 智能外设卡：12V 低压电瓶 · 车载冰箱 · 座舱加热 · 车灯照明",
-                                    "🏆 能耗评分卡：CLTC 续航达成率 S/A/B/C 评级 + 推算百公里电耗",
-                                    "📈 历史趋势卡：近 7 日 SOC 电量曲线 + 每日行驶里程柱状图（Swift Charts）",
-                                    "🔧 维保追踪卡：整车健康分 · 五项耗材寿命进度 · 累计保养花费",
-                                    "🗺️ 行驶轨迹卡：当日 GPS 采样路径地图回放"
-                                ]),
-                                ("⚙️ 平台与底层", [
-                                    "📱 最低系统要求提升至 iOS 26，全面拥抱现代 API",
-                                    "💾 服务订单本地持久化（orders.json），冷启动即刻可用",
-                                    "🏷️ 版本号升级至 5.0.0"
-                                ])
-                            ]
-                        )
-                        .transition(.opacity)
-
-                        // v4.8.0
-                        versionSection(
-                            version: "v4.8.0 (Build 2700)",
-                            date: "2026-08",
-                            isLatest: false,
-                            items: [
-                                ("🎨 主题系统 v2 · 全新三系七主题", [
-                                    "🐰 二次元系：蜜桃兔兔（浅）、樱夜粉兔（深）、抹茶奶盖（浅）",
-                                    "◻️ 简洁系：云石膏（浅）、曜石灰（深），单色克制极简",
-                                    "⚡️ 酷系：赛博霓虹（深）、暮光星野（深）",
-                                    "🌗 全新浅色主题支持：看板 / 设置 / 关于 / 日志全页面墨字白卡自适应",
-                                    "🎨 灵动岛与锁屏实时活动同步跟随主题配色"
-                                ]),
-                                ("🏝️ 灵动岛与实时活动重做", [
-                                    "⚡️ 充电时展示实时功率与免刷新充满倒计时",
-                                    "🚨 车窗/车门未关好时锁屏卡片顶部告警条提示",
-                                    "🛞 胎压四轮同显并新增 12V 电瓶与冰箱 / V2L 放电状态",
-                                    "🎯 展开态重排：电量实估 / 续航双数字 + 模式状态 + 电量进度条"
-                                ]),
-                                ("🚀 性能优化", [
-                                    "📉 灵动岛数据无显著变化时跳过更新，降低系统功耗",
-                                    "🧵 轨迹历史 JSON 编码与持久化全部移出主线程",
-                                    "⏱️ 缓存全局 DateFormatter，消除高频刷新下的重复创建开销",
-                                    "🔋 新增省电动效开关，一键关闭流光与浮动等常驻动画"
-                                ])
-                            ]
-                        )
-
-                        // v4.7.0
-                        versionSection(
-                            version: "v4.7.0 (Build 2620)",
-                            date: "2026-08",
-                            isLatest: false,
-                            items: [
-                                ("🚀 NIO-Dash & ha-nio 全面功能大移植", [
-                                    "💻 车机系统与固件 FOTA 版本展示（零件号、上一版本与升级状态）",
-                                    "🔋 动力电池全维诊断（实时充电功率 kW、达成率、充电上限、锁电量、V2L 对外放电）",
-                                    "⚡️ 低压 12V 蓄电池监控（12V 小电瓶 SOC % 与实时电压监测）",
-                                    "🧊 车载智能冰箱（开关状态、当前与目标温度）与 PM2.5 空气质量健康",
-                                    "💡 车外灯光与照明系统监测（近光灯、远光灯、示宽灯、双闪警报）",
-                                    "📍 停车位置高精度纠偏寻车（WGS-84/GCJ-02、苹果地图/高德地图一键导航寻车）",
-                                    "♨️ 暖风座舱超强干燥（高温超强干燥模式、极速除霜、极速制冷制热、座舱过热保护）",
-                                    "📑 换电站足迹与财务大屏（累计换电次数、总花费、单次均价、Top 换电站打卡排行榜）"
-                                ]),
-                                ("🔐 动态 Widget 签名与稳定性", [
-                                    "⚡️ 新增 Widget 动态签名模式，每次拉取动态生成时间戳与 MD5 校验码，长期运行永不失效",
-                                    "🛠️ 彻底修复了 iOS 报文渲染引发的 EXC_BAD_ACCESS (code=2) 闪退问题",
-                                    "🪄 全新升级一键抓包嗅探插件，车况、换电、签到全量一次性一键截取导入"
-                                ]),
-                                ("🎨 视觉与体验全面进阶", [
-                                    "🌸 保留 2026款 ET5 自然奇境特别版，并开放全系 9 大车型与全车漆涂装自由选择",
-                                    "✨ 5 大动漫主题系统移植（深空霓虹、日系治愈、赛博二次元、软萌可爱、新海诚）",
-                                    "🏝️ 灵动岛与锁屏实时活动毫秒级同步联动",
-                                    "⏱️ 优化开屏像素绘制动画时序，更方便截屏分享与后台资源初始化"
-                                ])
-                            ]
-                        )
-
-                        // v4.6.5
-                        versionSection(
-                            version: "v4.6.5 (Build 2612)",
-                            date: "2026-08",
-                            isLatest: false,
-                            items: [
-                                ("⚡️ 蔚来核心数据看板", [
-                                    "⚡️ 萌动超能双色电量能量流光槽",
-                                    "🚪 雪豹与海獭可爱守护结界（7门车锁动态状态）",
-                                    "🛞 4 轮萌爪胎压与温度网格矩阵监测",
-                                    "📅 蔚来每日签到与连续连击天数统计",
-                                    "🏝️ 首次引入 Live Activity 灵动岛与锁屏实时车况监控"
-                                ])
-                            ]
-                        )
         }
     }
 
-    private func versionSection(
-        version: String,
-        date: String,
-        isLatest: Bool,
-        items: [(category: String, points: [String])]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func versionSection(_ release: NIOAboutRelease) -> some View {
+        let version = release.version
+        let date = release.date
+        let isLatest = release.isLatest
+        let items = release.items
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 HStack(spacing: 6) {
                     Text(version)
