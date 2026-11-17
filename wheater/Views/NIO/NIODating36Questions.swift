@@ -92,6 +92,9 @@ struct NIODating36QuestionsView: View {
     /// 对视倒计时（秒）
     @State private var gazeRemaining: Int?
     @State private var gazeTimer: Timer?
+    /// 进度记忆：上次练到的题号（0-35），翻题自动保存，完成对视后清零
+    @AppStorage("nio_dating_36q_progress") private var savedProgress: Int = 0
+    @State private var showResumeBanner = false
 
     private var setIndex: Int { min(index / 12, 2) }
     private var set: NIODating36Questions.QuestionSet { NIODating36Questions.sets[setIndex] }
@@ -126,6 +129,15 @@ struct NIODating36QuestionsView: View {
             }
             // 兜底：sheet 被编程式关闭时停掉倒计时，防止 Timer 空转持有视图状态
             .onDisappear { gazeTimer?.invalidate() }
+            // 进度记忆：进入时检测上次练到的题号，翻题时自动保存
+            .onAppear {
+                if savedProgress > 0, savedProgress < 36 {
+                    showResumeBanner = true
+                }
+            }
+            .onChange(of: index) { _, newIndex in
+                savedProgress = newIndex
+            }
         }
     }
 
@@ -165,6 +177,12 @@ struct NIODating36QuestionsView: View {
                 }
             }
             .frame(height: 6)
+
+            // 接续提示：36 问可分多次完成，重开时从上次题号继续
+            if showResumeBanner {
+                resumeBanner
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             // 理论依据（默认折叠，与看板/理论页同源）
             NIODatingEvidenceDisclosure(text: NIODatingEvidence.aron36)
@@ -235,6 +253,7 @@ struct NIODating36QuestionsView: View {
                     if index >= 35 {
                         gazeTimer?.invalidate()
                         gazeRemaining = NIODating36Questions.eyeGazeSeconds
+                        savedProgress = 0 // 完成全部 36 问，进度记忆清零
                         withAnimation(NIOThemeMotion.themeSpring) { finished = true }
                     } else {
                         withAnimation(NIOThemeMotion.layoutSpring) {
@@ -266,6 +285,62 @@ struct NIODating36QuestionsView: View {
         .padding(.top, 10)
         .padding(.bottom, 16)
         .frame(maxWidth: 560)
+    }
+
+    // MARK: 进度接续横幅
+
+    private var resumeBanner: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Text("🔖").font(.system(size: 13))
+                Text("上次练到第 \(savedProgress + 1) 问")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(NIOThemePaint.text)
+                Spacer()
+                Text("渐近式练习可分次完成")
+                    .font(.system(size: 9))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+            }
+            HStack(spacing: 10) {
+                Button {
+                    withAnimation(NIOThemeMotion.layoutSpring) {
+                        previousShownIndex = savedProgress
+                        index = savedProgress
+                        showResumeBanner = false
+                    }
+                } label: {
+                    Text("接续上次")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing))
+                        )
+                }
+                .buttonStyle(NIOPressableButtonStyle())
+
+                Button {
+                    savedProgress = 0
+                    withAnimation(NIOThemeMotion.layoutSpring) { showResumeBanner = false }
+                } label: {
+                    Text("从头开始")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(NIOThemePaint.well))
+                }
+                .buttonStyle(NIOPressableButtonStyle())
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(NIOThemePaint.fill)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(sakuraPink.opacity(0.25), lineWidth: 1))
+        )
     }
 
     // MARK: 对视彩蛋（第 36 题后）

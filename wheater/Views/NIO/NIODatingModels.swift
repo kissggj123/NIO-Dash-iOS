@@ -283,6 +283,8 @@ struct NIODatingScores: Codable, Equatable {
     /// 章节序号（第几次提交）
     var chapter: Int = 1
     var updatedAt: Date = Date()
+    /// 本次评分情境标签（可选，随原始分一起进密封区；旧数据无此字段解码为 nil 自动兼容）
+    var contextTags: [String]? = nil
 
     func value(forKey key: String, default defaultValue: Double = 60) -> Double {
         values[key] ?? defaultValue
@@ -293,6 +295,13 @@ struct NIODatingScores: Codable, Equatable {
     }
 
     var means: [String: Double] { values }
+
+    /// 快捷情境标签选项（评分时可多选，记录本轮相处场景——情境标注提升纵向对照的可解释性）
+    static let contextTagOptions: [String] = [
+        "🍜 美食探店", "☕️ 咖啡闲聊", "🚶 散步压马路", "🎬 观影看展",
+        "📱 异地视频", "🎮 游戏开黑", "🌧 雨天宅家", "✈️ 旅行出游",
+        "🎉 节日庆祝", "💻 日常网聊"
+    ]
 }
 
 // MARK: - 爱情类型（Sternberg 七类型）

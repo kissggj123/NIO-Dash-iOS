@@ -1323,6 +1323,8 @@ struct NIODatingRatingFormView: View {
                 dimensionCard(dim)
             }
 
+            contextTagCard
+
             noteCard
 
             submitButton
@@ -1527,6 +1529,82 @@ struct NIODatingRatingFormView: View {
 
     private func assign(_ value: Double, forKey key: String) {
         scores.setValue(value, forKey: key)
+    }
+
+    /// 情境标签：快捷记录本轮相处场景（可选多选，随原始分一起进密封区，不参与聚合并脱离个人原始分）
+    private var contextTagCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("📎 本次情境（可选）")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(NIOThemePaint.text)
+                Spacer()
+                Text("随原始分加密存档")
+                    .font(.system(size: 9))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+            }
+
+            // 上轮标签对照：标注上次相处场景，纵向比较时排除情境差异的干扰
+            if let previousTags = previousScores?.contextTags, !previousTags.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("上次 · \(previousTags.joined(separator: " · "))")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(NIOThemePaint.well)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 8)], spacing: 8) {
+                ForEach(NIODatingScores.contextTagOptions, id: \.self) { tag in
+                    let isSelected = scores.contextTags?.contains(tag) ?? false
+                    Button {
+                        var tags = scores.contextTags ?? []
+                        if tags.contains(tag) {
+                            tags.removeAll { $0 == tag }
+                        } else {
+                            tags.append(tag)
+                        }
+                        scores.contextTags = tags.isEmpty ? nil : tags
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isSelected {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .heavy))
+                            }
+                            Text(tag)
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .rounded))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(isSelected ? .white : NIOThemePaint.text.opacity(0.7))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(isSelected ? AnyShapeStyle(accent) : AnyShapeStyle(NIOThemePaint.well))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(isSelected ? Color.clear : NIOThemePaint.stroke, lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(NIOThemePaint.fill)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(accent.opacity(0.3), lineWidth: 1))
+        )
     }
 
     private var noteCard: some View {
