@@ -52,9 +52,16 @@ struct NIODatingTheoryView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(sakuraPink)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("关闭")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(sakuraPink)
+                            .fixedSize()
+                    }
+                    // 工具栏项不参与内容弹簧动画，防止「关闭」随滚动 / 展开布局漂移
+                    .transaction { $0.animation = nil }
                 }
             }
         }

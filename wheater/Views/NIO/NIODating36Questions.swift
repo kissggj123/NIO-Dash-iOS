@@ -119,12 +119,17 @@ struct NIODating36QuestionsView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") {
+                    Button {
                         gazeTimer?.invalidate()
                         dismiss()
+                    } label: {
+                        Text("关闭")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(sakuraPink)
+                            .fixedSize()
                     }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(sakuraPink)
+                    // 工具栏项不参与翻卡弹簧动画，防止「关闭」随布局偶尔漂移
+                    .transaction { $0.animation = nil }
                 }
             }
             // 兜底：sheet 被编程式关闭时停掉倒计时，防止 Timer 空转持有视图状态

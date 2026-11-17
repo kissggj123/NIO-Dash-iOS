@@ -108,9 +108,16 @@ struct NIODatingLabView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(sakuraPink)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("关闭")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(sakuraPink)
+                            .fixedSize()
+                    }
+                    // 修复：流程切换的弹簧动画沿视图树泄漏进工具栏，「关闭」会随布局偶尔漂移 —— 工具栏项不参与动画
+                    .transaction { $0.animation = nil }
                 }
             }
             .overlay { privacyShield }
