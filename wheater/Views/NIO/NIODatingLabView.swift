@@ -1696,6 +1696,35 @@ struct NIODatingCompositeCardView: View {
             // 建议
             adviceSection
 
+            // Aron 36 问练习入口：初识心动期且畅聊感处于「待培育」区时触发
+            if snapshot.stage == .firstSpark, (snapshot.dimensionBands["flow"] ?? 3) == 0 {
+                Button {
+                    show36Questions = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bubble.left.and.text.bubble.right")
+                            .font(.system(size: 13, weight: .bold))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("畅聊感练习 · Aron 36 问")
+                                .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                            Text("心理学经典的渐进式自我表露——两人轮流回答 36 个逐级加深的私人问题")
+                                .font(.system(size: 10))
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(sakuraPink)
+                    .padding(12)
+                    .background(sakuraPink.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(sakuraPink.opacity(0.25), lineWidth: 1))
+                }
+                .buttonStyle(NIOPressableButtonStyle())
+            }
+
             // 更新时间
             updateTimeFooter
 
@@ -1738,6 +1767,11 @@ struct NIODatingCompositeCardView: View {
             .sheet(isPresented: $showTheoryPage) {
                 NIODatingTheoryView()
                     // 长文档阅读页禁下滑误关，走"关闭"按钮退出
+                    .interactiveDismissDisabled(true)
+            }
+            .sheet(isPresented: $show36Questions) {
+                NIODating36QuestionsView()
+                    // 双人问答进行中禁下滑误关，走"关闭"按钮退出
                     .interactiveDismissDisabled(true)
             }
             .sheet(item: $shareItem) { item in
@@ -2232,6 +2266,7 @@ struct NIODatingCompositeCardView: View {
 
     @State private var shareItem: ShareImageItem?
     @State private var showTheoryPage = false
+    @State private var show36Questions = false
 
     /// 将看板结论渲染为可分享的图片卡（仅聚合信息，不含个人原始分）
     private func renderShareImage() {

@@ -49,6 +49,7 @@
 		AA7000042D21000000EED680 /* NIO/NIODatingVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100042D21000000EED680 /* NIO/NIODatingVault.swift */; };
 		AA7000052D21000000EED680 /* NIO/NIODatingLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100052D21000000EED680 /* NIO/NIODatingLabView.swift */; };
 		AA7000062D21000000EED680 /* NIO/NIODatingTheoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100062D21000000EED680 /* NIO/NIODatingTheoryView.swift */; };
+		AA7000072D21000000EED680 /* NIO/NIODating36Questions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100072D21000000EED680 /* NIO/NIODating36Questions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +117,7 @@
 		AA7100042D21000000EED680 /* NIO/NIODatingVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODatingVault.swift; sourceTree = "<group>"; };
 		AA7100052D21000000EED680 /* NIO/NIODatingLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODatingLabView.swift; sourceTree = "<group>"; };
 		AA7100062D21000000EED680 /* NIO/NIODatingTheoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODatingTheoryView.swift; sourceTree = "<group>"; };
+		AA7100072D21000000EED680 /* NIO/NIODating36Questions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODating36Questions.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -211,6 +213,7 @@
 				AA7100042D21000000EED680 /* NIO/NIODatingVault.swift */,
 				AA7100052D21000000EED680 /* NIO/NIODatingLabView.swift */,
 				AA7100062D21000000EED680 /* NIO/NIODatingTheoryView.swift */,
+				AA7100072D21000000EED680 /* NIO/NIODating36Questions.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -370,6 +373,7 @@
 				AA7000042D21000000EED680 /* NIO/NIODatingVault.swift in Sources */,
 				AA7000052D21000000EED680 /* NIO/NIODatingLabView.swift in Sources */,
 				AA7000062D21000000EED680 /* NIO/NIODatingTheoryView.swift in Sources */,
+				AA7000072D21000000EED680 /* NIO/NIODating36Questions.swift in Sources */,
 			);
 		};
 		2B902BE628D91FFF003FB942 /* Sources */ = {
