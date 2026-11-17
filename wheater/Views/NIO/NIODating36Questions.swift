@@ -86,6 +86,8 @@ struct NIODating36QuestionsView: View {
 
     /// 全局题号（0…35），36 表示已完成进入对视彩蛋
     @State private var index: Int = 0
+    /// 上一题号（翻卡方向感知用）
+    @State private var previousShownIndex: Int = 0
     @State private var finished: Bool = false
     /// 对视倒计时（秒）
     @State private var gazeRemaining: Int?
@@ -122,6 +124,8 @@ struct NIODating36QuestionsView: View {
                     .foregroundStyle(sakuraPink)
                 }
             }
+            // 兜底：sheet 被编程式关闭时停掉倒计时，防止 Timer 空转持有视图状态
+            .onDisappear { gazeTimer?.invalidate() }
         }
     }
 
@@ -177,7 +181,18 @@ struct NIODating36QuestionsView: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
-                    .id(index) // 切题时重新触发过渡
+                    .id(index) // 切题时重建并播放翻卡过渡
+                    .transition(
+                        index > previousShownIndex
+                            ? .asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .opacity.combined(with: .scale(scale: 0.94))
+                            )
+                            : .asymmetric(
+                                insertion: .move(edge: .leading).combined(with: .opacity),
+                                removal: .opacity.combined(with: .scale(scale: 0.94))
+                            )
+                    )
 
                 Label("两人都回答 —— 轮流作答比抢答更能生成亲近感", systemImage: "person.2")
                     .font(.system(size: 10.5, weight: .medium))
@@ -199,7 +214,10 @@ struct NIODating36QuestionsView: View {
             HStack(spacing: 10) {
                 if index > 0 {
                     Button {
-                        withAnimation(NIOThemeMotion.layoutSpring) { index -= 1 }
+                        withAnimation(NIOThemeMotion.layoutSpring) {
+                            previousShownIndex = index
+                            index -= 1
+                        }
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 13, weight: .bold))
@@ -216,7 +234,10 @@ struct NIODating36QuestionsView: View {
                         gazeRemaining = NIODating36Questions.eyeGazeSeconds
                         withAnimation(NIOThemeMotion.themeSpring) { finished = true }
                     } else {
-                        withAnimation(NIOThemeMotion.layoutSpring) { index += 1 }
+                        withAnimation(NIOThemeMotion.layoutSpring) {
+                            previousShownIndex = index
+                            index += 1
+                        }
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -268,7 +289,7 @@ struct NIODating36QuestionsView: View {
                 .padding(.horizontal, 10)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let remaining = gazeRemaining {
+            if let remaining = gazeRemaining, remaining > 0 {
                 ZStack {
                     Circle()
                         .stroke(NIOThemePaint.stroke, lineWidth: 10)
@@ -295,6 +316,33 @@ struct NIODating36QuestionsView: View {
                 }
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+            } else if gazeRemaining == 0 {
+                // 对视完成状态（修复：原实现停在 0:00 空圆环，无完成反馈）
+                VStack(spacing: 10) {
+                    Text("🎉")
+                        .font(.system(size: 44))
+                    Text("四分钟到了")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Text("如果此刻你们还在聊个不停——这正是这份练习想要的结局")
+                        .font(.system(size: 11))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button("回到题目") {
+                        gazeRemaining = nil
+                        index = 35
+                        withAnimation(NIOThemeMotion.themeSpring) { finished = false }
+                    }
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(sakuraPink)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(sakuraPink.opacity(0.12)))
+                    .padding(.top, 4)
+                }
             } else {
                 Button {
                     gazeRemaining = NIODating36Questions.eyeGazeSeconds
