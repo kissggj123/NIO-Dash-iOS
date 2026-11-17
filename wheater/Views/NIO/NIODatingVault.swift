@@ -116,6 +116,8 @@ final class NIODatingVault: ObservableObject {
     @Published private(set) var lastSubmitOutcome: NIODatingSubmitOutcome?
     /// 关系阶段：初识心动期 / 深度关系期（决定维度体系与权重）
     @Published private(set) var stage: NIODatingStage = .firstSpark
+    /// 待展示的纪念里程碑（达成后由看板展示庆祝卡，庆祝后置 nil；2026-11-18 新增）
+    @Published private(set) var pendingMilestone: NIODatingMilestone?
 
     private let defaults = UserDefaults.standard
 
@@ -129,6 +131,7 @@ final class NIODatingVault: ObservableObject {
         static let compositeVault = "nio_dating_composite_vault"
         static let snapshot = "nio_dating_snapshot"
         static let stage = "nio_dating_stage"
+        static let celebratedMilestones = "nio_dating_celebrated_milestones"
     }
 
     private init() {
@@ -159,6 +162,8 @@ final class NIODatingVault: ObservableObject {
            (old.mikanRounds ?? 0) > 0, (old.xiaRounds ?? 0) > 0 {
             rebuildSnapshot(from: vault ?? NIODatingCompositeVault(mikan: nil, xia: nil), appendHistory: false)
         }
+
+        checkMilestones()
     }
 
     /// 切换关系阶段：两套维度体系不同，切换会清空双方评分（密码保留）
@@ -169,6 +174,8 @@ final class NIODatingVault: ObservableObject {
         }
         defaults.removeObject(forKey: StoreKey.compositeVault)
         defaults.removeObject(forKey: StoreKey.snapshot)
+        defaults.removeObject(forKey: StoreKey.celebratedMilestones)
+        pendingMilestone = nil
         snapshot = nil
         hasMikanRated = false
         hasXiaRated = false
@@ -526,7 +533,12 @@ final class NIODatingVault: ObservableObject {
         let newHistory: [NIODatingHistoryPoint] = {
             var history = snapshot?.overallHistory ?? []
             if appendHistory || history.isEmpty {
-                history.append(NIODatingHistoryPoint(date: Date(), overall: overall, harmony: harmony))
+                history.append(NIODatingHistoryPoint(
+                    date: Date(),
+                    overall: overall,
+                    harmony: harmony,
+                    chapters: mikan.chapters + xia.chapters
+                ))
             }
             if history.count > 30 {
                 history.removeFirst(history.count - 30)
@@ -549,7 +561,7 @@ final class NIODatingVault: ObservableObject {
             mikanRounds: mikan.rounds,
             xiaRounds: xia.rounds,
             overallHistory: newHistory,
-            algorithmVersion: 5,
+            algorithmVersion: NIODatingEngine.currentAlgorithmVersion,
             sparkKey: sparkLevel.key,
             overallDispersion: overallDispersion,
             stageKey: currentStage.rawValue
@@ -562,6 +574,34 @@ final class NIODatingVault: ObservableObject {
         if let data = try? JSONEncoder().encode(newSnapshot) {
             defaults.set(data, forKey: StoreKey.snapshot)
         }
+
+        checkMilestones()
+    }
+
+    // MARK: 纪念里程碑
+
+    /// 检查纪念里程碑：从已达成集合中找出尚未庆祝的最新一项待展示（旧数据超过多个里程碑时只弹最新）
+    private func checkMilestones() {
+        guard let snapshot else {
+            pendingMilestone = nil
+            return
+        }
+        let celebrated = Set(defaults.stringArray(forKey: StoreKey.celebratedMilestones) ?? [])
+        let achieved = NIODatingEngine.achievedMilestones(
+            combinedChapters: snapshot.combinedChapters,
+            mikanRounds: snapshot.mikanRounds ?? 0,
+            xiaRounds: snapshot.xiaRounds ?? 0
+        )
+        pendingMilestone = achieved.last(where: { !celebrated.contains($0.key) })
+    }
+
+    /// 庆祝完成：记录已达成 key，看板撤下庆祝卡
+    func markMilestoneCelebrated() {
+        guard let milestone = pendingMilestone else { return }
+        var list = defaults.stringArray(forKey: StoreKey.celebratedMilestones) ?? []
+        list.append(milestone.key)
+        defaults.set(list, forKey: StoreKey.celebratedMilestones)
+        pendingMilestone = nil
     }
 
     // MARK: 重置
@@ -576,6 +616,8 @@ final class NIODatingVault: ObservableObject {
         defaults.removeObject(forKey: StoreKey.compositeVault)
         defaults.removeObject(forKey: StoreKey.snapshot)
         defaults.removeObject(forKey: StoreKey.stage)
+        defaults.removeObject(forKey: StoreKey.celebratedMilestones)
+        pendingMilestone = nil
         snapshot = nil
         hasMikanRated = false
         hasXiaRated = false

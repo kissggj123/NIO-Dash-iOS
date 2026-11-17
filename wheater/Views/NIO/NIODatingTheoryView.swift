@@ -33,7 +33,7 @@ struct NIODatingTheoryView: View {
                         ethicsSection
                         referencesSection
 
-                        Text("恋爱好感度实验室 · 理论文档 v5.1 · 与 App 内「📐 依据」同源")
+                        Text("恋爱好感度实验室 · 理论文档 v5.2 · 与 App 内「📐 依据」同源")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundStyle(NIOThemePaint.text.opacity(0.4))
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -95,6 +95,9 @@ struct NIODatingTheoryView: View {
             """)
             theoryParagraph("""
             全部结论均由双方评分聚合而来 —— 看板永远不知道也不会泄露任何一方的原始打分。本页与看板中每项数据的「📐 依据」同源，随时可交叉对照。
+            """)
+            theoryParagraph("""
+            2026-11-18 · v5.2 功能升级：① 评分情境标签 —— 评分时可多选快捷标签（美食探店 / 异地视频 / 旅行出游…）标注本轮相处场景，随原始分密封存档，纵向比较时可排除情境差异的干扰（提升追踪数据的可解释性）；② 轮次回溯 —— 趋势曲线支持轻点任意数据点回看当轮匿名摘要（时间 + 聚合分 + 章节号，不含留言与原始分）；③ 纪念里程碑 —— 连载满 10 章 / 双方各评满 10 轮时给出庆祝卡（叙事认同理论的仪式感设计）；④ Aron 36 问进度记忆 —— 渐进式表露练习可分次完成，重开自动接续上次题号。
             """)
         }
     }
@@ -165,7 +168,7 @@ struct NIODatingTheoryView: View {
     private var pipelineSection: some View {
         theoryCard(index: "03", title: "综合计算流水线", icon: "⚙️") {
             theoryParagraph("""
-            每次提交后，评分经过七步流水线才成为看板上的结论 —— 每一步都对应一种已知的测量误差及其校正方法：
+            每次提交后，评分经过八步流水线才成为看板上的结论 —— 每一步都对应一种已知的测量误差及其校正方法：
             """)
             pipelineStep(no: "1", title: "情感演算", desc: "留言情绪由 Apple NaturalLanguage 端内模型实时打分（±6 封顶），让结构性评估不被一时情绪淹没")
             pipelineStep(no: "2", title: "首测先验收缩", desc: "首轮聚合起点 = 0.8×本轮 + 0.2×中性先验 70 分，防止单轮极端印象锚定长期轨迹（首测均值回归）")
@@ -174,6 +177,7 @@ struct NIODatingTheoryView: View {
             pipelineStep(no: "5", title: "加权聚合", desc: "维度分按阶段权重加权 → 有效分；默契指数 = 100×e^(−加权感知差/30)（距离衰减非线性）")
             pipelineStep(no: "6", title: "稳健趋势估计", desc: "Theil–Sen 配对斜率中位数（抗离群点）+ Mann–Kendall 显著性检验（|z|>1.96 才当真）")
             pipelineStep(no: "7", title: "滞后判定与信度", desc: "评级 / 类型 / 火花全部带边界滞后缓冲防抖；连续信度 = 1−e^(−n/5) 随轮次指数累积")
+            pipelineStep(no: "8", title: "轮间波动误差条", desc: "双方有效分逐轮漂移的 EMA 以「±N」呈现（经典测量理论）—— 79±3 与 79±12 是不同质量的结论，误差条大时解读应保守")
         }
     }
 

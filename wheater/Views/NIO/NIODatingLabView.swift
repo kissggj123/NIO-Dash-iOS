@@ -506,6 +506,11 @@ struct NIODatingLabView: View {
 
     private var dashboardSection: some View {
         VStack(spacing: 16) {
+            // 纪念里程碑庆祝卡（达成后展示一次）
+            if let milestone = vault.pendingMilestone {
+                milestoneCard(milestone)
+            }
+
             stageSwitchCard
 
             if let snapshot = vault.snapshot {
@@ -522,6 +527,75 @@ struct NIODatingLabView: View {
 
             resetCard
         }
+    }
+
+    // MARK: 纪念里程碑庆祝卡（达成后展示一次，点击「继续连载」后不再出现）
+
+    private func milestoneCard(_ milestone: NIODatingMilestone) -> some View {
+        VStack(spacing: 10) {
+            Text(milestone.emoji)
+                .font(.system(size: 42))
+                .shadow(color: sakuraPink.opacity(0.3), radius: 12)
+
+            Text("🎉 里程碑达成")
+                .font(.system(size: 10, weight: .heavy, design: .rounded))
+                .foregroundStyle(pastelYellow)
+
+            Text(milestone.title)
+                .font(.system(size: 19, weight: .heavy, design: .rounded))
+                .foregroundStyle(
+                    LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
+                )
+                .multilineTextAlignment(.center)
+
+            Text(milestone.subtitle)
+                .font(.system(size: 11.5))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.75))
+                .lineSpacing(3)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("📖 \(milestone.citation)")
+                .font(.system(size: 9.5))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                .lineSpacing(3)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(8)
+                .background(NIOThemePaint.well)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            Button {
+                let impact = UIImpactFeedbackGenerator(style: .medium)
+                impact.impactOccurred()
+                withAnimation(NIOThemeMotion.themeSpring) {
+                    vault.markMilestoneCelebrated()
+                }
+            } label: {
+                Text("继续连载 →")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(NIOPressableButtonStyle())
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(NIOThemePaint.fill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            LinearGradient(colors: [sakuraPink.opacity(0.6), lavenderDream.opacity(0.4)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: 1.2
+                        )
+                )
+        )
     }
 
     // MARK: 关系阶段切换（初识心动期 / 深度关系期）
@@ -1708,6 +1782,8 @@ struct NIODatingCompositeCardView: View {
 
     @State private var animatedOverall: Double = 0
     @State private var isTypeExpanded = false
+    /// 轮次回溯：当前选中的趋势点（轻点曲线数据点弹出当轮匿名摘要卡）
+    @State private var roundSummary: NIODatingRoundSummaryItem?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -1806,6 +1882,11 @@ struct NIODatingCompositeCardView: View {
             // 更新时间
             updateTimeFooter
 
+            Divider().background(NIOThemePaint.stroke)
+
+            // 算法版本徽章与一句话说明
+            algorithmVersionSection
+
             // 分享结论卡（仅聚合信息）
             HStack(spacing: 10) {
                 Button {
@@ -1877,6 +1958,11 @@ struct NIODatingCompositeCardView: View {
                 .padding(20)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $roundSummary) { item in
+                NIODatingRoundSummaryView(item: item)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
             }
         }
         .padding(14)
@@ -2054,7 +2140,8 @@ struct NIODatingCompositeCardView: View {
                     }
                 }
 
-                // 迷你趋势线（Canvas，综合分 0-100 归一化）
+                // 迷你趋势线（Canvas，综合分 0-100 归一化）；轻点数据点回看当轮匿名摘要
+                GeometryReader { geo in
                 Canvas { context, size in
                     guard history.count >= 2 else { return }
                     let values = history.map { $0.overall }
@@ -2110,7 +2197,27 @@ struct NIODatingCompositeCardView: View {
                         )
                     }
                 }
+                .gesture(
+                    // SpatialTapGesture：按 x 坐标定位最近的数据点，弹出当轮摘要
+                    SpatialTapGesture()
+                        .onEnded { value in
+                            let count = history.count
+                            guard count >= 1 else { return }
+                            let stepX = count > 1 ? geo.size.width / CGFloat(count - 1) : 0
+                            let index = count == 1 ? 0 : Int(round(value.location.x / stepX))
+                            guard index >= 0, index < count else { return }
+                            roundSummary = NIODatingRoundSummaryItem(
+                                point: history[index],
+                                previous: index > 0 ? history[index - 1] : nil
+                            )
+                        }
+                )
+                }
                 .frame(height: 56)
+
+                Text("👆 轻点曲线上的数据点，回看当轮匿名摘要（时间 · 聚合分 · 章节号）")
+                    .font(.system(size: 9))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.4))
 
                 Text(trendCaption)
                     .font(.system(size: 10))
@@ -2312,6 +2419,29 @@ struct NIODatingCompositeCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
+    /// 当前算法版本徽章（与理论页 / 快照迁移判定同源引用）
+    private var algorithmVersionSection: some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 5) {
+                Image(systemName: "cpu")
+                    .font(.system(size: 10, weight: .bold))
+                Text("心理学引擎 · \(NIODatingEngine.algorithmDisplayName)")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(lavenderDream)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(Capsule().stroke(lavenderDream.opacity(0.5), lineWidth: 1))
+
+            Text(NIODatingEngine.algorithmDescription)
+                .font(.system(size: 9))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var updateTimeFooter: some View {
         HStack(spacing: 8) {
             if let mikanDate = snapshot.mikanLastUpdate {
@@ -2352,6 +2482,91 @@ struct NIODatingCompositeCardView: View {
         renderer.scale = 3
         guard let image = renderer.uiImage else { return }
         shareItem = ShareImageItem(image: image)
+    }
+}
+
+// MARK: - 轮次摘要卡（趋势点回溯）
+
+/// sheet item 包装（item-based 呈现，避免首次渲染时 state 未就绪）
+struct NIODatingRoundSummaryItem: Identifiable {
+    let id = UUID()
+    let point: NIODatingHistoryPoint
+    let previous: NIODatingHistoryPoint?
+}
+
+/// 当轮匿名摘要：只含时间 + 聚合分 + 章节号，不含留言与任何一方的原始分
+struct NIODatingRoundSummaryView: View {
+    let item: NIODatingRoundSummaryItem
+
+    @ObservedObject private var themeService = AnimeThemeService.shared
+    private var sakuraPink: Color { themeService.accentColor() }
+    private var lavenderDream: Color { Color(hex: themeService.currentToken.gradientEnd) }
+
+    private var chapterLabel: String {
+        if let chapters = item.point.chapters { return "第 \(chapters) 章" }
+        return "早期数据点"
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("📖")
+                .font(.system(size: 36))
+                .shadow(color: sakuraPink.opacity(0.2), radius: 10)
+
+            Text(chapterLabel)
+                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .foregroundStyle(
+                    LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing)
+                )
+
+            Text(item.point.date, format: .dateTime.year().month().day().hour().minute())
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+
+            HStack(spacing: 12) {
+                summaryStat(
+                    value: Int(item.point.overall),
+                    label: "综合分",
+                    delta: item.previous.map { item.point.overall - $0.overall }
+                )
+                summaryStat(
+                    value: Int(item.point.harmony),
+                    label: "默契指数",
+                    delta: item.previous.map { item.point.harmony - $0.harmony }
+                )
+            }
+
+            Text("当轮仅记录聚合指标（时间 · 综合分 · 默契指数 · 章节号）—— 不含留言与任何一方的原始分。")
+                .font(.system(size: 9))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+                .lineSpacing(3)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func summaryStat(value: Int, label: String, delta: Double?) -> some View {
+        VStack(spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 26, weight: .heavy, design: .rounded))
+                .foregroundStyle(NIOThemePaint.text)
+                .monospacedDigit()
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+            if let delta {
+                Text("\(delta >= 0 ? "+" : "")\(String(format: "%.1f", delta)) vs 上期")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(delta >= 0 ? sakuraPink : Color.orange)
+                    .monospacedDigit()
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(NIOThemePaint.well)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

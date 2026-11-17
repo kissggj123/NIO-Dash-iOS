@@ -272,6 +272,19 @@ struct NIODatingSparkLevel: Identifiable {
     var id: String { key }
 }
 
+// MARK: - 纪念里程碑
+
+/// 纪念里程碑（连载仪式感）：达成后看板展示庆祝卡一次，点击「继续连载」后不再出现
+struct NIODatingMilestone: Identifiable, Equatable {
+    let key: String
+    let emoji: String
+    let title: String
+    let subtitle: String
+    let citation: String
+
+    var id: String { key }
+}
+
 // MARK: - 评分数据
 
 /// 一次评分记录（0-100 分制，仅密码持有者本人可见明文）
@@ -417,11 +430,18 @@ struct NIODatingHistoryPoint: Codable, Equatable {
     var date: Date
     var overall: Double
     var harmony: Double
+    /// 该期对应的累计章节数（2026-11-18 新增：轮次回溯摘要卡显示「第 N 章」；旧数据 nil）
+    var chapters: Int?
 }
 
 // MARK: - 评分引擎（纯函数）
 
 enum NIODatingEngine {
+
+    /// 当前算法版本号（快照迁移判定用）与展示名（看板徽章 / 理论页同源引用）
+    static let currentAlgorithmVersion = 5
+    static let algorithmDisplayName = "v5.2"
+    static let algorithmDescription = "自适应 EMA 纵向平滑 · 首测先验收缩 · 加权默契 · Theil–Sen 稳健趋势 · 滞后判定防抖 · 轮间波动误差条"
 
     /// 指数移动平均（EMA）平滑：多轮评分纵向聚合，α=0.6 让本轮占主导、历史做缓冲，
     /// 降低单次情绪噪声对聚合结果的冲击（纵向追踪优于单次横断的方法学原则）
@@ -590,6 +610,44 @@ enum NIODatingEngine {
         let boundaries: [Double] = [50, 60, 70, 80, 90]
         let margin = boundaries.map { abs(overall - $0) }.min() ?? 99
         return margin < 1.5 ? previous : newLevel
+    }
+
+    // MARK: 纪念里程碑目录
+
+    /// 章节里程碑：恋爱物语连载每满 10 章达成一次
+    static func chapterMilestone(n: Int) -> NIODatingMilestone {
+        NIODatingMilestone(
+            key: "chapters_\(n * 10)",
+            emoji: "📚",
+            title: "连载满 \(n * 10) 章",
+            subtitle: "你们的恋爱物语已经写到第 \(n * 10) 章 —— 每一章都是一次真诚的双向记录。",
+            citation: "叙事认同研究（McAdams, 2001）：把关系当作一个持续讲述的故事，会让双方更主动地为「下一章」投入 —— 连载本身就是一种关系维护仪式。"
+        )
+    }
+
+    /// 轮次里程碑：双方各评满 10 轮达成一次（追踪信度里程碑）
+    static func roundsMilestone(n: Int) -> NIODatingMilestone {
+        let combined = n * 20
+        let confidence = Int(round((1 - exp(-Double(combined) / 5.0)) * 100))
+        return NIODatingMilestone(
+            key: "rounds_\(n * 10)",
+            emoji: "🔭",
+            title: "双方各评满 \(n * 10) 轮",
+            subtitle: "两位观测者各自完成 \(n * 10) 轮独立盲评 —— 追踪结论已进入高信度区间。",
+            citation: "连续信度公式 1−e^(−n/5)：双方合计 \(combined) 轮时结论信度约 \(confidence)% —— 轮次越多，EMA 平滑后的读数越能代表关系的真实轨迹而非一时情绪。"
+        )
+    }
+
+    /// 当前已达成的全部里程碑（章节在前、轮次在后；展示时取尚未庆祝的末项 = 最新达成）
+    static func achievedMilestones(combinedChapters: Int, mikanRounds: Int, xiaRounds: Int) -> [NIODatingMilestone] {
+        var result: [NIODatingMilestone] = []
+        for n in 1...10 where combinedChapters >= n * 10 {
+            result.append(chapterMilestone(n: n))
+        }
+        for n in 1...10 where min(mikanRounds, xiaRounds) >= n * 10 {
+            result.append(roundsMilestone(n: n))
+        }
+        return result
     }
 
     // MARK: 爱情类型判定
