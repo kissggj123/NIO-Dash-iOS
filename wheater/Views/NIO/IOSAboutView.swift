@@ -247,10 +247,9 @@ struct IOSAboutView: View {
             .sheet(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
             }
-            .sheet(isPresented: $showDatingLab) {
-                NIODatingLabView()
-                    // 实验室含评分与看板流程，禁用下滑误关，走左上角"关闭"按钮退出
-                    .interactiveDismissDisabled(true)
+            // 实验室以主界面页面呈现（push 进导航栈，系统返回手势返回），不再是弹窗
+            .navigationDestination(isPresented: $showDatingLab) {
+                NIODatingLabView(showsAsModal: false)
             }
         }
     }
@@ -678,11 +677,35 @@ struct NIOAboutRelease {
 
 enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
+        // v5.4.0
+        NIOAboutRelease(
+            version: "v5.4.0 (Build 2812)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("🧮 心理学引擎 v5.1-v5.2", [
+                    "🛡 Theil–Sen 稳健趋势斜率 + Mann–Kendall 显著性检验：趋势解读区分真实信号与随机噪声",
+                    "🎯 首测先验收缩：首轮聚合起点向中性先验收缩，防止单轮极端印象锚定长期轨迹",
+                    "📊 综合分新增「± 轮间波动」误差条：测量误差可视化，读数不稳时差异解读应保守",
+                    "🕐 默契时窗提示：双方评分相隔超过 14 天时自动提示情境效度",
+                    "⚡ 密码派生密钥会话缓存 + 后台拉伸：输入密码与评分全流程不再卡顿",
+                    "📐 看板依据文案与理论页全部同步新算法"
+                ]),
+                ("🖥 主界面化", [
+                    "🚪 实验室从弹窗改为主界面页面：从设置页 / 关于页直接推入导航栈，支持系统返回手势",
+                    "📚 新增心理学理论依据页：七章节原生文档（六维模型 / 计算流水线 / 隐私加密 / 伦理声明 / 14 篇参考文献），与看板「依据」同源联动"
+                ]),
+                ("🔁 判定防抖", [
+                    "✨ 心动火花等级滞后缓冲（±1.5 分边界沿用上期），评级 / 类型 / 火花三重防抖一致化",
+                    "📈 旧结果打开即按新算法自动重算迁移，历史数据无缝升级"
+                ])
+            ]
+        ),
         // v5.3.0
         NIOAboutRelease(
             version: "v5.3.0 (Build 2811)",
             date: "2026-11",
-            isLatest: true,
+            isLatest: false,
             items: [
                 ("💞 恋爱好感度实验室", [
                     "🐰 关于页点击兔子头像进入：蜜柑 🍊 × 夏老师 🫧 双人密码盲评互评游戏",

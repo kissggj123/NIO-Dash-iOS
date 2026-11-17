@@ -354,9 +354,17 @@ struct NIODatingCompositeSnapshot: Codable, Equatable {
     var algorithmVersion: Int?
     /// 初识心动期火花等级缓存 key（v5.1 滞后判定用；旧快照 nil → 实时按分数计算）
     var sparkKey: String?
+    /// 综合分轮间波动误差条（v5.2）：双方有效分漂移 EMA 的均值，±N 显示；旧快照 / 单轮 nil
+    var overallDispersion: Double?
 
     var loveType: NIODatingLoveType { NIODatingEngine.loveType(forKey: loveTypeKey) }
     var rank: NIODatingRank { NIODatingEngine.rank(forKey: rankKey) }
+
+    /// 双方最近一轮评分的时间间隔（天，v5.2 默契时窗提示用；任一方缺时间戳为 nil）
+    var roundGapDays: Double? {
+        guard let a = mikanLastUpdate, let b = xiaLastUpdate else { return nil }
+        return abs(a.timeIntervalSince(b)) / 86400
+    }
 
     /// 关系阶段（2026-11-14 新增：初识心动期 / 深度关系期；旧快照无此字段按深度关系期处理）
     var stageKey: String?
@@ -872,6 +880,8 @@ enum NIODatingEvidence {
     数据质量过滤（默许偏差 / acquiescence bias）：当单轮各维度几乎同分（轮内标准差 < 5）时判定为「未做真实区分」，该轮 α 额外降权 0.1 并提示。依据：问卷方法学中默许偏差是自评量表的主要效度威胁（Paulhus, 1991），低区分度数据应降权处理。
 
     首测先验收缩（v5.1）：首轮聚合起点 = 0.8 × 本轮 + 0.2 × 中性先验 70 分 —— 首测均值回归（regression to the mean）：单轮极端印象（光环效应或首因晕轮）不应直接成为长期聚合的锚点，第二轮起由自适应 EMA 接管。
+
+    轮间波动误差条（v5.2）：双方有效分逐轮漂移幅度的 EMA 估计以「± N 轮间波动」呈现于综合分旁 —— 任何测量都带误差（经典测量理论），79 ± 3 与 79 ± 12 是完全不同的结论质量；误差条越大说明读数越不稳，此时差异解读应保守。
     """
 
     /// 心动火花等级（初识心动期专用）

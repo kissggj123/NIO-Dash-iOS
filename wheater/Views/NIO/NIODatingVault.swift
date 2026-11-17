@@ -65,6 +65,9 @@ struct NIODatingSideSummary: Codable {
     var lastUpdate: Date
     /// 累计评分轮次（2026-11-14 新增，用于 EMA 平滑与稳定度判定；旧数据无此字段）
     var rounds: Int?
+    /// 轮间波动（2026-11-18 v5.2 新增）：有效分逐轮漂移幅度的 EMA 估计，
+    /// 驱动综合分误差条 ±N；旧数据 nil，第二轮起有值
+    var dispersion: Double?
 }
 
 /// 聚合金库（双方摘要，设备密钥密封后持久化）
@@ -429,14 +432,24 @@ final class NIODatingVault: ObservableObject {
         defaults.set(sealed.base64EncodedString(), forKey: StoreKey.sealedScores(member))
 
         // 6. 更新聚合金库（设备密钥密封；仅存平滑聚合摘要，永不展示个人原始分）
+        // v5.2 轮间波动（dispersion）：新轮有效分相对上轮聚合的漂移幅度，EMA 追踪 ——
+        // 作为综合分测量误差条（±N）的数据来源，第二轮起有估计值
         var compositeVault = loadCompositeVault() ?? NIODatingCompositeVault()
+        let newDispersion: Double?
+        if let previousSummary {
+            let drift = abs(effective - previousSummary.effective)
+            newDispersion = (previousSummary.dispersion ?? drift) * 0.7 + drift * 0.3
+        } else {
+            newDispersion = nil
+        }
         let summary = NIODatingSideSummary(
             means: smoothedMeans,
             effective: effective,
             sentiment: sentiment,
             chapters: previousSummary.map { $0.chapters + 1 } ?? 1,
             lastUpdate: Date(),
-            rounds: (previousSummary?.rounds ?? 0) + 1
+            rounds: (previousSummary?.rounds ?? 0) + 1,
+            dispersion: newDispersion
         )
         compositeVault.setSide(summary, for: member)
         guard saveCompositeVault(compositeVault) else {
@@ -501,6 +514,11 @@ final class NIODatingVault: ObservableObject {
         let rank = NIODatingEngine.rank(for: overall, previousKey: snapshot?.rankKey)
         // v5.1 火花等级滞后判定（仅初识心动期生效，深度期 key 存占位）
         let sparkLevel = NIODatingEngine.sparkLevel(for: overall, previousKey: snapshot?.sparkKey)
+        // v5.2 轮间波动误差条：双方 dispersion 的均值（任一方尚无第二轮估计则为 nil）
+        let overallDispersion: Double? = {
+            guard let dm = mikan.dispersion, let dx = xia.dispersion else { return nil }
+            return (dm + dx) / 2
+        }()
         let balance = NIODatingEngine.balanceScore(compositeMeans: compositeMeans)
 
         // v4/v5 趋势序列：常规提交追加本期聚合点（仅综合分与默契指数，不含个人原始分），上限 30 点；
@@ -533,6 +551,7 @@ final class NIODatingVault: ObservableObject {
             overallHistory: newHistory,
             algorithmVersion: 5,
             sparkKey: sparkLevel.key,
+            overallDispersion: overallDispersion,
             stageKey: currentStage.rawValue
         )
 

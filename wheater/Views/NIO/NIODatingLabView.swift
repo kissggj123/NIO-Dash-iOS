@@ -13,6 +13,10 @@ import SwiftUI
 // MARK: - 主入口
 
 struct NIODatingLabView: View {
+    /// true = 独立模态（自带 NavigationStack + 关闭按钮，兼容旧入口）
+    /// false = 作为主界面页面被宿主 NavigationStack push 呈现（系统返回手势返回）
+    var showsAsModal: Bool = true
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var vault = NIODatingVault.shared
@@ -47,7 +51,15 @@ struct NIODatingLabView: View {
     @State private var archiveWork = NIOScheduledWork()
 
     var body: some View {
-        NavigationStack {
+        if showsAsModal {
+            NavigationStack { labContent }
+        } else {
+            labContent
+        }
+    }
+
+    /// 实验室主体（push 模式下 navigationTitle / toolbar 修饰由宿主 NavigationStack 响应）
+    private var labContent: some View {
             ZStack {
                 labBackground
                     .ignoresSafeArea()
@@ -103,7 +115,7 @@ struct NIODatingLabView: View {
             }
             .overlay { privacyShield }
             .overlay(alignment: .top) { archiveBanner }
-        }
+        // 引导页仅在未配置时展示；已配置直接进看板
         .onAppear {
             if flow == .intro, vault.isConfigured {
                 flow = .dashboard
@@ -1614,6 +1626,7 @@ struct NIODatingCompositeCardView: View {
     private var sakuraPink: Color { themeService.accentColor() }
     private var lavenderDream: Color { Color(hex: themeService.currentToken.gradientEnd) }
     private var mintCyan: Color { themeService.glowColor() }
+    private var pastelYellow: Color { themeService.warmAccentColor() }
 
     @State private var animatedOverall: Double = 0
     @State private var isTypeExpanded = false
@@ -1633,6 +1646,16 @@ struct NIODatingCompositeCardView: View {
                 rankBadge
 
                 stabilityBadge
+
+                // v5.2 轮间波动误差条：±N（双方有效分漂移 EMA 的均值）
+                if let dispersion = snapshot.overallDispersion, dispersion > 0.5 {
+                    Text(String(format: "± %.1f 轮间波动", dispersion))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(Capsule().stroke(NIOThemePaint.stroke, lineWidth: 1))
+                }
 
                 Text("你们的恋爱物语已连载 \(snapshot.combinedChapters) 章")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
@@ -2034,6 +2057,18 @@ struct NIODatingCompositeCardView: View {
             Text(harmonyCaption)
                 .font(.system(size: 10))
                 .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+
+            // v5.2 默契时窗提示：双方最近一轮评分相隔较久时，感知差异可能来自情境变化
+            if let gapDays = snapshot.roundGapDays, gapDays > 14 {
+                Label(
+                    String(format: "两次评分相隔 %.0f 天 —— 感知差异可能部分来自情境变化，而非真实分歧", gapDays),
+                    systemImage: "clock.badge.exclamationmark"
+                )
+                .font(.system(size: 9.5))
+                .foregroundStyle(pastelYellow)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+            }
 
             NIODatingEvidenceDisclosure(text: NIODatingEvidence.harmony)
         }
