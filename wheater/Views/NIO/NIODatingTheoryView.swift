@@ -189,6 +189,7 @@ struct NIODatingTheoryView: View {
             NIODatingEvidenceDisclosure(text: NIODatingEvidence.harmony)
             NIODatingEvidenceDisclosure(text: NIODatingEvidence.trend)
             NIODatingEvidenceDisclosure(text: NIODatingEvidence.stability)
+            NIODatingEvidenceDisclosure(text: NIODatingEvidence.aron36)
         }
     }
 

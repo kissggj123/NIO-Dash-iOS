@@ -166,6 +166,9 @@ struct NIODating36QuestionsView: View {
             }
             .frame(height: 6)
 
+            // 理论依据（默认折叠，与看板/理论页同源）
+            NIODatingEvidenceDisclosure(text: NIODatingEvidence.aron36)
+
             Spacer(minLength: 4)
 
             // 题卡
