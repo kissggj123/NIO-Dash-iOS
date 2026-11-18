@@ -131,7 +131,7 @@ struct NIOSchematicCarView: View {
             return String(format: "%.1f kW", w / (w > 100 ? 1000 : 1))
         }()
 
-        return [
+        var spots: [NIOSchematicSpot] = [
             tyreSpot("tyre_fl", "左前轮", tyres.fl),
             tyreSpot("tyre_fr", "右前轮", tyres.fr),
             tyreSpot("tyre_rl", "左后轮", tyres.rl),
@@ -185,6 +185,20 @@ struct NIOSchematicCarView: View {
                 ]
             )
         ]
+
+        // 家充桩：仅充电时显示（iOS 端无 HAR 导入的桩体数据，只展示充电态摘要）
+        if isCharging {
+            spots.append(NIOSchematicSpot(
+                id: "charger", title: "家充桩",
+                tone: .ok,
+                rows: [
+                    NIOSchematicSpotRow(label: "状态", value: "充电中"),
+                    NIOSchematicSpotRow(label: "功率", value: powerText)
+                ]
+            ))
+        }
+
+        return spots
     }
 
     private var spots: [NIOSchematicSpot] { Self.makeSpots(status: status, isCharging: isCharging) }
@@ -221,6 +235,16 @@ struct NIOSchematicCarView: View {
             guard isCharging else { return }
             withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
                 chargePulse = true
+            }
+        }
+        .onChange(of: isCharging) { _, charging in
+            // 充电状态变化时启停呼吸动画（家充桩 / 充电线 / 充电口同步）
+            if charging {
+                withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                    chargePulse = true
+                }
+            } else {
+                withAnimation(NIOThemeMotion.easeSmooth) { chargePulse = false }
             }
         }
     }
@@ -278,6 +302,16 @@ struct NIOSchematicCarView: View {
 
             // 灯光
             lightsView
+
+            // 家充桩 + 充电线（仅充电时显示，充电线从桩体连到充电口）
+            if isCharging {
+                PathShape(path: cablePath)
+                    .stroke(
+                        NIOSchematicTone.ok.color.opacity(chargePulse ? 0.85 : 0.45),
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                    )
+                chargerPileView
+            }
 
             // 充电口
             chargePortView
@@ -399,6 +433,46 @@ struct NIOSchematicCarView: View {
         }
         .contentShape(Rectangle().size(width: 34, height: 34))
         .onTapGesture { select("port") }
+    }
+
+    /// 家充桩（Web 版 SVG 原坐标：桩体/屏幕/LED/底座）
+    private var chargerPileView: some View {
+        ZStack {
+            // 桩体
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color(red: 0.78, green: 0.81, blue: 0.85), lineWidth: 1.6)
+                )
+                .frame(width: 50, height: 152)
+                .position(x: 75, y: 150)
+            // 屏幕
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color(red: 0.16, green: 0.20, blue: 0.25))
+                .frame(width: 30, height: 22)
+                .position(x: 75, y: 199)
+            // LED 指示灯（呼吸）
+            Circle()
+                .fill(NIOSchematicTone.ok.color.opacity(chargePulse ? 1.0 : 0.4))
+                .frame(width: 8, height: 8)
+                .position(x: 75, y: 172)
+            // 底座
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color(red: 0.82, green: 0.84, blue: 0.86))
+                .frame(width: 66, height: 10)
+                .position(x: 75, y: 73)
+        }
+        .contentShape(Rectangle().size(width: 66, height: 162))
+        .onTapGesture { select("charger") }
+    }
+
+    /// 充电线：M 100 176 C 150 250, 200 30, 244 80（桩体 → 充电口）
+    private var cablePath: Path {
+        var p = Path()
+        p.move(to: CGPoint(x: 100, y: 176))
+        p.addCurve(to: CGPoint(x: 244, y: 80), control1: CGPoint(x: 150, y: 250), control2: CGPoint(x: 200, y: 30))
+        return p
     }
 
     private func select(_ id: String) {
