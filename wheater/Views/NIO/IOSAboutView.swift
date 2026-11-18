@@ -1119,12 +1119,21 @@ struct NIOAboutLongShareView: View {
 
     private let latest = NIOAboutReleases.latest
 
+    /// 实时读取当前 App 图标（Bundle 主图标，渲染期动态取，无需静态资源）
+    private var appIconImage: UIImage? {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let iconFiles = primary["CFBundleIconFiles"] as? [String],
+              let iconName = iconFiles.last else { return nil }
+        return UIImage(named: iconName)
+    }
+
     var body: some View {
         VStack(spacing: 14) {
-            // 顶部胶囊标题条
+            // 顶部胶囊标题条（当前主题色标题实时读取）
             HStack(spacing: 6) {
                 Text("✨").font(.system(size: 12))
-                Text("YumikoToysRR · 关于本作 · 定制分享卡")
+                Text("\(themeService.currentStyle.displayName) · 关于本作 · 定制分享卡")
                     .font(.system(size: 12, weight: .heavy, design: .rounded))
                     .foregroundStyle(rose)
                 Text("✨").font(.system(size: 12))
@@ -1138,11 +1147,24 @@ struct NIOAboutLongShareView: View {
             HStack(alignment: .top, spacing: 14) {
                 // ── 左栏：品牌头部 + 最新版本更新日志 ──
                 VStack(spacing: 12) {
-                    // 品牌 hero 白卡（参考关于页头部样式）
+                    // 品牌 hero 白卡（参考关于页头部样式；图标实时读取 App 图标）
                     VStack(spacing: 8) {
-                        Text("💞")
-                            .font(.system(size: 44))
-                            .shadow(color: rose.opacity(0.22), radius: 10)
+                        if let icon = appIconImage {
+                            Image(uiImage: icon)
+                                .resizable()
+                                .interpolation(.high)
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                        .stroke(Color.white, lineWidth: 2)
+                                )
+                                .shadow(color: rose.opacity(0.25), radius: 10, y: 3)
+                        } else {
+                            Text("💞")
+                                .font(.system(size: 44))
+                                .shadow(color: rose.opacity(0.22), radius: 10)
+                        }
                         Text("YumikoToysRR")
                             .font(.system(size: 26, weight: .heavy, design: .rounded))
                             .foregroundStyle(ink)
@@ -1248,6 +1270,37 @@ struct NIOAboutLongShareView: View {
                                 .stroke(ink.opacity(0.05), lineWidth: 1)
                         )
                     }
+
+                    // 恋爱实验室引擎卡（填补右栏下方空白，实时读取当前算法版本）
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text("🧮 恋爱好感度实验室")
+                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .foregroundStyle(ink)
+                            Spacer()
+                            Text("心理学引擎 · \(NIODatingEngine.algorithmDisplayName)")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(rose))
+                        }
+                        Text(NIODatingEngine.algorithmDescription)
+                            .font(.system(size: 9))
+                            .foregroundStyle(ink.opacity(0.72))
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.white)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(ink.opacity(0.05), lineWidth: 1)
+                    )
                 }
                 .frame(width: 400)
             }
