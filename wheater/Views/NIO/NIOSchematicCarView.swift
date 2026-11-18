@@ -208,9 +208,14 @@ struct NIOSchematicCarView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // 720×240 原图坐标系（Web 版 viewBox 30 30 720 240）
-            let scale = min(geo.size.width / 700, geo.size.height / 235)
+            // 自适应缩放：按内容实际边界（充电时含家充桩）计算，车体撑满可用区域并居中
+            let contentW: CGFloat = isCharging ? 585 : 460
+            let contentH: CGFloat = 205
+            let contentCenterX: CGFloat = isCharging ? 327 : 390
+            let contentCenterY: CGFloat = 152
+            let scale = min(geo.size.width / contentW, geo.size.height / contentH)
             carDrawing
+                .offset(x: 350 - contentCenterX, y: 117.5 - contentCenterY)
                 .frame(width: 700, height: 235)
                 .scaleEffect(scale)
                 .frame(width: geo.size.width, height: geo.size.height)
@@ -329,8 +334,8 @@ struct NIOSchematicCarView: View {
                     .stroke(tone == .warn ? NIOSchematicTone.warn.color : .clear, lineWidth: 2.5)
             )
             .frame(width: 58, height: 20)
-            .position(x: x + 29, y: y + 10)
             .contentShape(Rectangle())
+            .position(x: x + 29, y: y + 10)
             .onTapGesture { select(id) }
     }
 
@@ -356,13 +361,14 @@ struct NIOSchematicCarView: View {
                     .stroke(Color(red: 0.78, green: 0.81, blue: 0.85), lineWidth: 1.4)
             )
             .frame(width: width, height: 16)
-            .position(x: x + width / 2, y: y + 8)
             .contentShape(Rectangle())
+            .position(x: x + width / 2, y: y + 8)
             .onTapGesture { select(id) }
     }
 
     private var cabinView: some View {
         ZStack {
+            // 车顶面板（座舱）
             RoundedRectangle(cornerRadius: 22)
                 .fill(Color.white)
                 .overlay(
@@ -370,26 +376,25 @@ struct NIOSchematicCarView: View {
                         .stroke(Color(red: 0.86, green: 0.88, blue: 0.90), lineWidth: 1.6)
                 )
                 .frame(width: 158, height: 108)
-                .position(x: 351, y: 150)
-
-            // SOC 电量条（轨道 + 填充）
+            // SOC 电量条（轨道 + 填充，局部坐标：轨道左缘距容器中心 -55）
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(red: 0.90, green: 0.91, blue: 0.93))
                 .frame(width: 110, height: 8)
-                .position(x: 351, y: 174)
+                .offset(x: 0, y: 24)
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(red: 0.22, green: 0.72, blue: 0.42))
                 .frame(width: max(10, 110 * CGFloat(min(1, max(0, Double(soc) / 100)))), height: 8)
-                .position(x: 296 + max(5, 55 * CGFloat(min(1, max(0, Double(soc) / 100)))), y: 174)
-
+                .offset(x: min(55, max(10, 110 * CGFloat(min(1, max(0, Double(soc) / 100))))) / 2 - 55, y: 24)
             // 锁止文字（容器整体旋转 180°，此处反转回正）
             Text(locked ? "已上锁" : "未上锁")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(red: 0.18, green: 0.23, blue: 0.28))
                 .rotationEffect(.degrees(180))
-                .position(x: 351, y: 146)
+                .offset(y: -4)
         }
+        .frame(width: 170, height: 120)
         .contentShape(Rectangle())
+        .position(x: 351, y: 150)
         .onTapGesture { select("cabin") }
     }
 
@@ -408,7 +413,9 @@ struct NIOSchematicCarView: View {
                     .blur(radius: 5)
             }
         }
-        .contentShape(Rectangle().size(width: 40, height: 120))
+        .frame(width: 40, height: 120)
+        .contentShape(Rectangle())
+        .position(x: 608, y: 150)
         .onTapGesture { select("lights") }
     }
 
@@ -420,22 +427,21 @@ struct NIOSchematicCarView: View {
                     .fill(NIOSchematicTone.ok.color.opacity(chargePulse ? 0.35 : 0.08))
                     .frame(width: 34, height: 34)
                     .scaleEffect(chargePulse ? 1.25 : 0.8)
-                    .position(x: 248, y: 84)
             }
             Circle()
                 .fill(portFill)
                 .frame(width: 14, height: 14)
-                .position(x: 248, y: 84)
             Circle()
                 .stroke(portStroke, lineWidth: 2)
                 .frame(width: 14, height: 14)
-                .position(x: 248, y: 84)
         }
-        .contentShape(Rectangle().size(width: 34, height: 34))
+        .frame(width: 34, height: 34)
+        .contentShape(Rectangle())
+        .position(x: 248, y: 84)
         .onTapGesture { select("port") }
     }
 
-    /// 家充桩（Web 版 SVG 原坐标：桩体/屏幕/LED/底座）
+    /// 家充桩（Web 版 SVG 原坐标：桩体/屏幕/LED/底座；局部坐标基于 66×162 容器）
     private var chargerPileView: some View {
         ZStack {
             // 桩体
@@ -446,24 +452,25 @@ struct NIOSchematicCarView: View {
                         .stroke(Color(red: 0.78, green: 0.81, blue: 0.85), lineWidth: 1.6)
                 )
                 .frame(width: 50, height: 152)
-                .position(x: 75, y: 150)
             // 屏幕
             RoundedRectangle(cornerRadius: 5)
                 .fill(Color(red: 0.16, green: 0.20, blue: 0.25))
                 .frame(width: 30, height: 22)
-                .position(x: 75, y: 199)
+                .offset(y: 49)
             // LED 指示灯（呼吸）
             Circle()
                 .fill(NIOSchematicTone.ok.color.opacity(chargePulse ? 1.0 : 0.4))
                 .frame(width: 8, height: 8)
-                .position(x: 75, y: 172)
+                .offset(y: 22)
             // 底座
             RoundedRectangle(cornerRadius: 5)
                 .fill(Color(red: 0.82, green: 0.84, blue: 0.86))
                 .frame(width: 66, height: 10)
-                .position(x: 75, y: 73)
+                .offset(y: -77)
         }
-        .contentShape(Rectangle().size(width: 66, height: 162))
+        .frame(width: 66, height: 162)
+        .contentShape(Rectangle())
+        .position(x: 75, y: 150)
         .onTapGesture { select("charger") }
     }
 
@@ -612,17 +619,18 @@ struct NIOSchematicCarView: View {
         return p
     }
 
+    // 灯光曲线（局部坐标，容器 40×120 定位在 (608,150)）
     private var lightLeftPath: Path {
         var p = Path()
-        p.move(to: CGPoint(x: 590, y: 96))
-        p.addQuadCurve(to: CGPoint(x: 606, y: 124), control: CGPoint(x: 604, y: 108))
+        p.move(to: CGPoint(x: 2, y: 6))
+        p.addQuadCurve(to: CGPoint(x: 18, y: 34), control: CGPoint(x: 16, y: 18))
         return p
     }
 
     private var lightRightPath: Path {
         var p = Path()
-        p.move(to: CGPoint(x: 590, y: 204))
-        p.addQuadCurve(to: CGPoint(x: 606, y: 176), control: CGPoint(x: 604, y: 192))
+        p.move(to: CGPoint(x: 2, y: 114))
+        p.addQuadCurve(to: CGPoint(x: 18, y: 88), control: CGPoint(x: 16, y: 102))
         return p
     }
 }

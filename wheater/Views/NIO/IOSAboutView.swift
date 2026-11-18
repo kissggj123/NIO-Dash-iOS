@@ -677,11 +677,29 @@ struct NIOAboutRelease {
 
 enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
+        // v5.5.0
+        NIOAboutRelease(
+            version: "v5.5.0 (Build 2813)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("🚗 可调节车辆仪表盘", [
+                    "🗺 nio-dash Web 版俯视车况示意图移植到 iOS 主界面：车头朝左俯视图，轮胎 / 四门 / 前备箱 / 尾门 / 充电口 / 座舱 / 灯光全部可交互",
+                    "👆 轻点任意部件弹出实时状态卡：胎压胎温、车门车窗开度、充电功率与限充、车锁空调温度、灯光状态",
+                    "🔌 家充桩仅在充电时出现：桩体 + 呼吸 LED + 充电线与充电口联动脉动，轻点查看充电摘要",
+                    "📐 示意图按内容边界自适应缩放，iPhone / iPad 双端撑满 Hero 区域；修复部件点击热区错位",
+                    "🧩 Hero 二选一布局：示意图模式 = 左信息列 + 右车视图（Web 版同款，无叠加）；渐变模式 = 原版渐变信息卡，设置页随时切换"
+                ]),
+                ("🗑 移除", [
+                    "🖼 下线主页车型图片（内置车图 Vision 抠图 / 相册导入），旧设置自动迁移到俯视示意图"
+                ])
+            ]
+        ),
         // v5.4.0
         NIOAboutRelease(
             version: "v5.4.0 (Build 2812)",
             date: "2026-11",
-            isLatest: true,
+            isLatest: false,
             items: [
                 ("🧮 心理学引擎 v5.1-v5.2", [
                     "🛡 Theil–Sen 稳健趋势斜率 + Mann–Kendall 显著性检验：趋势解读区分真实信号与随机噪声",
