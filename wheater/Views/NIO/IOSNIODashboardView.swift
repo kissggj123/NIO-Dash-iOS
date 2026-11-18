@@ -411,13 +411,147 @@ struct IOSNIODashboardView: View {
     /// 灵动岛/锁屏卡片点击进 App 的主卡片入场动画（收起 → 弹性展开）
     @State private var heroEntryShown = true
 
+    /// 主页 Hero：二选一 —— 俯视示意图（Web 版布局：左信息列 + 右车视图，不叠加）/ 渐变信息卡
     private var vehicleHero: some View {
-        ZStack(alignment: .bottomLeading) {
-            // 车型图层（依设置：内置图 / 外部导入 / 纯渐变）
-            heroPhotoLayer
+        Group {
+            if heroPhotoMode == .schematic {
+                schematicHero
+            } else {
+                gradientHero
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 16, y: 10)
+        .scaleEffect(heroEntryShown ? 1 : 0.9, anchor: .top)
+        .opacity(heroEntryShown ? 1 : 0.3)
+        .offset(y: heroEntryShown ? 0 : -8)
+        .onReceive(service.$islandEntryPulse) { pulse in
+            guard pulse != nil else { return }
+            // 无动画瞬间收起，再弹性展开（经典重播手法）
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { heroEntryShown = false }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+                heroEntryShown = true
+            }
+            NIOBootHaptics.impact(.light)
+        }
+    }
 
-            // 渐变遮罩：纯渐变模式满铺；图片模式垂直渐变（顶部浓保文字、底部透出车形）
-            heroOverlay
+    /// 俯视示意图 Hero（参考 nio-dash Web 版：左侧信息列 + 右侧可轻点车视图，无叠加）
+    private var schematicHero: some View {
+        HStack(alignment: .center, spacing: 4) {
+            schematicInfoColumn
+                .frame(width: 130)
+            NIOSchematicCarView(status: status, isCharging: isCharging)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 6)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .background(NIOThemePaint.fillStrong)
+    }
+
+    /// 示意图模式左侧信息列（SOC / 续航 / 电量条 / 状态 chips / 温度 / 提示）
+    private var schematicInfoColumn: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(soc.map { String(format: "%.0f", $0.soc ?? 0) } ?? "--")
+                    .font(.system(size: 44, weight: .thin, design: .rounded))
+                    .foregroundStyle(NIOThemePaint.text)
+                Text("%")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+            }
+            .monospacedDigit()
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(rangeText(heroMainRange.value)) \(heroMainRange.label)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.8))
+                Text("\(rangeText(heroSubRange.value)) \(heroSubRange.label)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.55))
+            }
+            .monospacedDigit()
+
+            GeometryReader { proxy in
+                let fraction = CGFloat(min(1, max(0, (soc?.soc ?? 0) / 100)))
+                ZStack(alignment: .leading) {
+                    Capsule().fill(NIOThemePaint.text.opacity(0.10))
+                    if fraction > 0 {
+                        Capsule()
+                            .fill(isCharging ? AnyShapeStyle(Color.green) : AnyShapeStyle(NIOThemePaint.accentGradient))
+                            .frame(width: max(8, proxy.size.width * fraction))
+                    }
+                }
+            }
+            .frame(height: 6)
+
+            HStack(spacing: 5) {
+                schematicChip(label: isLocked ? "已上锁" : "未上锁", ok: isLocked)
+                schematicChip(label: vehicleStateLabel, ok: nil)
+                schematicChip(label: isCharging ? "充电中" : "未充电", ok: isCharging ? true : nil)
+            }
+
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(temperatureText)
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Text("车内设定")
+                        .font(.system(size: 9))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(degreeText(status?.hvacStatus?.outsideTemperature))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Text("车外")
+                        .font(.system(size: 9))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                }
+            }
+
+            Text("轻点车上看轮胎 · 车门 · 充电口")
+                .font(.system(size: 9))
+                .foregroundStyle(NIOThemePaint.text.opacity(0.45))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 状态小胶囊（ok=nil 中性、true 绿、false 琥珀）
+    private func schematicChip(label: String, ok: Bool?) -> some View {
+        let color: Color = ok == true ? .green : (ok == false ? .orange : NIOThemePaint.text.opacity(0.6))
+        return Text(label)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(color.opacity(0.12)))
+    }
+
+    /// 渐变信息卡 Hero（原版：白字叠主题渐变）
+    private var gradientHero: some View {
+        ZStack(alignment: .bottomLeading) {
+            NIOThemePaint.gradientEnd
+
+            // 渐变遮罩：高光 + 底部压暗
+            ZStack {
+                NIOThemePaint.accentGradient
+                RadialGradient(
+                    colors: [.white.opacity(0.20), .clear],
+                    center: UnitPoint(x: 0.12, y: -0.05),
+                    startRadius: 10,
+                    endRadius: 400
+                )
+                LinearGradient(
+                    colors: [.black.opacity(0.16), .clear],
+                    startPoint: .bottom,
+                    endPoint: .center
+                )
+            }
 
             Circle()
                 .fill(.white.opacity(0.06))
@@ -502,78 +636,6 @@ struct IOSNIODashboardView: View {
             }
             .foregroundStyle(.white)
             .padding(22)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .shadow(color: .black.opacity(0.18), radius: 16, y: 10)
-        .scaleEffect(heroEntryShown ? 1 : 0.9, anchor: .top)
-        .opacity(heroEntryShown ? 1 : 0.3)
-        .offset(y: heroEntryShown ? 0 : -8)
-        .onReceive(service.$islandEntryPulse) { pulse in
-            guard pulse != nil else { return }
-            // 无动画瞬间收起，再弹性展开（经典重播手法）
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { heroEntryShown = false }
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
-                heroEntryShown = true
-            }
-            NIOBootHaptics.impact(.light)
-        }
-    }
-
-    /// 车型展示层：俯视示意图（可轻点部件） / 纯渐变兜底
-    @ViewBuilder
-    private var heroPhotoLayer: some View {
-        switch heroPhotoMode {
-        case .schematic:
-            // 可调节俯视示意图（移植 nio-dash Web 版）：车体靠右，轻点部件查看实时状态
-            NIOSchematicCarView(status: status, isCharging: isCharging)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-        case .gradient:
-            NIOThemePaint.gradientEnd
-        }
-    }
-
-    /// 遮罩层：纯渐变模式满铺对角渐变；示意图模式轻压暗（保车体通透、文字可读）
-    @ViewBuilder
-    private var heroOverlay: some View {
-        if heroPhotoMode == .gradient {
-            ZStack {
-                NIOThemePaint.accentGradient
-                // 左上高光：给纯渐变一点"打光"的体积感
-                RadialGradient(
-                    colors: [.white.opacity(0.20), .clear],
-                    center: UnitPoint(x: 0.12, y: -0.05),
-                    startRadius: 10,
-                    endRadius: 400
-                )
-                // 底部压暗：保证 hero 指标行的可读性
-                LinearGradient(
-                    colors: [.black.opacity(0.16), .clear],
-                    startPoint: .bottom,
-                    endPoint: .center
-                )
-            }
-        } else if heroPhotoMode == .schematic {
-            LinearGradient(
-                stops: [
-                    .init(color: NIOThemePaint.gradientStart.opacity(0.50), location: 0),
-                    .init(color: NIOThemePaint.gradientStart.opacity(0.22), location: 0.55),
-                    .init(color: NIOThemePaint.gradientEnd.opacity(0.18), location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        } else {
-            LinearGradient(
-                stops: [
-                    .init(color: NIOThemePaint.gradientStart.opacity(0.9), location: 0),
-                    .init(color: NIOThemePaint.gradientStart.opacity(0.4), location: 0.48),
-                    .init(color: NIOThemePaint.gradientEnd.opacity(0.34), location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
         }
     }
 
