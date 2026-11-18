@@ -39,10 +39,7 @@ struct IOSNIOConfigView: View {
     @AppStorage("nio_vehicle_selected_color") private var selectedColorSlug = "nature_wonder"
     // 首页名称与车型图片（v5.1）
     @AppStorage("nio_home_title") private var homeTitle = "兔可可·蔚来"
-    @AppStorage("nio_hero_photo_mode") private var heroPhotoModeRaw = NIOHeroPhotoMode.gradient.rawValue
-    @State private var heroPhotoItem: PhotosPickerItem?
-    @State private var heroPhotoHint: String?
-
+    @AppStorage("nio_hero_photo_mode") private var heroPhotoModeRaw = NIOHeroPhotoMode.schematic.rawValue
     // 二次元萌系主题色（跟随全局主题实时刷新）
     private var sakuraPink: Color { themeService.accentColor() }
     private var lavenderDream: Color { Color(hex: themeService.currentToken.gradientEnd) }
@@ -221,24 +218,6 @@ struct IOSNIOConfigView: View {
             }
             .fullScreenCover(isPresented: $showLaunchPreview) {
                 NIOLaunchPreviewHost(isPresented: $showLaunchPreview)
-            }
-            .onChange(of: heroPhotoItem) { _, item in
-                guard let item else { return }
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        // 压缩存储，控制沙盒体积
-                        if let jpeg = image.jpegData(compressionQuality: 0.85) {
-                            try? NIOHeroPhotoStore.save(data: jpeg)
-                            heroPhotoHint = "✅ 已导入，主页将显示自定义车型图"
-                        } else {
-                            heroPhotoHint = "⚠️ 图片格式无法识别"
-                        }
-                    } else {
-                        heroPhotoHint = "⚠️ 图片读取失败，请重试"
-                    }
-                    heroPhotoItem = nil
-                }
             }
         }
     }
@@ -567,9 +546,9 @@ struct IOSNIOConfigView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("看板首页左上角标题")
 
-                // 车型图片来源
+                // 主页车辆展示模式（俯视示意图 / 纯渐变）
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("主页车型图片")
+                    Text("主页车辆展示")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(NIOThemePaint.text)
 
@@ -595,48 +574,11 @@ struct IOSNIOConfigView: View {
                         }
                     }
 
-                    if heroPhotoModeRaw == NIOHeroPhotoMode.custom.rawValue {
-                        HStack(spacing: 10) {
-                            PhotosPicker(selection: $heroPhotoItem, matching: .images) {
-                                HStack(spacing: 5) {
-                                    Image(systemName: "photo.badge.plus")
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Text(NIOHeroPhotoStore.hasCustomPhoto ? "重新导入图片" : "从相册导入")
-                                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                                }
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(LinearGradient(colors: [sakuraPink, lavenderDream], startPoint: .leading, endPoint: .trailing))
-                                .clipShape(Capsule())
-                            }
-
-                            if NIOHeroPhotoStore.hasCustomPhoto {
-                                Button {
-                                    NIOHeroPhotoStore.clear()
-                                    heroPhotoHint = "已清除导入图片，将回退为渐变背景"
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(NIOThemePaint.text.opacity(0.6))
-                                        .padding(8)
-                                        .background(NIOThemePaint.fill)
-                                        .clipShape(Capsule())
-                                }
-                                .buttonStyle(NIOPressableButtonStyle())
-                            }
-                        }
-
-                        if let hint = heroPhotoHint {
-                            Text(hint)
-                                .font(.system(size: 9))
-                                .foregroundStyle(mintCyan)
-                        } else {
-                            Text("导入后保存在本机沙盒，主页 Hero 卡以渐变压暗显示，保证文字可读")
-                                .font(.system(size: 9))
-                                .foregroundStyle(NIOThemePaint.text.opacity(0.5))
-                        }
-                    }
+                    Text(heroPhotoModeRaw == NIOHeroPhotoMode.schematic.rawValue
+                         ? "俯视示意图：轻点车上的轮胎、车门、充电口等部件查看实时状态"
+                         : "纯渐变：主页以主题渐变打底，最简洁")
+                        .font(.system(size: 9))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.5))
                 }
 
                 Divider().background(NIOThemePaint.stroke)

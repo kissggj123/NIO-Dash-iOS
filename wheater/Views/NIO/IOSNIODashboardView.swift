@@ -12,102 +12,18 @@ import CoreImage.CIFilterBuiltins
 import MapKit
 import CoreLocation
 
-/// 主页车型图片模式：纯渐变 / 内置车型图 / 外部导入
+/// 主页车辆展示模式：可调节俯视示意图（默认）/ 纯渐变兜底
 enum NIOHeroPhotoMode: String, CaseIterable, Codable, Identifiable {
-    case gradient  // 纯主题渐变（默认）
-    case builtin   // 内置车型图 (ET5_CleanPark)
-    case custom    // 外部导入图片
+    case schematic  // 可调节俯视示意图（移植 nio-dash Web 版，默认）
+    case gradient   // 纯主题渐变
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .gradient: return "纯渐变"
-        case .builtin:  return "内置车型图"
-        case .custom:   return "外部导入"
+        case .schematic: return "俯视示意图"
+        case .gradient:  return "纯渐变"
         }
-    }
-}
-
-/// 外部导入车型图的本地存取 + Vision 原生抠图（VNGenerateForegroundInstanceMaskRequest）
-enum NIOHeroPhotoStore {
-    static var fileURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent("nio_hero_photo.jpg")
-    }
-
-    /// 抠图结果缓存（透明 PNG）
-    static var cutoutURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent("nio_hero_cutout.png")
-    }
-
-    static func save(data: Data) throws {
-        try data.write(to: fileURL, options: .atomic)
-    }
-
-    static func load() -> UIImage? {
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return UIImage(data: data)
-    }
-
-    static func clear() {
-        try? FileManager.default.removeItem(at: fileURL)
-        try? FileManager.default.removeItem(at: cutoutURL)
-    }
-
-    static var hasCustomPhoto: Bool {
-        FileManager.default.fileExists(atPath: fileURL.path)
-    }
-
-    // MARK: - Vision 原生抠图
-
-    /// 加载内置车图的抠图结果（透明背景）；无缓存则后台生成
-    static func loadBuiltinCutout() -> UIImage? {
-        guard let data = try? Data(contentsOf: cutoutURL) else { return nil }
-        return UIImage(data: data)
-    }
-
-    /// 用 Vision 前景实例分割把图片主体抠成透明背景（iOS 17+）
-    static func generateCutout(from image: UIImage) async -> UIImage? {
-        guard let cgImage = image.cgImage else { return nil }
-        let request = VNGenerateForegroundInstanceMaskRequest()
-        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
-        do {
-            try handler.perform([request])
-            guard let observation = request.results?.first,
-                  !observation.allInstances.isEmpty else { return nil }
-
-            let maskBuffer = try observation.generateScaledMaskForImage(forInstances: observation.allInstances, from: handler)
-
-            // 用蒙版把主体从背景中分离（CIBlendWithMask → 透明底）
-            let input = CIImage(cgImage: cgImage)
-            let mask = CIImage(cvPixelBuffer: maskBuffer)
-            let filter = CIFilter.blendWithMask()
-            filter.inputImage = input
-            filter.backgroundImage = CIImage(color: .clear).cropped(to: input.extent)
-            filter.maskImage = mask
-
-            let context = CIContext(options: [.cacheIntermediates: false])
-            guard let output = filter.outputImage,
-                  let outCG = context.createCGImage(output, from: output.extent) else { return nil }
-            return UIImage(cgImage: outCG)
-        } catch {
-            return nil
-        }
-    }
-
-    /// 生成（或复用）内置车图抠图；失败时回退原图
-    static func builtinCutoutOrOriginal() async -> UIImage? {
-        if let cached = loadBuiltinCutout() { return cached }
-        let original = UIImage(named: "ET5_CleanPark")
-        guard let original else { return nil }
-        if let cutout = await generateCutout(from: original),
-           let png = cutout.pngData() {
-            try? png.write(to: cutoutURL, options: .atomic)
-            return cutout
-        }
-        return original
     }
 }
 
@@ -176,13 +92,9 @@ struct IOSNIODashboardView: View {
     @State private var selectedSection: DashboardSection = .overview
     @State private var sidebarSection: NIOSidebarSection? = .overview
     @State private var splitVisibility: NavigationSplitViewVisibility = .all
-    /// 内置车图抠图结果（Vision 前景分割，透明底，异步生成后替换原图）
-    @State private var builtinCutout: UIImage?
-    /// 外部导入车图缓存（避免 body 每帧磁盘 IO）
-    @State private var customPhoto: UIImage?
-
     private var heroPhotoMode: NIOHeroPhotoMode {
-        NIOHeroPhotoMode(rawValue: heroPhotoModeRaw) ?? .gradient
+        // 旧存档（builtin/custom 车辆图片模式已移除）自动落到俯视示意图
+        NIOHeroPhotoMode(rawValue: heroPhotoModeRaw) ?? .schematic
     }
 
     private var status: NIOVehicleStatus? { service.vehicleData?.data?.status }
@@ -239,16 +151,6 @@ struct IOSNIODashboardView: View {
                         .animation(NIOThemeMotion.easeSmooth, value: heroPhotoModeRaw)
                     }
                     .refreshable { await refresh() }
-                    .task(id: heroPhotoModeRaw) {
-                        switch heroPhotoMode {
-                        case .gradient:
-                            break
-                        case .builtin:
-                            builtinCutout = await NIOHeroPhotoStore.builtinCutoutOrOriginal()
-                        case .custom:
-                            customPhoto = NIOHeroPhotoStore.load()
-                        }
-                    }
                 } else {
                     NIOEmptyState(onConfigure: { showSettings = true })
                         .padding(24)
@@ -269,10 +171,7 @@ struct IOSNIODashboardView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSettings, onDismiss: {
-                // 设置页可能重新导入/清除了车型图，回来刷新缓存
-                if heroPhotoMode == .custom { customPhoto = NIOHeroPhotoStore.load() }
-            }) { IOSNIOConfigView() }
+            .sheet(isPresented: $showSettings) { IOSNIOConfigView() }
             .sheet(isPresented: $showLogs) { IOSNIOFetchLogView() }
         }
     }
@@ -344,16 +243,6 @@ struct IOSNIODashboardView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .refreshable { await refresh() }
-                    .task(id: heroPhotoModeRaw) {
-                        switch heroPhotoMode {
-                        case .gradient:
-                            break
-                        case .builtin:
-                            builtinCutout = await NIOHeroPhotoStore.builtinCutoutOrOriginal()
-                        case .custom:
-                            customPhoto = NIOHeroPhotoStore.load()
-                        }
-                    }
                 }
                 // 刷新结果 / 同行事件横幅：顶部悬浮，自动消失
                 .overlay(alignment: .top) {
@@ -379,9 +268,7 @@ struct IOSNIODashboardView: View {
                 }
             }
             // 大屏：设置全屏呈现（page sheet 宽度固定 ~640，双列布局永远触发不了）
-            .fullScreenCover(isPresented: $showSettings, onDismiss: {
-                if heroPhotoMode == .custom { customPhoto = NIOHeroPhotoStore.load() }
-            }) { IOSNIOConfigView() }
+            .fullScreenCover(isPresented: $showSettings) { IOSNIOConfigView() }
             .sheet(isPresented: $showLogs) { IOSNIOFetchLogView() }
         }
     }
@@ -634,53 +521,20 @@ struct IOSNIODashboardView: View {
         }
     }
 
-    /// 车型图片层：内置资产 / 外部导入照片 / 无（纯渐变兜底）
+    /// 车型展示层：俯视示意图（可轻点部件） / 纯渐变兜底
     @ViewBuilder
     private var heroPhotoLayer: some View {
         switch heroPhotoMode {
+        case .schematic:
+            // 可调节俯视示意图（移植 nio-dash Web 版）：车体靠右，轻点部件查看实时状态
+            NIOSchematicCarView(status: status, isCharging: isCharging)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         case .gradient:
             NIOThemePaint.gradientEnd
-        case .builtin:
-            // Vision 抠图就绪前显示纯渐变（避免黑底原图压在渐变上生硬突兀）
-            if let cutout = builtinCutout {
-                // 透明车形 + 底部展台辉光：像展厅灯箱一样托住车身
-                ZStack {
-                    Ellipse()
-                        .fill(
-                            RadialGradient(
-                                colors: [NIOThemePaint.accent.opacity(0.42), NIOThemePaint.glow.opacity(0.16), Color.clear],
-                                center: .center,
-                                startRadius: 8,
-                                endRadius: 170
-                            )
-                        )
-                        .frame(width: 330, height: 92)
-                        .blur(radius: 14)
-                        .offset(y: 6)
-
-                    Image(uiImage: cutout)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .offset(x: -4, y: 10)
-                        .shadow(color: NIOThemePaint.accent.opacity(0.35), radius: 18, y: 6)
-                }
-            } else {
-                NIOThemePaint.gradientEnd
-            }
-        case .custom:
-            if let image = customPhoto {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                // 未导入图片时兜底为渐变
-                NIOThemePaint.accentGradient
-            }
         }
     }
 
-    /// 遮罩层：纯渐变模式满铺对角渐变（叠加高光与底部压暗，突出文字层次）；图片模式顶部浓、底部淡，文字清晰且车形透出
+    /// 遮罩层：纯渐变模式满铺对角渐变；示意图模式轻压暗（保车体通透、文字可读）
     @ViewBuilder
     private var heroOverlay: some View {
         if heroPhotoMode == .gradient {
@@ -700,6 +554,16 @@ struct IOSNIODashboardView: View {
                     endPoint: .center
                 )
             }
+        } else if heroPhotoMode == .schematic {
+            LinearGradient(
+                stops: [
+                    .init(color: NIOThemePaint.gradientStart.opacity(0.50), location: 0),
+                    .init(color: NIOThemePaint.gradientStart.opacity(0.22), location: 0.55),
+                    .init(color: NIOThemePaint.gradientEnd.opacity(0.18), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         } else {
             LinearGradient(
                 stops: [
