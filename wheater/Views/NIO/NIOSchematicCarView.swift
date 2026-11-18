@@ -56,6 +56,8 @@ struct NIOSchematicCarView: View {
     // MARK: 遥测快照
 
     private var soc: Int { Int(status?.socStatus?.soc ?? 0) }
+    /// SOC 填充条宽度（轨道 110pt，最低 10pt 保证可见）
+    private var socFillWidth: CGFloat { max(10, 110 * CGFloat(min(1, max(0, Double(soc) / 100)))) }
     private var locked: Bool { (status?.doorStatus?["vehicle_lock_status"]?.intValue ?? 1) == 1 }
     private var tyres: NIOVehicleLib.TyreStatusInfo { NIOVehicleLib.extractTyreInfo(status?.tyreStatus) }
 
@@ -377,8 +379,8 @@ struct NIOSchematicCarView: View {
                 .offset(x: 0, y: 24)
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(red: 0.22, green: 0.72, blue: 0.42))
-                .frame(width: max(10, 110 * CGFloat(min(1, max(0, Double(soc) / 100)))), height: 8)
-                .offset(x: min(55, max(10, 110 * CGFloat(min(1, max(0, Double(soc) / 100))))) / 2 - 55, y: 24)
+                .frame(width: socFillWidth, height: 8)
+                .offset(x: socFillWidth / 2 - 55, y: 24)
             // 锁止文字（容器整体旋转 180°，此处反转回正）
             Text(locked ? "已上锁" : "未上锁")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
