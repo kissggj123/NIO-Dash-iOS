@@ -451,11 +451,36 @@ struct IOSNIODashboardView: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
         .background(NIOThemePaint.fillStrong)
+        .overlay(alignment: .bottomTrailing) {
+            // 锁止状态徽章：右下角空白处（不再挤在左侧信息列）
+            HStack(spacing: 4) {
+                Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
+                    .font(.system(size: 9, weight: .bold))
+                Text(isLocked ? "已上锁" : "未上锁")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(isLocked ? Color.green : Color.orange)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Capsule().fill((isLocked ? Color.green : Color.orange).opacity(0.12)))
+            .padding(10)
+        }
     }
 
     /// 示意图模式左侧信息列（SOC / 续航 / 电量条 / 状态 chips / 温度 / 提示）
     private var schematicInfoColumn: some View {
         VStack(alignment: .leading, spacing: 7) {
+            // 数据更新时间（与渐变卡一致：连接状态点 + 相对时间）
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(service.is403Detected ? Color.red : Color.green)
+                    .frame(width: 6, height: 6)
+                Text(lastUpdatedLabel)
+                    .font(.system(size: 9))
+                    .foregroundStyle(NIOThemePaint.text.opacity(0.5))
+                    .lineLimit(1)
+            }
+
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(soc.map { String(format: "%.0f", $0.soc ?? 0) } ?? "--")
                     .font(.system(size: 44, weight: .thin, design: .rounded))
@@ -490,7 +515,6 @@ struct IOSNIODashboardView: View {
             .frame(height: 6)
 
             HStack(spacing: 5) {
-                schematicChip(label: isLocked ? "已上锁" : "未上锁", ok: isLocked)
                 schematicChip(label: vehicleStateLabel, ok: nil)
                 schematicChip(label: isCharging ? "充电中" : "未充电", ok: isCharging ? true : nil)
             }
@@ -500,7 +524,7 @@ struct IOSNIODashboardView: View {
                     Text(temperatureText)
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(NIOThemePaint.text)
-                    Text("车内设定")
+                    Text("车内")
                         .font(.system(size: 9))
                         .foregroundStyle(NIOThemePaint.text.opacity(0.5))
                 }

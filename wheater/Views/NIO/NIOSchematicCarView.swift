@@ -227,12 +227,6 @@ struct NIOSchematicCarView: View {
                 detailCard(spot)
                     .padding(8)
                     .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .bottom)))
-            } else {
-                Text("轻点车上看轮胎 · 车门 · 充电口")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 6)
             }
         }
         .animation(NIOThemeMotion.easeSmooth, value: selectedID)
