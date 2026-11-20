@@ -39,3 +39,4 @@ NIO-Dash/
 
 # Local private secrets (NEVER commit)
 wheater/NIO_Secrets.plist
+.trae-html-share-packages/
