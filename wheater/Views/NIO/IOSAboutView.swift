@@ -677,11 +677,36 @@ struct NIOAboutRelease {
 
 enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
+        // v5.6.0
+        NIOAboutRelease(
+            version: "v5.6.0 (Build 2814)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("🚗 行程数据卡", [
+                    "🗺 nio-dash 行程数据移植到 iOS：最近行程起终点、用时 / 里程 / 均速，急加速 / 急减速 / 急转弯仅发生时显示",
+                    "📊 今日行驶 / 累计里程 / 激活天数三格速览，接口缺数时用本地 GPS 采样差值兜底"
+                ]),
+                ("🔋 充电锁定上限", [
+                    "🎯 对齐 nio-dash 语义：限充直接读 lock_soc 展示（用户设定值优先），修复能量卡 / 车辆示意图 / CarPlay 限充空白"
+                ]),
+                ("📱 锁屏实时活动重构", [
+                    "⚠️ 车门 / 车窗未关与胎压告警改为底部警示胶囊，未上锁时不再挤压内容出卡片",
+                    "🔇 有告警时自动让位温度与刷新标签，卡片高度保持稳定"
+                ]),
+                ("🚗 CarPlay 小组件", [
+                    "🖼 CarPlay / 待机会移除小组件背景，自定义壁纸改画进内容层兜底，车机上也能看到背景"
+                ]),
+                ("⌘ 快捷指令", [
+                    "🗣 新增 Siri / Shortcuts：「刷新车况」后台拉取并播报结果，「车况速览」免联网播报电量续航与锁车状态"
+                ])
+            ]
+        ),
         // v5.5.0
         NIOAboutRelease(
             version: "v5.5.0 (Build 2813)",
             date: "2026-11",
-            isLatest: true,
+            isLatest: false,
             items: [
                 ("🚗 可调节车辆仪表盘", [
                     "🗺 nio-dash Web 版俯视车况示意图移植到 iOS 主界面：车头朝左俯视图，轮胎 / 四门 / 前备箱 / 尾门 / 充电口 / 座舱 / 灯光全部可交互",
