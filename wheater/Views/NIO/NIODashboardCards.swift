@@ -1056,6 +1056,179 @@ struct NIOStatusRawBlocksCard: View {
     }
 }
 
+// MARK: - 行程数据卡（移植自 nio-dash：journey_merge/status + journeys/daily_data）
+
+struct NIOJourneyCard: View {
+    let journey: NIOJourney?
+    let daily: NIODailyStats?
+    /// 本地 GPS 快照差值兜底（接口 daily_data 不可用时展示）
+    let localTodayMileage: Double?
+
+    private var todayMileageText: String {
+        if let d = daily?.dailyMileage, d > 0 { return String(format: "%.1f", d) }
+        if let l = localTodayMileage, l > 0 { return String(format: "%.1f", l) }
+        return "0.0"
+    }
+
+    private var durationText: String? {
+        guard let m = journey?.durationMinutes, m > 0 else { return nil }
+        return m >= 60 ? "\(m / 60)时\(m % 60)分" : "\(m)分钟"
+    }
+
+    private var tripTimeText: String? {
+        guard let s = journey?.startTime, s > 0 else { return nil }
+        let start = Date(timeIntervalSince1970: s)
+        if let e = journey?.endTime, e > 0 {
+            let end = Date(timeIntervalSince1970: e)
+            return "\(NIOFormatters.clockShort.string(from: start)) – \(NIOFormatters.clockShort.string(from: end))"
+        }
+        return NIOFormatters.clockShort.string(from: start)
+    }
+
+    private func chip(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(text)
+                .font(.caption.weight(.semibold).monospacedDigit())
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Color.secondary.opacity(0.10)))
+    }
+
+    private func drivingEvent(_ count: Int?, _ label: String, _ icon: String, tint: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint)
+            Text("\(count ?? 0) 次\(label)")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    var body: some View {
+        NIODashCardShell(title: "行程数据", subtitle: "最近行程与当日里程") {
+            // 顶部三格：当日里程 / 累计里程 / 激活天数
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(todayMileageText) km")
+                        .font(.headline.weight(.heavy).monospacedDigit())
+                        .foregroundStyle(NIOThemePaint.accent)
+                    Text("今日行驶")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Divider().frame(height: 34)
+                Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    if let total = daily?.mileage, total > 0 {
+                        Text(total >= 10000 ? String(format: "%.1f 万", total / 10000) : "\(Int(total)) km")
+                            .font(.headline.weight(.heavy).monospacedDigit())
+                    } else {
+                        Text("—")
+                            .font(.headline.weight(.heavy))
+                    }
+                    Text("累计里程")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Divider().frame(height: 34)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(daily?.activateDays ?? 0) 天")
+                        .font(.headline.weight(.heavy).monospacedDigit())
+                    Text("激活天数")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
+            if let j = journey {
+                VStack(alignment: .leading, spacing: 10) {
+                    // 起终点
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.green)
+                            .padding(.top, 3)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(j.startLocation?.displayText ?? "—")
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(2)
+                            if let t = tripTimeText {
+                                Text(t)
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.red)
+                            .padding(.top, 3)
+                        Text(j.endLocation?.displayText ?? "—")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
+
+                    // 指标 chips
+                    HStack(spacing: 6) {
+                        if let d = j.tripOdometer, d > 0 {
+                            chip("point.topleft.down.curvedto.point.bottomright.up", String(format: "%.1f km", d))
+                        }
+                        if let t = durationText {
+                            chip("clock", t)
+                        }
+                        if let v = j.avgSpeed, v > 0 {
+                            chip("speedometer", String(format: "%.0f km/h", v))
+                        }
+                        Spacer(minLength: 0)
+                    }
+
+                    // 急加减速/急转弯（仅发生时显示）
+                    if (j.rapidAcceleration ?? 0) > 0 || (j.rapidDeceleration ?? 0) > 0 || (j.rapidSwerve ?? 0) > 0 {
+                        HStack(spacing: 12) {
+                            if (j.rapidAcceleration ?? 0) > 0 {
+                                drivingEvent(j.rapidAcceleration, "急加速", "hare.fill", tint: .orange)
+                            }
+                            if (j.rapidDeceleration ?? 0) > 0 {
+                                drivingEvent(j.rapidDeceleration, "急减速", "tortoise.fill", tint: .blue)
+                            }
+                            if (j.rapidSwerve ?? 0) > 0 {
+                                drivingEvent(j.rapidSwerve, "急转弯", "arrow.uturn.right", tint: .purple)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            } else {
+                Text("暂无完整行程记录 · 完成一段行程后自动同步")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 4)
+            }
+
+            if daily?.dailyMileage == nil, let l = localTodayMileage, l > 0 {
+                Text("今日里程取自本地 GPS 采样差值")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 // MARK: - 全局主题动效与控件手感（App 整体统一，随主题令牌联动）
 
 /// 统一动效曲线：全 App 交互动画从这里取，保证手感一致

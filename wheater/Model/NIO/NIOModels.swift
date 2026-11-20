@@ -956,6 +956,139 @@ struct NIODailyDelta: Identifiable, Hashable {
     var id: String { day }
 }
 
+// MARK: - 行程数据（移植自 nio-dash journey_merge/status + journeys/daily_data）
+
+struct NIOJourneyLocation: Codable, Equatable {
+    var poi: String?
+    var city: String?
+    var district: String?
+    var roadName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case poi, city, district
+        case roadName = "road_name"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        poi = try? c.decodeIfPresent(String.self, forKey: .poi)
+        city = try? c.decodeIfPresent(String.self, forKey: .city)
+        district = try? c.decodeIfPresent(String.self, forKey: .district)
+        roadName = try? c.decodeIfPresent(String.self, forKey: .roadName)
+    }
+
+    init(poi: String? = nil, city: String? = nil, district: String? = nil, roadName: String? = nil) {
+        self.poi = poi
+        self.city = city
+        self.district = district
+        self.roadName = roadName
+    }
+
+    /// 展示文本：poi · district · road_name，poi 为空回退 district，再回退 city
+    var displayText: String {
+        var parts = [poi, district, roadName].filter { ($0 ?? "").isEmpty == false }.compactMap { $0 }
+        if parts.isEmpty, let city, !city.isEmpty { parts = [city] }
+        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
+    }
+}
+
+struct NIOJourney: Codable, Equatable {
+    var tripId: String?
+    var startTime: Double?
+    var endTime: Double?
+    var avgSpeed: Double?
+    var maxSpeed: Double?
+    var tripOdometer: Double?
+    var durationMinutes: Int?
+    var rapidAcceleration: Int?
+    var rapidDeceleration: Int?
+    var rapidSwerve: Int?
+    var startLocation: NIOJourneyLocation?
+    var endLocation: NIOJourneyLocation?
+
+    enum CodingKeys: String, CodingKey {
+        case tripId = "trip_id"
+        case startTime = "start_time"
+        case endTime = "end_time"
+        case avgSpeed = "avg_speed"
+        case maxSpeed = "max_speed"
+        case tripOdometer = "trip_odometer"
+        case durationMinutes = "journey_duration_by_minutes"
+        case rapidAcceleration = "rapid_acceleration"
+        case rapidDeceleration = "rapid_deceleration"
+        case rapidSwerve = "rapid_swerve"
+        case startLocation = "start_location"
+        case endLocation = "end_location"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tripId = try? c.decodeIfPresent(String.self, forKey: .tripId)
+        // 时间戳兼容秒/毫秒（web 版规则：< 1e10 按秒，否则按毫秒归一为秒）
+        func normalizeTime(_ raw: Double?) -> Double? {
+            guard let raw, raw > 0 else { return nil }
+            return raw < 1e10 ? raw : raw / 1000.0
+        }
+        startTime = normalizeTime((try? c.decodeIfPresent(NIOJSONValue.self, forKey: .startTime))?.doubleValue)
+        endTime = normalizeTime((try? c.decodeIfPresent(NIOJSONValue.self, forKey: .endTime))?.doubleValue)
+        avgSpeed = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .avgSpeed))?.doubleValue
+        maxSpeed = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .maxSpeed))?.doubleValue
+        tripOdometer = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .tripOdometer))?.doubleValue
+        durationMinutes = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .durationMinutes))?.intValue
+        rapidAcceleration = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .rapidAcceleration))?.intValue
+        rapidDeceleration = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .rapidDeceleration))?.intValue
+        rapidSwerve = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .rapidSwerve))?.intValue
+        startLocation = try? c.decodeIfPresent(NIOJourneyLocation.self, forKey: .startLocation)
+        endLocation = try? c.decodeIfPresent(NIOJourneyLocation.self, forKey: .endLocation)
+    }
+
+    init(
+        tripId: String? = nil, startTime: Double? = nil, endTime: Double? = nil,
+        avgSpeed: Double? = nil, maxSpeed: Double? = nil, tripOdometer: Double? = nil,
+        durationMinutes: Int? = nil, rapidAcceleration: Int? = nil,
+        rapidDeceleration: Int? = nil, rapidSwerve: Int? = nil,
+        startLocation: NIOJourneyLocation? = nil, endLocation: NIOJourneyLocation? = nil
+    ) {
+        self.tripId = tripId
+        self.startTime = startTime
+        self.endTime = endTime
+        self.avgSpeed = avgSpeed
+        self.maxSpeed = maxSpeed
+        self.tripOdometer = tripOdometer
+        self.durationMinutes = durationMinutes
+        self.rapidAcceleration = rapidAcceleration
+        self.rapidDeceleration = rapidDeceleration
+        self.rapidSwerve = rapidSwerve
+        self.startLocation = startLocation
+        self.endLocation = endLocation
+    }
+}
+
+struct NIODailyStats: Codable, Equatable {
+    var dailyMileage: Double?
+    var mileage: Double?
+    var activateDays: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case dailyMileage = "daily_mileage"
+        case mileage
+        case activateDays = "activate_days"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        dailyMileage = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .dailyMileage))?.doubleValue
+        mileage = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .mileage))?.doubleValue
+        activateDays = (try? c.decodeIfPresent(NIOJSONValue.self, forKey: .activateDays))?.intValue
+    }
+
+    init(dailyMileage: Double? = nil, mileage: Double? = nil, activateDays: Int? = nil) {
+        self.dailyMileage = dailyMileage
+        self.mileage = mileage
+        self.activateDays = activateDays
+    }
+}
+
 // MARK: - 诊断结果模型
 
 struct NIODiagnosticStep: Identifiable {

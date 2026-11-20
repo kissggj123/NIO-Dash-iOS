@@ -797,6 +797,11 @@ struct IOSNIODashboardView: View {
             NIOOrderListCard(orders: service.serviceSummary?.orders ?? service.recentOrders)
 
             NIOMaintenanceCard(mileageKm: status?.exteriorStatus?.mileage, orders: service.recentOrders)
+            NIOJourneyCard(
+                journey: service.recentJourney,
+                daily: service.dailyStats,
+                localTodayMileage: service.dailyMileageDeltas.first { $0.day == NIOFormatters.dayKey.string(from: Date()) }?.delta
+            )
         }
     }
 

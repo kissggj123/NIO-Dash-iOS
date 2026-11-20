@@ -168,7 +168,7 @@ struct NIOSchematicCarView: View {
                 rows: [
                     NIOSchematicSpotRow(label: "车锁", value: locked ? "已上锁" : "未上锁"),
                     NIOSchematicSpotRow(label: "车辆", value: status?.exteriorStatus?.vehicleState == 1 ? "行驶中" : "已驻车"),
-                    NIOSchematicSpotRow(label: "车内设定", value: hvac?.temperature.map { "\(Int($0))°C" } ?? "—"),
+                    NIOSchematicSpotRow(label: "车内", value: hvac?.temperature.map { "\(Int($0))°C" } ?? "—"),
                     NIOSchematicSpotRow(label: "车外", value: hvac?.outsideTemperature.map { "\(Int($0))°C" } ?? "—"),
                     NIOSchematicSpotRow(label: "空调", value: hvac?.airConditionerOn == true ? "开启" : "关闭")
                 ]

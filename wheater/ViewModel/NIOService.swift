@@ -136,6 +136,9 @@ final class NIOService: ObservableObject {
     @Published var history: [NIOVehicleSnapshot] = []
     @Published var dailyPaths: [NIODailyPath] = []
     @Published var dailyMileageDeltas: [NIODailyDelta] = []
+    /// 最近一次完整行程（journey_merge/status）与当日里程统计（journeys/daily_data）
+    @Published var recentJourney: NIOJourney?
+    @Published var dailyStats: NIODailyStats?
     @Published var fetchLogs: [NIOFetchLogEntry] = []
     /// 最近一次遥测块摘要（去重：内容不变不重复写 telemetry 日志，防止高频轮询刷屏）
     private var lastTelemetrySummary: String = ""
@@ -250,6 +253,8 @@ final class NIOService: ObservableObject {
     private var checkinFile: URL { dataDirectory.appendingPathComponent("checkin.json") }
     private var logsFile: URL { dataDirectory.appendingPathComponent("logs.json") }
     private var ordersFile: URL { dataDirectory.appendingPathComponent("orders.json") }
+    private var journeyFile: URL { dataDirectory.appendingPathComponent("journey.json") }
+    private var dailyStatsFile: URL { dataDirectory.appendingPathComponent("daily_stats.json") }
 
     var cachedTyreStatus: [String: NIOJSONValue]? = nil
     var cachedLvBattStatus: [String: NIOJSONValue]? = nil
@@ -552,6 +557,11 @@ final class NIOService: ObservableObject {
             // 异步持久化到本地
             saveJSONAsync(merged, to: vehicleFile)
             appendSnapshot(merged)
+
+            // 行程补充数据（最近行程 + 当日里程）：跟随遥测刷新节奏，避免高频请求
+            if shouldRefreshTelemetry || force {
+                Task { await self.fetchTripExtras() }
+            }
         } else {
             if self.vehicleData == nil {
                 self.lastError = "车辆数据拉取失败，请在蔚来 App 爱车页下拉刷新后重新嗅探"
@@ -1331,6 +1341,8 @@ final class NIOService: ObservableObject {
         let cFile = checkinFile
         let lFile = logsFile
         let oFile = ordersFile
+        let jFile = journeyFile
+        let dsFile = dailyStatsFile
         Task.detached(priority: .userInitiated) { [weak self] in
             var fetchedAt: Date? = nil
             var vehicle: NIOVehicleResponse? = nil
@@ -1427,6 +1439,14 @@ final class NIOService: ObservableObject {
             if let data = try? Data(contentsOf: oFile) {
                 orders = (try? JSONDecoder().decode([NIOServiceOrder].self, from: data)) ?? []
             }
+            var journey: NIOJourney? = nil
+            if let data = try? Data(contentsOf: jFile) {
+                journey = try? JSONDecoder().decode(NIOJourney.self, from: data)
+            }
+            var dailyStats: NIODailyStats? = nil
+            if let data = try? Data(contentsOf: dsFile) {
+                dailyStats = try? JSONDecoder().decode(NIODailyStats.self, from: data)
+            }
 
             let finalVehicle = vehicle
             let finalCachedTyre = cachedTyre
@@ -1445,6 +1465,8 @@ final class NIOService: ObservableObject {
             let finalCheckin = checkin
             let finalLogs = logs
             let finalOrders = orders
+            let finalJourney = journey
+            let finalDailyStats = dailyStats
 
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
@@ -1475,6 +1497,8 @@ final class NIOService: ObservableObject {
                 if let c = finalCheckin, self.checkinData == nil { self.checkinData = c }
                 if !finalLogs.isEmpty, self.fetchLogs.isEmpty { self.fetchLogs = finalLogs }
                 if !finalOrders.isEmpty, self.recentOrders.isEmpty { self.recentOrders = finalOrders }
+                if let j = finalJourney, self.recentJourney == nil { self.recentJourney = j }
+                if let ds = finalDailyStats, self.dailyStats == nil { self.dailyStats = ds }
             }
         }
     }
@@ -1640,6 +1664,78 @@ final class NIOService: ObservableObject {
             }
         } catch {
             virtualKeysError = "网络错误：\(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - 行程数据（移植自 nio-dash：journey_merge/status + journeys/daily_data）
+
+    /// 通用签名 GET（icar.nio.com，Android md5_full 签名模板，与实时流/钥匙接口一致）
+    private func signedGet(host: String, path: String) async -> ([String: Any], Int)? {
+        let vid = nioVehicleId
+        let auth = effectiveCommandAuth
+        guard !vid.isEmpty, !auth.isEmpty else { return nil }
+        let secret = nioVehicleSignSecret.isEmpty ? NIOVehicleLib.builtinSignSecret : nioVehicleSignSecret
+        var params: [String: String] = [
+            "app_id": NIOVehicleLib.androidAppID,
+            "app_ver": "6.5.3",
+            "device_id": nioDeviceId.isEmpty ? "iOS_Device_\(vid.prefix(6))" : nioDeviceId,
+            "vehicle_id": vid,
+            "lang": "zh-CN",
+            "region": "cn",
+            "timestamp": String(Int(Date().timeIntervalSince1970))
+        ]
+        let sign = NIOVehicleLib.computeAndroidSign(method: "GET", path: path, params: params, secret: secret, authorization: auth)
+        params["sign"] = sign
+        let canon = params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        guard let url = URL(string: "https://\(host)\(path)?\(canon)") else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue(auth, forHTTPHeaderField: "Authorization")
+        req.setValue("NextevCar/6.5.3 (iPhone; iOS 18.0)", forHTTPHeaderField: "User-Agent")
+        do {
+            let (data, resp) = try await urlSession.data(for: req)
+            let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            return (obj, (resp as? HTTPURLResponse)?.statusCode ?? 0)
+        } catch {
+            return nil
+        }
+    }
+
+    /// 拉取最近一次完整行程与当日里程统计（失败静默，不干扰主车况流程）
+    func fetchTripExtras() async {
+        guard isConfigured else { return }
+
+        // 1. 最近行程
+        if let (obj, code) = await signedGet(host: "icar.nio.com", path: "/api/1/vehicle/journey_merge/status"),
+           (obj["result_code"] as? String) == "success" {
+            if let d = obj["data"] as? [String: Any],
+               let jData = try? JSONSerialization.data(withJSONObject: d),
+               let journey = try? JSONDecoder().decode(NIOJourneyContainer.self, from: jData) {
+                recentJourney = journey.journey
+                saveJSONAsync(journey.journey, to: journeyFile)
+            }
+            appendLog(NIOFetchLogEntry(category: "journey", level: "info", message: "最近行程拉取成功", detail: nil, timestamp: Date(), requestURL: "/api/1/vehicle/journey_merge/status", requestMethod: "GET", requestBody: nil, responsePreview: nil, statusCode: code))
+        }
+
+        // 2. 当日里程统计
+        if let (obj, code) = await signedGet(host: "icar.nio.com", path: "/api/1/vehicle/journeys/daily_data"),
+           (obj["result_code"] as? String) == "success" {
+            if let d = obj["data"] as? [String: Any],
+               let dsData = try? JSONSerialization.data(withJSONObject: d),
+               let stats = try? JSONDecoder().decode(NIODailyStats.self, from: dsData) {
+                dailyStats = stats
+                saveJSONAsync(stats, to: dailyStatsFile)
+            }
+            appendLog(NIOFetchLogEntry(category: "journey", level: "info", message: "当日里程统计拉取成功", detail: nil, timestamp: Date(), requestURL: "/api/1/vehicle/journeys/daily_data", requestMethod: "GET", requestBody: nil, responsePreview: nil, statusCode: code))
+        }
+    }
+
+    /// journey_merge/status 的 data 包装（data.journey 为行程主体）
+    private struct NIOJourneyContainer: Decodable {
+        let journey: NIOJourney?
+        enum CodingKeys: String, CodingKey { case journey }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            journey = try? c.decodeIfPresent(NIOJourney.self, forKey: .journey)
         }
     }
 
