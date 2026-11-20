@@ -301,6 +301,9 @@ YumikoToysRR-Weather/
 │   │   │   ├── NIOCredentialInboxView.swift # 凭证收件箱：直推字段展示/打码/复制/导出/导入（含车控与扫码样本分区）
 │   │   │   ├── IOSAboutView.swift           # 关于兔可可、功能矩阵与版本更新日志
 │   │   │   ├── NIOCarPlayScene.swift        # CarPlay 场景与车况列表模板
+│   │   │   ├── NIOSchematicCarView.swift    # 主页俯视车况示意图（可交互部件 + 家充桩充电动画）
+│   │   │   ├── NIOConfigBackupView.swift    # 凭证配置备份与恢复
+│   │   │   ├── NIODatingLabView.swift       # 约会实验室（心理学题目 / 理论卡片 / 心愿库）
 │   │   │   ├── NIOLaunchStyle.swift         # 启动风格枚举 / 节奏 / 触感 / 每日一次闸门 / 主题人设与路由器
 │   │   │   ├── NIOEnergyBootView.swift      # 能量充能动画（电池环 + 电弧凝聚 + 星尘冲击波）
 │   │   │   ├── NIOMinimalBootView.swift     # 极简快启动画
@@ -318,7 +321,10 @@ YumikoToysRR-Weather/
 ├── scripts/
 │   ├── shadowrocket/                   # Shadowrocket 模块与脚本（sgmodule 带 #!version 版本注释）
 │   ├── boxjs/                          # BoxJS 抓包配置脚本
-│   └── ish/                            # iSH 环境抓包脚本
+│   ├── ish/                            # iSH 环境抓包脚本
+│   ├── sniff_3d_model.py               # 车型 3D 渲染图素材抓包脚本（mitmproxy）
+│   └── sniff_3d_model.sh               # 车型素材抓包启动器
+├── dating-lab-psychology/              # 约会实验室心理学题目与理论研究资料
 └── YumikoToysRR.xcodeproj              # Xcode 完整工程配置与多 Target 架构（App + Widget 扩展）
 ```
 
