@@ -1305,6 +1305,15 @@ enum NIOVehicleLib {
         return (cltcKm * factor).rounded().safeInt ?? 0
     }
 
+    /// 充电锁定上限（限充 SOC）：对齐 nio-dash web 版语义——
+    /// soc_status.lock_soc 即「限充 / 充电锁定上限」，直接展示；
+    /// 有用户设定限充 target_soc_percentage 时优先展示它
+    static func chargeLimitSoc(_ soc: NIOSocStatus?) -> Double? {
+        if let t = soc?.targetSocPercentage, t > 1, t <= 100 { return t }
+        if let l = soc?.lockSoc, l > 1, l <= 100 { return l }
+        return nil
+    }
+
     /// 获取最佳可用续航：优先实估，无实估则用 CLTC 推算
     static func bestRange(cltcKm: Double?, actualKm: Double?) -> (km: Int, isEstimated: Bool)? {
         if let act = actualKm, act > 0, let km = act.rounded().safeInt {

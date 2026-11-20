@@ -159,7 +159,7 @@ struct NIOSchematicCarView: View {
                     NIOSchematicSpotRow(label: "充电口", value: ajar("second_charge_port_ajar_status") ? "开启" : "关闭"),
                     NIOSchematicSpotRow(label: "充电状态", value: chargeLabel),
                     NIOSchematicSpotRow(label: "功率", value: powerText),
-                    NIOSchematicSpotRow(label: "限充", value: socStatus?.targetSocPercentage.map { "\(Int($0))%" } ?? "—")
+                    NIOSchematicSpotRow(label: "限充", value: NIOVehicleLib.chargeLimitSoc(socStatus).map { "\(Int($0))%" } ?? "—")
                 ]
             ),
             NIOSchematicSpot(

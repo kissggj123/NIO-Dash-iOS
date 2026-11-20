@@ -476,37 +476,8 @@ struct LiveActivityLockScreenView: View {
                 .clipShape(Capsule())
             }
 
-            // 告警条：车门 / 车窗未关好 + 胎压偏低
-            {
-                let windowOpen = state.anyWindowOpen == true
-                let doorOpen = state.anyDoorOpen
-                var alerts: [String] = []
-                if doorOpen { alerts.append("车门未关") }
-                if windowOpen { alerts.append("车窗未关") }
-                var lowTyre: Double? = nil
-                let tyreValues = [state.tyrePressFL, state.tyrePressFR, state.tyrePressRL, state.tyrePressRR].compactMap { $0 }.filter { $0 > 0 }
-                if let minValue = tyreValues.min(), tyreValues.count >= 2, minValue < 2.2 {
-                    lowTyre = minValue
-                    alerts.append(String(format: "胎压偏低 %.1fbar", minValue))
-                }
-                if !alerts.isEmpty {
-                    return AnyView(
-                        HStack(spacing: 5) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 10))
-                            Text("⚠️ " + alerts.joined(separator: " · ") + "，请检查车辆")
-                                .font(.system(size: 10, weight: .bold))
-                            Spacer()
-                        }
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Color.orange.opacity(0.14))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    )
-                }
-                return AnyView(EmptyView())
-            }()
+            // 告警（车门/车窗未关、胎压偏低）不再占用独立一行——锁屏卡片高度受限，
+            // 未上锁时额外行会把下方内容挤压出卡片；改为并入底部胶囊行（见 alerts）
 
             // 中间：核心电量与续航大字展示
             HStack(alignment: .bottom) {
@@ -612,47 +583,69 @@ struct LiveActivityLockScreenView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
-            // 底部：座舱与模式状态胶囊 + 独立版本/时间标签
+            // 底部：告警 / 座舱与模式状态胶囊 + 独立版本/时间标签
+            // 有告警时优先展示警示胶囊并让位温度与刷新标签，防止横向溢出
+            let doorAlert = state.anyDoorOpen
+            let windowAlert = state.anyWindowOpen == true
+            let lowTyreAlert: Double? = {
+                let values = [state.tyrePressFL, state.tyrePressFR, state.tyrePressRL, state.tyrePressRR].compactMap { $0 }.filter { $0 > 0 }
+                guard let minValue = values.min(), values.count >= 2, minValue < 2.2 else { return nil }
+                return minValue
+            }()
+            let hasAlerts = doorAlert || windowAlert || lowTyreAlert != nil
+
             HStack(spacing: 5) {
-                if let t = state.insideTemp {
-                    chipView(icon: "thermometer.medium", label: "车内 \(String(format: "%.1f℃", t))", color: theme.glow)
+                if doorAlert {
+                    chipView(icon: "car.door.front.left.open", label: "车门未关", color: .orange)
+                }
+                if windowAlert {
+                    chipView(icon: "car.side.window.open", label: "车窗未关", color: .orange)
+                }
+                if let t = lowTyreAlert {
+                    chipView(icon: "exclamationmark.triangle.fill", label: String(format: "胎压 %.1fbar", t), color: .orange)
                 }
 
-                if let out = state.outsideTemp {
-                    chipView(icon: "sun.max.fill", label: "车外 \(String(format: "%.1f℃", out))", color: theme.textSoft)
-                }
+                if !hasAlerts {
+                    if let t = state.insideTemp {
+                        chipView(icon: "thermometer.medium", label: "车内 \(String(format: "%.1f℃", t))", color: theme.glow)
+                    }
 
-                if state.defenderActive {
-                    chipView(icon: "shield.fill", label: state.defenderWarnCount ?? 0 > 0 ? "守卫(\(state.defenderWarnCount!)告警)" : "守卫开启", color: .pink)
-                } else if state.petModeActive {
-                    chipView(icon: "pawprint.fill", label: "宠物模式", color: .orange)
-                } else if state.campModeActive {
-                    chipView(icon: "tent.fill", label: "露营模式", color: .purple)
-                } else if state.powerHoldActive {
-                    chipView(icon: "bolt.badge.clock.fill", label: "离车不下电", color: .blue)
-                }
+                    if let out = state.outsideTemp {
+                        chipView(icon: "sun.max.fill", label: "车外 \(String(format: "%.1f℃", out))", color: theme.textSoft)
+                    }
 
-                if state.frdgActive == true {
-                    chipView(
-                        icon: "snowflake",
-                        label: state.frdgTemp.map { String(format: "冰箱 %.0f℃", $0) } ?? "冰箱",
-                        color: .cyan
-                    )
-                }
+                    if state.defenderActive {
+                        chipView(icon: "shield.fill", label: state.defenderWarnCount ?? 0 > 0 ? "守卫(\(state.defenderWarnCount!)告警)" : "守卫开启", color: .pink)
+                    } else if state.petModeActive {
+                        chipView(icon: "pawprint.fill", label: "宠物模式", color: .orange)
+                    } else if state.campModeActive {
+                        chipView(icon: "tent.fill", label: "露营模式", color: .purple)
+                    } else if state.powerHoldActive {
+                        chipView(icon: "bolt.badge.clock.fill", label: "离车不下电", color: .blue)
+                    }
 
-                if state.v2lActive == true {
-                    chipView(icon: "powerplug.fill", label: "对外放电", color: .yellow)
-                }
+                    if state.frdgActive == true {
+                        chipView(
+                            icon: "snowflake",
+                            label: state.frdgTemp.map { String(format: "冰箱 %.0f℃", $0) } ?? "冰箱",
+                            color: .cyan
+                        )
+                    }
 
-                if let lv = state.lvBattSoc, lv > 0, lv < 30 {
-                    chipView(icon: "car.side.fill", label: "12V \(lv)%", color: .orange)
+                    if state.v2lActive == true {
+                        chipView(icon: "powerplug.fill", label: "对外放电", color: .yellow)
+                    }
+
+                    if let lv = state.lvBattSoc, lv > 0, lv < 30 {
+                        chipView(icon: "car.side.fill", label: "12V \(lv)%", color: .orange)
+                    }
                 }
 
                 Spacer()
 
                 // 最近一次刷新结果标签（已更新 / 无数据更新）：随数据指纹一并下发，
-                // 已更新为绿色，无数据更新弱化为次级色
-                if let notice = state.refreshNotice, !notice.isEmpty {
+                // 已更新为绿色，无数据更新弱化为次级色；有告警时隐藏避免挤压
+                if let notice = state.refreshNotice, !notice.isEmpty, !hasAlerts {
                     Text(notice)
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(notice == "已更新" ? Color.green : theme.textSoft.opacity(0.8))

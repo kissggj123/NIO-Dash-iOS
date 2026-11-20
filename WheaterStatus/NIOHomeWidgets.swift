@@ -117,6 +117,24 @@ func nioWidgetBackground(theme: WheaterThemeColors, slot: NIOWidgetBackgroundSlo
         }
 }
 
+/// 内容层内嵌背景兜底：CarPlay 与待机（StandBy）展示会移除小组件的 containerBackground，
+/// 此时只剩裸内容。把同一张自定义背景图（复用对应展示位）+ 主题遮罩再画进内容层，
+/// 保证车机/待机上仍有壁纸与文字对比度；桌面端 containerBackground 仍在，此层视觉上被覆盖。
+@ViewBuilder
+func nioWidgetInnerBackground(theme: WheaterThemeColors, slot: NIOWidgetBackgroundSlot) -> some View {
+    if NIOWidgetBackgroundStore.hasRenderableImage(for: slot) {
+        ZStack {
+            NIOWidgetFocalBackground(slot: slot, theme: theme)
+            if let scrim = NIOWidgetBackgroundStore.scrimGradient(isDarkTheme: theme.isDark) {
+                scrim
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    } else {
+        Color.clear
+    }
+}
+
 struct NIOVehicleWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WheaterVehicleSnapshotEntry
@@ -167,7 +185,10 @@ struct NIOVehicleSmallView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ZStack {
+            // CarPlay / 待机会移除 containerBackground，内容层再画一层壁纸兜底
+            nioWidgetInnerBackground(theme: theme, slot: .small)
+            VStack(alignment: .leading, spacing: 0) {
             // 顶部：车辆图标 + 在线状态 + 状态图标
             HStack(spacing: 4) {
                 Image("NIO_brand")
@@ -276,6 +297,7 @@ struct NIOVehicleSmallView: View {
                 .foregroundStyle(theme.textSoft.opacity(0.8))
         }
         .padding(.top, 3)
+            }
         }
         .containerBackground(for: .widget) {
             nioWidgetBackground(theme: theme)
@@ -352,7 +374,10 @@ struct NIOVehicleMediumView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        ZStack {
+            // CarPlay / 待机会移除 containerBackground，内容层再画一层壁纸兜底
+            nioWidgetInnerBackground(theme: theme, slot: .medium)
+            VStack(spacing: 8) {
         HStack(alignment: .top, spacing: 14) {
             // 左：电量与续航主区
             VStack(alignment: .leading, spacing: 0) {
@@ -529,6 +554,7 @@ struct NIOVehicleMediumView: View {
             }
             Spacer()
             widgetMetaPill(icon: "clock", text: updatedText, theme: theme)
+        }
         }
         }
         .containerBackground(for: .widget) {

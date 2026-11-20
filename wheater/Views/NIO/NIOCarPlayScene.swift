@@ -145,7 +145,7 @@ final class NIOCarPlaySceneDelegate: NSObject, CPTemplateApplicationSceneDelegat
         if let type = socStatus?.chargerType {
             items.append(item("充电桩类型", NIOVehicleLib.chargerTypeLabel(type)))
         }
-        if let target = socStatus?.targetSocPercentage, target > 0 {
+        if let target = NIOVehicleLib.chargeLimitSoc(socStatus) {
             items.append(item("限充上限", String(format: "%.0f%%", target)))
         }
         let doors = status?.doorStatus ?? [:]

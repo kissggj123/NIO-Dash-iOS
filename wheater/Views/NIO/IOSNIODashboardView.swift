@@ -700,19 +700,17 @@ struct IOSNIODashboardView: View {
             VStack(spacing: 0) {
                 KeyValueRow(label: "充电状态", value: NIOVehicleLib.smartChargeStateDescription(socStatus: soc, offcarStatus: status?.offcarModeStatus))
                 Divider()
-                KeyValueRow(label: "目标电量", value: soc?.targetSocPercentage.map { String(format: "%.0f%%", $0) } ?? "--")
+                KeyValueRow(label: "目标电量", value: NIOVehicleLib.chargeLimitSoc(soc).map { String(format: "%.0f%%", $0) } ?? "--")
                 Divider()
-                // lock_soc 与 max_soc 同为服务端常驻默认 90（非真实设定），仅与默认值不同时展示；
-                // 有用户设定限充（target_soc_percentage）时优先展示它
-                KeyValueRow(label: "电池锁定下限", value: lockSocDisplayText)
+                // lock_soc 为服务端「限充/充电锁定上限」（对齐 nio-dash 语义），有用户设定值时优先展示
+                KeyValueRow(label: "充电锁定上限", value: lockSocDisplayText)
             }
         }
     }
 
-    /// 电池锁定下限展示：lock_soc 服务端常驻 90 时视为无有效值显示 "--"
+    /// 充电锁定上限展示：target_soc_percentage 优先，其次 lock_soc（web 版同款直接展示）
     private var lockSocDisplayText: String {
-        if let t = soc?.targetSocPercentage, t > 1, t <= 100 { return String(format: "%.0f%%", t) }
-        if let l = soc?.lockSoc, l > 1, l <= 100, abs(l - 90) > 0.01 { return String(format: "%.0f%%", l) }
+        if let l = soc?.lockSoc, l > 1, l <= 100 { return String(format: "%.0f%%", l) }
         return "--"
     }
 
