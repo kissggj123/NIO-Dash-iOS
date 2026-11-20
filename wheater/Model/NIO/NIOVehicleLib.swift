@@ -2117,6 +2117,97 @@ enum NIOEfficiencyLib {
     }
 }
 
+// MARK: - SOC 差值实测电耗（基于历史快照的行程段测算）
+
+/// 用历史快照里「行驶前后的 SOC 差 × 电池容量 ÷ 里程」测算真实百公里电耗。
+/// 只取无充电/换电干扰的纯行驶段，短途段自动跳过以保证精度。
+enum NIOConsumptionLib {
+    struct MeasuredConsumption: Equatable {
+        var kwhPer100Km: Double    // 实测均值 kWh/100km
+        var distanceKm: Double     // 参与统计的总里程
+        var segmentCount: Int      // 参与统计的行程段数
+        var lastSegmentTime: Date? // 最近一段行程的结束时间
+    }
+
+    /// 单段最小里程：低于此值 SOC 采样精度（约 1% ≈ 0.75kWh）带来的误差过大
+    private static let minSegmentDistanceKm: Double = 20.0
+    /// 单段最大里程：超出视为跨天长途，中间大概率有采样盲区
+    private static let maxSegmentDistanceKm: Double = 600.0
+    /// 单段最长时长：同上，跨天窗口不可信
+    private static let maxSegmentDuration: TimeInterval = 24 * 3600
+    /// 段内 SOC 上升容忍度：超过即判定中间发生过充电/换电，整段作废
+    private static let socRiseTolerance: Double = 1.5
+    /// 实测电耗合理区间，区间外视为采样噪声直接丢弃
+    private static let plausibleRange: ClosedRange<Double> = 8.0...45.0
+    /// 参与均值的最近段数上限
+    private static let maxSegments = 10
+
+    struct Segment: Equatable {
+        var kwhPer100Km: Double
+        var distanceKm: Double
+        var endTime: Date
+    }
+
+    /// 从按时间升序的快照序列中切分有效行驶段并测算各段电耗
+    static func segments(from history: [NIOVehicleSnapshot], batteryCapacityKwh: Double) -> [Segment] {
+        guard batteryCapacityKwh > 0 else { return [] }
+        let valid = history
+            .filter { $0.ts > 0 && $0.soc > 0 && $0.mileage > 0 }
+            .sorted { $0.ts < $1.ts }
+        guard valid.count >= 2 else { return [] }
+
+        var result: [Segment] = []
+        var anchor = valid[0]
+        for snap in valid.dropFirst() {
+            let distance = snap.mileage - anchor.mileage
+            guard distance >= minSegmentDistanceKm else {
+                // 车没动但 SOC 明显下降（驻车空调/哨兵等静态耗电）：前移锚点，不计入行驶电耗
+                if distance < 0.5, snap.soc < anchor.soc - socRiseTolerance {
+                    anchor = snap
+                }
+                continue
+            }
+            // 段内任何 SOC 回升都说明中途充过电，这段不纯净
+            let interiorRises = valid[(valid.firstIndex(of: anchor) ?? 0) + 1 ..< (valid.firstIndex(of: snap) ?? 0)]
+                .contains { $0.soc > anchor.soc + socRiseTolerance }
+            guard !interiorRises, snap.soc < anchor.soc - socRiseTolerance else {
+                anchor = snap
+                continue
+            }
+            let duration = TimeInterval(snap.ts - anchor.ts)
+            guard duration > 0, duration <= maxSegmentDuration, distance <= maxSegmentDistanceKm else {
+                anchor = snap
+                continue
+            }
+            let energyKwh = (anchor.soc - snap.soc) / 100.0 * batteryCapacityKwh
+            let consumption = energyKwh / (distance / 100.0)
+            if plausibleRange.contains(consumption) {
+                result.append(Segment(
+                    kwhPer100Km: consumption,
+                    distanceKm: distance,
+                    endTime: Date(timeIntervalSince1970: TimeInterval(snap.ts) / 1000.0)
+                ))
+            }
+            anchor = snap
+        }
+        return result
+    }
+
+    /// 近期有效段按里程加权平均；无有效段返回 nil
+    static func measuredConsumption(from history: [NIOVehicleSnapshot], batteryCapacityKwh: Double) -> MeasuredConsumption? {
+        let segs = Array(segments(from: history, batteryCapacityKwh: batteryCapacityKwh).suffix(maxSegments))
+        let totalDistance = segs.reduce(0.0) { $0 + $1.distanceKm }
+        guard !segs.isEmpty, totalDistance > 0 else { return nil }
+        let totalEnergy = segs.reduce(0.0) { $0 + $1.kwhPer100Km * $1.distanceKm / 100.0 }
+        return MeasuredConsumption(
+            kwhPer100Km: round(totalEnergy / totalDistance * 1000.0) / 10.0,
+            distanceKm: (totalDistance * 10.0).rounded() / 10.0,
+            segmentCount: segs.count,
+            lastSegmentTime: segs.last?.endTime
+        )
+    }
+}
+
 // MARK: - 维保周期与耗材寿命追踪 (nsom_so_maintenance)
 
 enum NIOMaintenanceTracker {

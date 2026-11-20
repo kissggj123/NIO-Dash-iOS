@@ -256,6 +256,8 @@ struct NIOAccessoriesCard: View {
 struct NIOEfficiencyCard: View {
     let soc: NIOSocStatus?
     let batteryCapacityKwh: Double
+    /// 历史快照（含 ts/soc/mileage），用于 SOC 差值实测电耗测算
+    var history: [NIOVehicleSnapshot] = []
 
     private var nominalRange: Double? {
         guard let cltc = soc?.remainingRange, cltc > 0, let pct = soc?.soc, pct > 0 else { return nil }
@@ -265,6 +267,11 @@ struct NIOEfficiencyCard: View {
     private var score: NIOEfficiencyLib.EfficiencyScore? {
         guard let nominal = nominalRange else { return nil }
         return NIOEfficiencyLib.computeScore(nominalRange: nominal, actualRange: soc?.remainingActualRange, batteryCapacityKwh: batteryCapacityKwh)
+    }
+
+    /// 近期纯行驶段实测均值（无可用段时为 nil，卡片不显示该行）
+    private var measured: NIOConsumptionLib.MeasuredConsumption? {
+        NIOConsumptionLib.measuredConsumption(from: history, batteryCapacityKwh: batteryCapacityKwh)
     }
 
     private var gradeTint: Color {
@@ -319,6 +326,24 @@ struct NIOEfficiencyCard: View {
                     Spacer(minLength: 0)
                 }
 
+                if let measured {
+                    Divider()
+                    HStack {
+                        Label("近期实测", systemImage: "gauge.with.dial.needle.bottom.50percent")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(String(format: "%.1f kWh/100km", measured.kwhPer100Km))
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.primary)
+                            Text("\(measured.segmentCount) 段 · \(String(format: "%.0f", measured.distanceKm)) km")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 if let nominal = nominalRange {
                     Divider()
                     HStack {
@@ -330,6 +355,22 @@ struct NIOEfficiencyCard: View {
                             .font(.caption.weight(.medium).monospacedDigit())
                     }
                 }
+            } else if let measured {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("暂无续航数据，同步车辆状态后自动评分")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Label("近期实测", systemImage: "gauge.with.dial.needle.bottom.50percent")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.1f kWh/100km · %d 段 %.0f km",
+                                    measured.kwhPer100Km, measured.segmentCount, measured.distanceKm))
+                            .font(.caption.weight(.semibold).monospacedDigit())
+                    }
+                }
+                .padding(.vertical, 4)
             } else {
                 Text("暂无续航数据，同步车辆状态后自动评分")
                     .font(.caption)
