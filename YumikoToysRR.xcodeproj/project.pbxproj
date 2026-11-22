@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA8600012E000000 /* YumikoToysRRWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AA8000002E000000 /* YumikoToysRRWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA8500012E000000 /* NIOWatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8500002E000000 /* NIOWatchBridge.swift */; };
 		AA8100012E000000 /* WheaterWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000012E000000 /* WheaterWatchApp.swift */; };
 		AA8100022E000000 /* WatchSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000022E000000 /* WatchSnapshot.swift */; };
@@ -60,6 +61,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		AA8600032E000000 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2B2BB24828BFB36300A8B2A3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA8300002E000000;
+			remoteInfo = YumikoToysRRWatch;
+		};
 		2B902BF928D92003003FB942 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2B2BB24828BFB36300A8B2A3 /* Project object */;
@@ -70,6 +78,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		AA8600002E000000 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				AA8600012E000000 /* YumikoToysRRWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2B902BFC28D92004003FB942 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "";
@@ -299,11 +318,13 @@
 				2B2BB24D28BFB36300A8B2A3 /* Frameworks */,
 				2B2BB24E28BFB36300A8B2A3 /* Resources */,
 				2B902BFC28D92004003FB942 /* Embed Foundation Extensions */,
+				AA8600002E000000 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				2B902BFA28D92003003FB942 /* PBXTargetDependency */,
+				AA8600022E000000 /* PBXTargetDependency */,
 			);
 			name = YumikoToysRR;
 			productName = wheater;
@@ -468,6 +489,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		AA8600022E000000 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA8300002E000000 /* YumikoToysRRWatch */;
+			targetProxy = AA8600032E000000 /* PBXContainerItemProxy */;
+		};
 		2B902BFA28D92003003FB942 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 2B902BE928D91FFF003FB942 /* WheaterStatusExtension */;
