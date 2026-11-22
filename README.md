@@ -272,7 +272,7 @@
    ```
 2. 使用 Xcode 打开 `YumikoToysRR.xcodeproj`；
 3. 在 `Signing & Capabilities` 中配置您的开发者账号证书，选择真机运行安装即可；
-4. 🔐 **签名密钥**：仓库不含真实 Sign Secret（`wheater/NIO_Secrets.plist` 已 gitignore）。克隆构建后请在 App 设置页手动填入签名密钥（或自建同路径 plist），否则 Widget 动态签名模式无法签名。
+4. 🔐 **签名密钥**：克隆构建后请在 App 设置页填入签名密钥，否则 Widget 动态签名模式无法签名。
 
 ---
 
@@ -329,7 +329,6 @@ YumikoToysRR-Weather/
 │   │   ├── Brand/                      # 蔚来品牌 Logo 与矢量图标
 │   │   └── Cars/                       # 10 款全系蔚来车型高清 3D 渲染图与车身色库
 │   ├── wheaterApp.swift                # iOS 应用程序主入口
-│   ├── NIO_Secrets.plist               # 签名密钥（gitignore 本地私有文件，仓库不含；缺失时在设置页手填）
 │   └── wheater.entitlements            # App Group 与后台刷新权限声明
 ├── docs/screenshots/                   # README 展示截图（灵动岛 / 锁屏 / 小组件 / 看板 / Duo）
 ├── auto_sniff.py                       # mitmproxy 抓包脚本（指纹捕获 + 局域网直推回 iPhone）
