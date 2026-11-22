@@ -109,6 +109,13 @@
 
 ## 📜 更新日志
 
+### v5.7.0 (Build 2815) · 2026-11
+- ⌚️ **Apple Watch 腕上速览**：全新独立 watchOS App——SOC 极光环、续航、充电功率与充满倒计时、胎压四宫格、车内外温度、锁车与特殊模式徽章；WatchConnectivity 桥接，iPhone 刷新车况自动推送快照，手表端零凭证零网络请求；主题色跟随 iPhone
+- 🔬 **SOC 差值实测电耗**：能耗评分卡新增「近期实测」——历史快照切分纯行驶段（≥20km、剔除中途充电/换电与驻车静态耗电），近 10 段按里程加权平均；后台预计算，无有效段自动隐藏
+- ⚡️ **自适应轮询快车道**：行驶中 / 充电中轮询自动提到 1 分钟（动态签名无过期），驻车维持设定间隔，车道切换写诊断日志
+- 🎨 **主题华丽化**：十套主题渐变 / 强调 / 辉光提饱和拉开层次；卡片极光三色标题条 + 顶部虹彩光晕 + 主题辉光投影
+- 📜 仓库新增 MIT LICENSE 文件
+
 ### v5.6.0 (Build 2814) · 2026-11
 - 🚗 行程数据卡（nio-dash 移植）：最近行程起终点地名、用时 / 里程 / 均速，急加速 / 急减速 / 急转弯仅发生时显示；今日行驶 / 累计里程 / 激活天数三格速览，接口缺数时本地 GPS 采样差值兜底
 - 🔋 充电锁定上限修复：对齐 nio-dash 语义直接读 `lock_soc` 展示（用户设定限充优先），能量卡 / 车辆示意图 / CarPlay 限充不再空白
@@ -279,6 +286,12 @@ YumikoToysRR-Weather/
 │   ├── WheaterStatus.intentdefinition  # WidgetKit 意图配置
 │   ├── Info.plist                      # Widget 扩展权限配置
 │   └── Assets.xcassets                 # 小组件专属素材与颜色令牌
+├── WheaterWatch/                       # Apple Watch 腕上速览（独立 watchOS App）
+│   ├── WheaterWatchApp.swift           # watch App 入口
+│   ├── WatchDashboardView.swift        # 腕上看板（SOC 极光环 / 徽章 / 胎压宫格 / 温度）
+│   ├── WatchSession.swift              # WatchConnectivity 快照接收
+│   ├── WatchSnapshot.swift             # 快照模型（与 iPhone 端 JSON 字段对齐）
+│   └── WatchTheme.swift                # watch 端轻量主题色表（跟随 iPhone 主题）
 ├── wheater/                            # iOS 主应用程序源码
 │   ├── Model/                          # 数据模型与核心算法库
 │   │   ├── NIO/

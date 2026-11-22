@@ -677,11 +677,39 @@ struct NIOAboutRelease {
 
 enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
+        // v5.7.0
+        NIOAboutRelease(
+            version: "v5.7.0 (Build 2815)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("⌚️ Apple Watch 腕上速览", [
+                    "📱 全新独立 watchOS App：SOC 极光环 + 续航 + 充电倒计时 + 胎压四宫格 + 车内外温度，抬腕即览",
+                    "🔗 WatchConnectivity 桥接：iPhone 刷新车况后自动推送最新快照到手表，手表端零凭证零请求",
+                    "🎨 手表主题色跟随 iPhone 当前主题（十套预设同色值）"
+                ]),
+                ("🔬 实测电耗", [
+                    "⚡️ 能耗评分卡新增「近期实测」：利用历史快照切分纯行驶段（≥20km、剔除中途充电与驻车耗电），SOC 差 × 电池容量 ÷ 里程测算真实电耗",
+                    "📈 近 10 段按里程加权平均，无有效段时自动隐藏；后台预计算零 UI 开销"
+                ]),
+                ("⚡️ 自适应轮询快车道", [
+                    "🚗 行驶中 / 充电中轮询自动提到 1 分钟（动态签名无过期，充电功率观感大幅提升），驻车维持设定间隔",
+                    "🛣 车道切换写入诊断日志，可在抓包日志页查看"
+                ]),
+                ("🎨 主题华丽化", [
+                    "🌈 十套主题渐变 / 强调 / 辉光全部提饱和、拉开色相层次",
+                    "✨ 卡片新增极光三色标题条 + 顶部虹彩光晕 + 主题辉光投影，全局生效"
+                ]),
+                ("📄 开源协议", [
+                    "📜 仓库新增 MIT LICENSE 文件，README 许可链接不再 404"
+                ])
+            ]
+        ),
         // v5.6.0
         NIOAboutRelease(
             version: "v5.6.0 (Build 2814)",
             date: "2026-11",
-            isLatest: true,
+            isLatest: false,
             items: [
                 ("🚗 行程数据卡", [
                     "🗺 nio-dash 行程数据移植到 iOS：最近行程起终点、用时 / 里程 / 均速，急加速 / 急减速 / 急转弯仅发生时显示",
