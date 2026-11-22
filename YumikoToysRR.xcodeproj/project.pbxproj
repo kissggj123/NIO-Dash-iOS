@@ -51,6 +51,7 @@
 		AA5600082D0E5A0000EED680 /* NIOVehicleSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5600072D0E5A0000EED680 /* NIOVehicleSnapshot.swift */; };
 		AA5600092D0E5A0000EED680 /* NIOHomeWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA56000A2D0E5A0000EED680 /* NIOHomeWidgets.swift */; };
 		AA7000002D21000000EED680 /* NIO/NIOConfigBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100002D21000000EED680 /* NIO/NIOConfigBackupView.swift */; };
+		AA7000002D26000000EED680 /* NIO/NIOReleaseOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100002D26000000EED680 /* NIO/NIOReleaseOnboardingView.swift */; };
 		AA7000012D20000000EED680 /* NIO/NIOCredentialInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100012D20000000EED680 /* NIO/NIOCredentialInboxView.swift */; };
 		AA7000022D20000000EED680 /* NIO_Secrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = AA7100022D20000000EED680 /* NIO_Secrets.plist */; };
 		AA7000032D21000000EED680 /* NIO/NIODatingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7100032D21000000EED680 /* NIO/NIODatingModels.swift */; };
@@ -147,6 +148,7 @@
 		AA5600072D0E5A0000EED680 /* NIOVehicleSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOVehicleSnapshot.swift; sourceTree = "<group>"; };
 		AA56000A2D0E5A0000EED680 /* NIOHomeWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIOHomeWidgets.swift; sourceTree = "<group>"; };
 		AA7100002D21000000EED680 /* NIO/NIOConfigBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOConfigBackupView.swift; sourceTree = "<group>"; };
+		AA7100002D26000000EED680 /* NIO/NIOReleaseOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOReleaseOnboardingView.swift; sourceTree = "<group>"; };
 		AA7100012D20000000EED680 /* NIO/NIOCredentialInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIOCredentialInboxView.swift; sourceTree = "<group>"; };
 		AA7100022D20000000EED680 /* NIO_Secrets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = NIO_Secrets.plist; sourceTree = "<group>"; };
 		AA7100032D21000000EED680 /* NIO/NIODatingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIO/NIODatingModels.swift; sourceTree = "<group>"; };
@@ -255,6 +257,7 @@
 				AA5600042D0E5A0000EED680 /* NIO/NIOCarPlayScene.swift */,
 				AA7100012D20000000EED680 /* NIO/NIOCredentialInboxView.swift */,
 				AA7100002D21000000EED680 /* NIO/NIOConfigBackupView.swift */,
+				AA7100002D26000000EED680 /* NIO/NIOReleaseOnboardingView.swift */,
 				AA7100032D21000000EED680 /* NIO/NIODatingModels.swift */,
 				AA7100042D21000000EED680 /* NIO/NIODatingVault.swift */,
 				AA7100052D21000000EED680 /* NIO/NIODatingLabView.swift */,
@@ -461,6 +464,7 @@
 				AA5600022D0E5A0000EED680 /* NIO/NIOCarPlayScene.swift in Sources */,
 				AA7000012D20000000EED680 /* NIO/NIOCredentialInboxView.swift in Sources */,
 				AA7000002D21000000EED680 /* NIO/NIOConfigBackupView.swift in Sources */,
+				AA7000002D26000000EED680 /* NIO/NIOReleaseOnboardingView.swift in Sources */,
 				AA7000032D21000000EED680 /* NIO/NIODatingModels.swift in Sources */,
 				AA7000042D21000000EED680 /* NIO/NIODatingVault.swift in Sources */,
 				AA7000052D21000000EED680 /* NIO/NIODatingLabView.swift in Sources */,

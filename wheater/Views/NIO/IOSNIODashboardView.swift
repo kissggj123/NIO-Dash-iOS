@@ -151,11 +151,20 @@ struct IOSNIODashboardView: View {
                         .animation(NIOThemeMotion.easeSmooth, value: heroPhotoModeRaw)
                     }
                     .refreshable { await refresh() }
-                } else {
+                } else if service.configProbeFinished {
                     NIOEmptyState(onConfigure: { showSettings = true })
                         .padding(24)
                         .frame(maxWidth: 460)
                         .frame(maxWidth: .infinity)
+                } else {
+                    // 冷启动配置探测中：不渲染「开始配置」空页，避免重启后首次启动误判丢配置
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在恢复车辆配置…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .navigationTitle(homeTitle.isEmpty ? "NIO" : homeTitle)

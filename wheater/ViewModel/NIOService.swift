@@ -290,6 +290,16 @@ final class NIOService: ObservableObject {
         }
         loadPersistedData()
         startScheduling()
+        // 配置探测门：未配置时延迟复核一次 UserDefaults，确认是真未配置还是冷启动域未就绪
+        if isConfigured {
+            configProbeFinished = true
+        } else {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                reloadConfigKeys()
+                configProbeFinished = true
+            }
+        }
         // Apple Watch 腕上速览：激活 WatchConnectivity 会话（刷新成功后推送快照）
         NIOWatchBridge.shared.activate()
         setupLifecycleObservers()
@@ -459,6 +469,20 @@ final class NIOService: ObservableObject {
 
     /// 上一次轮询车道（行驶/白天/夜间），用于车道切换时写一条诊断日志
     private var lastPollLane: NIOPollSchedule.PollReason?
+
+    /// 配置探测门：设备重启后的首次冷启动，cfprefsd 域可能未就绪导致 UserDefaults
+    /// 读出空值（杀掉 App 重开即恢复正常）。首次渲染前先探测确认，避免看板
+    /// 闪现「开始配置」空页误导用户以为凭证丢失。
+    @Published var configProbeFinished = false
+
+    /// 重新从 UserDefaults 回读关键凭证字段（探测兜底用）
+    private func reloadConfigKeys() {
+        nioVehicleAccessToken = UserDefaults.standard.string(forKey: "nio_vehicle_token") ?? nioVehicleAccessToken
+        nioVehicleApiURL = UserDefaults.standard.string(forKey: "nio_vehicle_api_url") ?? nioVehicleApiURL
+        nioVehicleId = UserDefaults.standard.string(forKey: "nio_vehicle_id") ?? nioVehicleId
+        nioDeviceId = UserDefaults.standard.string(forKey: "nio_device_id") ?? nioDeviceId
+        nioVehicleSignSecret = UserDefaults.standard.string(forKey: "nio_vehicle_sign_secret") ?? nioVehicleSignSecret
+    }
 
     func stopScheduling() {
         vehicleTimer?.invalidate()
