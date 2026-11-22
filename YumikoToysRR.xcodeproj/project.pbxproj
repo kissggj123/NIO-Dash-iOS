@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA8500012E000000 /* NIOWatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8500002E000000 /* NIOWatchBridge.swift */; };
+		AA8100012E000000 /* WheaterWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000012E000000 /* WheaterWatchApp.swift */; };
+		AA8100022E000000 /* WatchSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000022E000000 /* WatchSnapshot.swift */; };
+		AA8100032E000000 /* WatchTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000032E000000 /* WatchTheme.swift */; };
+		AA8100042E000000 /* WatchSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000042E000000 /* WatchSession.swift */; };
+		AA8100052E000000 /* WatchDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000052E000000 /* WatchDashboardView.swift */; };
 		2B2BB25428BFB36300A8B2A3 /* wheaterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */; };
 		2B2BB25628BFB36300A8B2A3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB25528BFB36300A8B2A3 /* ContentView.swift */; };
 		2B2BB25828BFB36600A8B2A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */; };
@@ -76,6 +82,14 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AA8000002E000000 /* YumikoToysRRWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YumikoToysRRWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA8000012E000000 /* WheaterWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheaterWatchApp.swift; sourceTree = "<group>"; };
+		AA8000022E000000 /* WatchSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSnapshot.swift; sourceTree = "<group>"; };
+		AA8000032E000000 /* WatchTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTheme.swift; sourceTree = "<group>"; };
+		AA8000042E000000 /* WatchSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSession.swift; sourceTree = "<group>"; };
+		AA8000052E000000 /* WatchDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardView.swift; sourceTree = "<group>"; };
+		AA8000062E000000 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA8500002E000000 /* NIOWatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/NIOWatchBridge.swift; sourceTree = "<group>"; };
 		2B2BB25028BFB36300A8B2A3 /* YumikoToysRR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YumikoToysRR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = wheaterApp.swift; sourceTree = "<group>"; };
 		2B2BB25528BFB36300A8B2A3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -123,6 +137,12 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AA8200012E000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2B2BB24D28BFB36300A8B2A3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -143,6 +163,7 @@
 			children = (
 				2B2BB25228BFB36300A8B2A3 /* wheater */,
 				2B902BF028D91FFF003FB942 /* WheaterStatus */,
+				AA8900002E000000 /* WheaterWatch */,
 				2B902BEB28D91FFF003FB942 /* Frameworks */,
 				2B2BB25128BFB36300A8B2A3 /* Products */,
 			);
@@ -153,6 +174,7 @@
 			children = (
 				2B2BB25028BFB36300A8B2A3 /* YumikoToysRR.app */,
 				2B902BEA28D91FFF003FB942 /* WheaterStatusExtension.appex */,
+				AA8000002E000000 /* YumikoToysRRWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -167,6 +189,7 @@
 				AA1000112C3E846500EED680 /* Services/VPN/NIOMitmEngine.swift */,
 				AA1000122C3E846500EED680 /* Services/VPN/NIOVPNManager.swift */,
 				AA1000132C3E846500EED680 /* Services/VPN/NIOCredentialReceiver.swift */,
+				AA8500002E000000 /* NIOWatchBridge.swift */,
 				2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */,
 				2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */,
 				2B2BB25928BFB36600A8B2A3 /* Preview Content */,
@@ -252,6 +275,19 @@
 			path = ViewModel;
 			sourceTree = "<group>";
 		};
+		AA8900002E000000 /* WheaterWatch */ = {
+			isa = PBXGroup;
+			children = (
+				AA8000012E000000 /* WheaterWatchApp.swift */,
+				AA8000052E000000 /* WatchDashboardView.swift */,
+				AA8000042E000000 /* WatchSession.swift */,
+				AA8000022E000000 /* WatchSnapshot.swift */,
+				AA8000032E000000 /* WatchTheme.swift */,
+				AA8000062E000000 /* Info.plist */,
+			);
+			path = WheaterWatch;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -289,6 +325,23 @@
 			productReference = 2B902BEA28D91FFF003FB942 /* WheaterStatusExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		AA8300002E000000 /* YumikoToysRRWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA8400002E000000 /* Build configuration list for PBXNativeTarget "YumikoToysRRWatch" */;
+			buildPhases = (
+				AA8200002E000000 /* Sources */,
+				AA8200012E000000 /* Frameworks */,
+				AA8200022E000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = YumikoToysRRWatch;
+			productName = YumikoToysRRWatch;
+			productReference = AA8000002E000000 /* YumikoToysRRWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -304,6 +357,9 @@
 					};
 					2B902BE928D91FFF003FB942 = {
 						CreatedOnToolsVersion = 14.1;
+					};
+					AA8300002E000000 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -322,6 +378,7 @@
 			targets = (
 				2B2BB24F28BFB36300A8B2A3 /* YumikoToysRR */,
 				2B902BE928D91FFF003FB942 /* WheaterStatusExtension */,
+				AA8300002E000000 /* YumikoToysRRWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -340,6 +397,12 @@
 			files = (
 				2B902BF528D92003003FB942 /* Assets.xcassets in Resources */,
 			);
+		};
+		AA8200022E000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
@@ -368,6 +431,7 @@
 				AA2000122C3E846A00EED680 /* Services/VPN/NIOVPNManager.swift in Sources */,
 				AA2000132C3E846A00EED680 /* Services/VPN/NIOCredentialReceiver.swift in Sources */,
 				2B2BB25428BFB36300A8B2A3 /* wheaterApp.swift in Sources */,
+				AA8500012E000000 /* NIOWatchBridge.swift in Sources */,
 				AA5600082D0E5A0000EED680 /* NIOVehicleSnapshot.swift in Sources */,
 				AA5600022D0E5A0000EED680 /* NIO/NIOCarPlayScene.swift in Sources */,
 				AA7000012D20000000EED680 /* NIO/NIOCredentialInboxView.swift in Sources */,
@@ -389,6 +453,16 @@
 				AA5600092D0E5A0000EED680 /* NIOHomeWidgets.swift in Sources */,
 				2B902BF728D92003003FB942 /* WheaterStatus.intentdefinition in Sources */,
 				2B902C0228D932EA003FB942 /* WheaterAttributes.swift in Sources */,
+			);
+		};
+		AA8200002E000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				AA8100012E000000 /* WheaterWatchApp.swift in Sources */,
+				AA8100022E000000 /* WatchSnapshot.swift in Sources */,
+				AA8100032E000000 /* WatchTheme.swift in Sources */,
+				AA8100042E000000 /* WatchSession.swift in Sources */,
+				AA8100052E000000 /* WatchDashboardView.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
@@ -650,6 +724,48 @@
 			};
 			name = Release;
 		};
+		AA8400012E000000 /* Debug configuration for PBXNativeTarget "YumikoToysRRWatch" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2814;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WheaterWatch/Info.plist;
+				MARKETING_VERSION = 5.6.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+				WK_APPLICATION = YES;
+			};
+			name = Debug;
+		};
+		AA8400022E000000 /* Release configuration for PBXNativeTarget "YumikoToysRRWatch" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2814;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WheaterWatch/Info.plist;
+				MARKETING_VERSION = 5.6.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.YumikoToysRR.wheater.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+				WK_APPLICATION = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -675,6 +791,15 @@
 				2B902BFD28D92004003FB942 /* Debug configuration for PBXNativeTarget "WheaterStatusExtension" */,
 				2B902BFE28D92004003FB942 /* Release configuration for PBXNativeTarget "WheaterStatusExtension" */,
 			);
+			defaultConfigurationName = Release;
+		};
+		AA8400002E000000 /* Build configuration list for PBXNativeTarget "YumikoToysRRWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA8400012E000000 /* Debug configuration for PBXNativeTarget "YumikoToysRRWatch" */,
+				AA8400022E000000 /* Release configuration for PBXNativeTarget "YumikoToysRRWatch" */,
+			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

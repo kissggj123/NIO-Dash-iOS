@@ -51,11 +51,9 @@ struct WheaterVehicleSnapshot: Codable {
     static let appGroupID = "group.com.YumikoToysRR.wheater"
     private static let storeKey = "nio_vehicle_snapshot_v1"
 
-    /// App 端：从 Live Activity 状态提取并落盘（App Group UserDefaults）。
-    /// 写入后读回验证，返回是否真正落盘成功（无 App Group 权限时 set 静默失败，读回为 nil）。
-    @discardableResult
-    static func save(from state: WheaterAttributes.ContentState) -> Bool {
-        let snapshot = WheaterVehicleSnapshot(
+    /// 从 Live Activity 状态组装快照（save 落盘与 Watch 桥接推送共用）
+    static func make(from state: WheaterAttributes.ContentState) -> WheaterVehicleSnapshot {
+        WheaterVehicleSnapshot(
             vehicleName: state.vehicleName,
             soc: state.soc,
             remainingRangeKm: state.remainingRangeKm,
@@ -91,6 +89,13 @@ struct WheaterVehicleSnapshot: Codable {
             refreshNotice: state.refreshNotice,
             updatedAt: state.updateTimestamp
         )
+    }
+
+    /// App 端：从 Live Activity 状态提取并落盘（App Group UserDefaults）。
+    /// 写入后读回验证，返回是否真正落盘成功（无 App Group 权限时 set 静默失败，读回为 nil）。
+    @discardableResult
+    static func save(from state: WheaterAttributes.ContentState) -> Bool {
+        let snapshot = make(from: state)
         guard let defaults = UserDefaults(suiteName: appGroupID),
               let data = try? JSONEncoder().encode(snapshot) else { return false }
         defaults.set(data, forKey: storeKey)

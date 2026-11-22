@@ -290,6 +290,8 @@ final class NIOService: ObservableObject {
         }
         loadPersistedData()
         startScheduling()
+        // Apple Watch 腕上速览：激活 WatchConnectivity 会话（刷新成功后推送快照）
+        NIOWatchBridge.shared.activate()
         setupLifecycleObservers()
         setupIslandRaiseObserver()
         setupWidgetBackgroundObserver()
@@ -1941,6 +1943,10 @@ final class NIOService: ObservableObject {
         if force || widgetFingerprint != lastWidgetFingerprint {
             if WheaterVehicleSnapshot.save(from: state) {
                 WidgetCenter.shared.reloadAllTimelines()
+                // Apple Watch 腕上速览：快照内容变化时推送最新数据到已配对手表
+                if let watchData = try? JSONEncoder().encode(WheaterVehicleSnapshot.make(from: state)) {
+                    NIOWatchBridge.shared.push(snapshotData: watchData)
+                }
                 if widgetSyncFailureLogged {
                     widgetSyncFailureLogged = false
                     appendLog(NIOFetchLogEntry(
