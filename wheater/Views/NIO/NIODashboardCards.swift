@@ -27,10 +27,11 @@ struct NIODashCardShell<Content: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    // 主题渐变竖条：给每张卡片一个轻的主题锚点
+                    // 主题极光渐变竖条：三色级联 + 辉光小投影，给每张卡片一个华丽主题锚点
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(NIOThemePaint.accentGradient)
-                        .frame(width: 3.5, height: 14)
+                        .fill(NIOThemePaint.auroraGradient)
+                        .frame(width: 3.5, height: 15)
+                        .shadow(color: NIOThemePaint.glow.opacity(0.55), radius: 3, y: 1)
                     Text(title)
                         .font(.headline)
                 }
@@ -41,13 +42,23 @@ struct NIODashCardShell<Content: View>: View {
             content
         }
         .padding(16)
-        .background(NIOThemePaint.fill)
+        .background(
+            ZStack(alignment: .top) {
+                NIOThemePaint.fill
+                NIOThemePaint.cardSheen
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(NIOThemePaint.stroke, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(NIOThemePaint.isDark ? 0.30 : 0.06), radius: 10, y: 5)
+        // 投影带主题色：浅色下辉光微光，深色下保持黑投影不变
+        .shadow(
+            color: NIOThemePaint.isDark ? .black.opacity(0.30) : NIOThemePaint.glow.opacity(0.22),
+            radius: NIOThemePaint.isDark ? 10 : 14,
+            y: NIOThemePaint.isDark ? 5 : 6
+        )
     }
 }
 
@@ -256,8 +267,8 @@ struct NIOAccessoriesCard: View {
 struct NIOEfficiencyCard: View {
     let soc: NIOSocStatus?
     let batteryCapacityKwh: Double
-    /// 历史快照（含 ts/soc/mileage），用于 SOC 差值实测电耗测算
-    var history: [NIOVehicleSnapshot] = []
+    /// SOC 差值实测电耗（NIOService 随 history 后台预计算），nil 时该行隐藏
+    var measured: NIOConsumptionLib.MeasuredConsumption? = nil
 
     private var nominalRange: Double? {
         guard let cltc = soc?.remainingRange, cltc > 0, let pct = soc?.soc, pct > 0 else { return nil }
@@ -267,11 +278,6 @@ struct NIOEfficiencyCard: View {
     private var score: NIOEfficiencyLib.EfficiencyScore? {
         guard let nominal = nominalRange else { return nil }
         return NIOEfficiencyLib.computeScore(nominalRange: nominal, actualRange: soc?.remainingActualRange, batteryCapacityKwh: batteryCapacityKwh)
-    }
-
-    /// 近期纯行驶段实测均值（无可用段时为 nil，卡片不显示该行）
-    private var measured: NIOConsumptionLib.MeasuredConsumption? {
-        NIOConsumptionLib.measuredConsumption(from: history, batteryCapacityKwh: batteryCapacityKwh)
     }
 
     private var gradeTint: Color {

@@ -2038,6 +2038,20 @@ public enum NIOThemePaint {
         LinearGradient(colors: [gradientStart, gradientEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
+    /// 极光三色级联渐变（强调 → 辉光 → 渐变终色）：大标题条、环形进度等主视觉华丽化
+    public static var auroraGradient: LinearGradient {
+        LinearGradient(colors: [gradientStart, glow, gradientEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    /// 卡片顶部虹彩光晕：accent → glow 淡入淡出，叠加在卡片底色之上增加层次（不抢正文）
+    public static var cardSheen: LinearGradient {
+        LinearGradient(
+            colors: [accent.opacity(0.14), glow.opacity(0.08), .clear],
+            startPoint: .top,
+            endPoint: UnitPoint(x: 0.5, y: 0.38)
+        )
+    }
+
     /// 正文主色
     public static var text: Color { Color(hex: token.textPrimary) }
     /// 正文弱化色
@@ -2148,7 +2162,7 @@ enum NIOConsumptionLib {
         var endTime: Date
     }
 
-    /// 从按时间升序的快照序列中切分有效行驶段并测算各段电耗
+    /// 从按时间升序的快照序列中切分有效行驶段并测算各段电耗（单次 O(n) 索引扫描）
     static func segments(from history: [NIOVehicleSnapshot], batteryCapacityKwh: Double) -> [Segment] {
         guard batteryCapacityKwh > 0 else { return [] }
         let valid = history
@@ -2157,26 +2171,28 @@ enum NIOConsumptionLib {
         guard valid.count >= 2 else { return [] }
 
         var result: [Segment] = []
-        var anchor = valid[0]
-        for snap in valid.dropFirst() {
+        var anchorIndex = 0
+        for index in valid.indices.dropFirst() {
+            let snap = valid[index]
+            let anchor = valid[anchorIndex]
             let distance = snap.mileage - anchor.mileage
             guard distance >= minSegmentDistanceKm else {
                 // 车没动但 SOC 明显下降（驻车空调/哨兵等静态耗电）：前移锚点，不计入行驶电耗
                 if distance < 0.5, snap.soc < anchor.soc - socRiseTolerance {
-                    anchor = snap
+                    anchorIndex = index
                 }
                 continue
             }
             // 段内任何 SOC 回升都说明中途充过电，这段不纯净
-            let interiorRises = valid[(valid.firstIndex(of: anchor) ?? 0) + 1 ..< (valid.firstIndex(of: snap) ?? 0)]
+            let interiorRises = valid[(anchorIndex + 1)..<index]
                 .contains { $0.soc > anchor.soc + socRiseTolerance }
             guard !interiorRises, snap.soc < anchor.soc - socRiseTolerance else {
-                anchor = snap
+                anchorIndex = index
                 continue
             }
             let duration = TimeInterval(snap.ts - anchor.ts)
             guard duration > 0, duration <= maxSegmentDuration, distance <= maxSegmentDistanceKm else {
-                anchor = snap
+                anchorIndex = index
                 continue
             }
             let energyKwh = (anchor.soc - snap.soc) / 100.0 * batteryCapacityKwh
@@ -2188,7 +2204,7 @@ enum NIOConsumptionLib {
                     endTime: Date(timeIntervalSince1970: TimeInterval(snap.ts) / 1000.0)
                 ))
             }
-            anchor = snap
+            anchorIndex = index
         }
         return result
     }

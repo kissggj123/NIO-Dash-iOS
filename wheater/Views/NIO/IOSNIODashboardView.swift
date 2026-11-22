@@ -374,7 +374,7 @@ struct IOSNIODashboardView: View {
         case .energy:
             cardColumns(twoColumns,
                 left: { energyCard },
-                right: { NIOEfficiencyCard(soc: soc, batteryCapacityKwh: service.estimateBatteryCapacityKwh(socStatus: soc), history: service.history) })
+                right: { NIOEfficiencyCard(soc: soc, batteryCapacityKwh: service.estimateBatteryCapacityKwh(socStatus: soc), measured: service.measuredConsumption) })
         case .tyres:
             cardColumns(twoColumns,
                 left: { tyreCard },
@@ -846,7 +846,7 @@ struct IOSNIODashboardView: View {
             NIOBluetoothKeysCard(service: service)
             statusCard
             energyCard
-            NIOEfficiencyCard(soc: soc, batteryCapacityKwh: service.estimateBatteryCapacityKwh(socStatus: soc), history: service.history)
+            NIOEfficiencyCard(soc: soc, batteryCapacityKwh: service.estimateBatteryCapacityKwh(socStatus: soc), measured: service.measuredConsumption)
             NIOModesCard(offcar: status?.offcarModeStatus, v2lStatus: soc?.v2lStatus)
             NIOAccessoriesCard(
                 lvBatt: status?.lvBattStatus,

@@ -134,6 +134,8 @@ final class NIOService: ObservableObject {
     @Published var recentOrders: [NIOServiceOrder] = []
     @Published var checkinData: NIOCheckinData?
     @Published var history: [NIOVehicleSnapshot] = []
+    /// SOC 差值实测电耗（近 10 段纯行驶段加权均值），随 history 更新在后台重算，供能耗评分卡直接读取
+    @Published var measuredConsumption: NIOConsumptionLib.MeasuredConsumption? = nil
     @Published var dailyPaths: [NIODailyPath] = []
     @Published var dailyMileageDeltas: [NIODailyDelta] = []
     /// 最近一次完整行程（journey_merge/status）与当日里程统计（journeys/daily_data）
@@ -1315,12 +1317,16 @@ final class NIOService: ObservableObject {
 
     private func updateDerivedMetrics(from snapshots: [NIOVehicleSnapshot]) {
         let copy = snapshots
+        // 电池容量档位在主线程取一次（estimateBatteryCapacityKwh 依赖 vehicleData 快照）
+        let capacity = estimateBatteryCapacityKwh(socStatus: vehicleData?.data?.status?.socStatus)
         Task.detached(priority: .userInitiated) {
             let paths = NIOVehicleLib.buildDailyPaths(history: copy)
             let deltas = NIOVehicleLib.computeDailyMileageDeltas(history: copy)
+            let measured = NIOConsumptionLib.measuredConsumption(from: copy, batteryCapacityKwh: capacity)
             await MainActor.run {
                 NIOService.shared.dailyPaths = paths
                 NIOService.shared.dailyMileageDeltas = deltas
+                NIOService.shared.measuredConsumption = measured
             }
         }
     }
