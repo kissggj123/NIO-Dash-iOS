@@ -110,12 +110,12 @@
 ## 📜 更新日志
 
 ### v5.7.0 (Build 2815) · 2026-11
-- ⌚️ **Apple Watch 腕上速览**：全新独立 watchOS App——SOC 极光环、续航、充电功率与充满倒计时、胎压四宫格、车内外温度、锁车与特殊模式徽章；WatchConnectivity 桥接，iPhone 刷新车况自动推送快照，手表端零凭证零网络请求；主题色跟随 iPhone；已嵌入 iOS 包，Watch App 内一键安装
-- 🔬 **SOC 差值实测电耗**：能耗评分卡新增「近期实测」——历史快照切分纯行驶段（≥20km、剔除中途充电/换电与驻车静态耗电），近 10 段按里程加权平均；后台预计算，无有效段自动隐藏
-- ⚡️ **自适应轮询快车道**：行驶中 / 充电中轮询自动提到 1 分钟（动态签名无过期），驻车维持设定间隔，车道切换写诊断日志
-- 🎨 **主题华丽化**：十套主题渐变 / 强调 / 辉光提饱和拉开层次；卡片极光三色标题条 + 顶部虹彩光晕 + 主题辉光投影
-- 📖 **版本更新引导页（OOTD）**：首次安装欢迎引导 + 每版新特性页，每版本只弹一次，主题色联动
-- 🛠 **修复**：设备重启后首次冷启动闪现「开始配置」空页（cfprefsd 域未就绪延迟复核）；Watch 伴身声明与图标；BGTask Swift 6 隔离警告
+- ⌚️ **Apple Watch 腕上速览**：全新 Apple Watch App——SOC 极光环、续航、充电功率与充满倒计时、胎压四宫格、车内外温度、锁车与特殊模式徽章；iPhone 刷新车况后自动推送到手表，抬腕即览；手表不保存任何凭证、不联网请求，主题色跟随 iPhone；已嵌入 iOS 包，在 iPhone 的 Watch App 里一键安装
+- 🔬 **SOC 差值实测电耗**：能耗评分卡新增「近期实测」——根据行车前后的电量与里程记录测算真实百公里电耗，自动剔除充电段与驻车耗电，近 10 段按里程加权平均；暂无有效数据时自动隐藏
+- ⚡️ **自适应轮询快车道**：行驶中 / 充电中车况自动加快到约 1 分钟刷新，驻车时维持设定间隔，兼顾实时与省电
+- 🎨 **主题华丽化**：十套主题渐变 / 强调 / 辉光全面提亮；卡片极光三色标题条 + 顶部虹彩光晕 + 主题辉光投影
+- 📖 **版本更新引导页**：首次安装弹出欢迎引导，每个版本更新后首次启动弹出「本版新特性」，每版本只弹一次
+- 🛠 **修复**：设备重启后首次打开 App 不再误入「开始配置」空页；Watch App 图标与安装修复
 - 📜 仓库新增 MIT LICENSE 文件
 
 ### v5.6.0 (Build 2814) · 2026-11
@@ -174,42 +174,18 @@
 
 ---
 
-## 🔄 双引擎数据获取与自动容灾体系
+## 🔄 双引擎数据获取
 
-```
-                    ┌───────────────────────────────────────────┐
-                    │            用户配置 / 数据拉取触发           │
-                    └─────────────────────┬─────────────────────┘
-                                          │
-                   ┌──────────────────────┴──────────────────────┐
-                   ▼                                             ▼
-       【模式 A：Shadowrocket 抓包模式】              【模式 B：Widget 动态签名模式】
-        (icar.nio.com 全量 RVS 数据源)                 (app.nio.com 小组件轻量数据源)
-                   │                                             │
-      包含全部 24 个深度状态块:                               包含 6-8 个核心基础状态块:
-      • 12V 小电瓶电压/健康度                                  • 高压电量 SoC / 续航里程
-      • 智能钥匙/蓝牙靠近感应                                  • 4 门开闭与整车车锁
-      • 座椅通风加热/方向盘加热                                • 车辆实时位置 GPS
-      • 4 门车窗天幕独立开度                                   • 胎压与基本状态
-      • 车载冰箱/储物箱/车外灯光                                         │
-                   │                                                     │
-                   ▼                                                     ▼
-      ┌─────────────────────────┐                           ┌─────────────────────────┐
-      │  每次抓包捕获全量数据包   │                           │  动态计算 Sign，永不过期  │
-      │  自动触发 7 大缓存落盘   │                           │  日常高频轮询，安全稳定  │
-      └────────────┬────────────┘                           └────────────┬────────────┘
-                   │                                                     │
-                   └──────────────────────┬──────────────────────────────┘
-                                          ▼
-                   ┌───────────────────────────────────────────┐
-                   │       ⚡️ 智能数据继承与融合渲染引擎       │
-                   │ (当 Widget 模式缺少小电瓶/座椅/车窗等块时，  │
-                   │  自动无缝继承并渲染本地缓存中的真实有效数据)  │
-                   └───────────────────────────────────────────┘
-```
+App 支持两种数据来源，可单独使用，也可同时开启互补：
 
-- **7 大高级数据本地持久化继承**：`cached-tyre.json`、`cached-lv-batt.json`、`cached-key.json`、`cached-heating.json`、`cached-window.json`、`cached-frdg.json`、`cached-box.json`、`cached-light.json`。
-- 即使在日常使用 Widget 动态签名模式下，小电瓶、座椅加热、车窗开度等数据也始终保持最新状态，绝不空白！
+| | 模式 A：抓包回放模式 | 模式 B：动态签名模式 |
+|---|---|---|
+| 数据来源 | 蔚来 App 全量车况接口 | 小组件轻量接口 |
+| 数据丰富度 | ⭐⭐⭐ 全部深度状态块（12V 电瓶 / 座椅加热 / 车窗开度 / 冰箱 / 灯光等） | ⭐⭐ 核心基础块（电量 / 续航 / 车锁 / 位置 / 胎压） |
+| 凭证获取 | 蔚来 App 刷新一次自动抓取 | 手动填 Vehicle ID / Device ID / 签名密钥 |
+| Token 保鲜 | 蔚来 App 刷新即自动续新，无感续命 | 动态计算签名，永不过期 |
+
+两种模式同时开启时，智能数据继承引擎会自动融合：动态签名模式缺少的深度数据块，自动无缝使用抓包模式缓存的最新有效数据，任何卡片都绝不空白。
 
 ---
 
@@ -282,65 +258,62 @@
 YumikoToysRR-Weather/
 ├── WheaterStatus/                      # 灵动岛 / 锁屏 / 桌面小组件 / 控制中心 Widget 扩展
 │   ├── WheaterStatus.swift             # 实时活动 UI 渲染（紧凑岛、展开岛、锁屏大卡片）
-│   ├── NIOHomeWidgets.swift            # 桌面系统小组件（小 / 中 / 大尺寸）
+│   ├── NIOHomeWidgets.swift            # 桌面系统小组件（小 / 中尺寸）
 │   ├── IslandControlWidget.swift       # 控制中心控件（一键上岛胶囊）
 │   ├── NIOVehicleSnapshot.swift        # App ↔ Widget 跨进程车况快照（App Group）
 │   ├── WheaterStatus.intentdefinition  # WidgetKit 意图配置
-│   ├── Info.plist                      # Widget 扩展权限配置
 │   └── Assets.xcassets                 # 小组件专属素材与颜色令牌
-├── WheaterWatch/                       # Apple Watch 腕上速览（独立 watchOS App）
+├── WheaterWatch/                       # Apple Watch 腕上速览
 │   ├── WheaterWatchApp.swift           # watch App 入口
 │   ├── WatchDashboardView.swift        # 腕上看板（SOC 极光环 / 徽章 / 胎压宫格 / 温度）
-│   ├── WatchSession.swift              # WatchConnectivity 快照接收
-│   ├── WatchSnapshot.swift             # 快照模型（与 iPhone 端 JSON 字段对齐）
-│   └── WatchTheme.swift                # watch 端轻量主题色表（跟随 iPhone 主题）
+│   ├── WatchSession.swift              # 快照接收（iPhone 自动推送）
+│   ├── WatchSnapshot.swift             # 快照模型
+│   └── WatchTheme.swift                # watch 端主题色（跟随 iPhone 主题）
 ├── wheater/                            # iOS 主应用程序源码
-│   ├── Model/                          # 数据模型与核心算法库
-│   │   ├── NIO/
-│   │   │   ├── NIOModels.swift         # 蔚来 API 数据结构定义 (SOC/车门/空调/胎压/维保/充电/车窗/冰箱等)
-│   │   │   ├── NIOVehicleLib.swift     # 电池容量推算、坐标纠偏、达成率算法、动态重签名引擎与主题令牌
-│   │   │   ├── NIOOrderLib.swift       # 换电/维保订单账单与常用换电站排行解析库
-│   │   │   └── NIOCheckinLib.swift     # 车主每日签到与积分统计
-│   │   └── WheaterAttributes.swift     # 跨进程 Live Activity 数据通信契约与指纹去重
+│   ├── Model/NIO/                      # 数据模型与核心算法库
+│   │   ├── NIOModels.swift             # 蔚来 API 数据结构定义（SOC/车门/空调/胎压/维保/充电等）
+│   │   ├── NIOVehicleLib.swift         # 电池容量推算、坐标纠偏、能耗评分、动态签名与主题令牌
+│   │   ├── NIOOrderLib.swift           # 换电/维保订单账单与常用换电站排行解析
+│   │   └── NIOCheckinLib.swift         # 车主每日签到与连签统计
+│   ├── Model/WheaterAttributes.swift   # 跨进程 Live Activity 数据契约与指纹去重
 │   ├── ViewModel/
-│   │   └── NIOService.swift            # 蔚来双引擎通信协议、7大状态块持久化继承、后台轮询、灵动岛生命周期
-│   ├── Services/VPN/                   # 抓包凭证链路（三链路方案）
-│   │   ├── NIOVPNManager.swift         # Packet Tunnel 抓包 VPN 生命周期管理
-│   │   ├── NIOMitmEngine.swift         # 本地 MITM 代理引擎（指纹嗅探与流量中继）
-│   │   ├── NIOVPNCertManager.swift     # CA 证书本地分发服务
+│   │   └── NIOService.swift            # 双引擎通信、数据继承融合、自适应轮询、灵动岛生命周期
+│   ├── Services/VPN/                   # 抓包凭证链路
+│   │   ├── NIOVPNManager.swift         # 抓包 VPN 生命周期管理
+│   │   ├── NIOMitmEngine.swift         # 本地代理引擎（指纹嗅探与流量中继）
+│   │   ├── NIOVPNCertManager.swift     # CA 证书本地分发
 │   │   └── NIOCredentialReceiver.swift # 局域网凭证直推接收器
-│   ├── Views/                          # SwiftUI 视图组件层
-│   │   ├── NIO/
-│   │   │   ├── IOSNIODashboardView.swift    # 蔚来 27 大全景车况主看板（iPhone 分段器 / iPad·Duo 侧栏双列自适应）
-│   │   │   ├── NIODashboardCards.swift      # 六张新卡：特殊模式 / 智能外设 / 能耗评分 / 历史趋势 / 维保追踪 / 行驶轨迹
-│   │   │   ├── IOSNIOConfigView.swift       # 车机凭证配置、智能填充、抓包日志、TCP 转发、车型涂装与连通性测试
-│   │   │   ├── NIOCredentialInboxView.swift # 凭证收件箱：直推字段展示/打码/复制/导出/导入（含车控与扫码样本分区）
-│   │   │   ├── IOSAboutView.swift           # 关于兔可可、功能矩阵与版本更新日志
-│   │   │   ├── NIOCarPlayScene.swift        # CarPlay 场景与车况列表模板
-│   │   │   ├── NIOSchematicCarView.swift    # 主页俯视车况示意图（可交互部件 + 家充桩充电动画）
-│   │   │   ├── NIOConfigBackupView.swift    # 凭证配置备份与恢复
-│   │   │   ├── NIODatingLabView.swift       # 约会实验室（心理学题目 / 理论卡片 / 心愿库）
-│   │   │   ├── NIOLaunchStyle.swift         # 启动风格枚举 / 节奏 / 触感 / 每日一次闸门 / 主题人设与路由器
-│   │   │   ├── NIOEnergyBootView.swift      # 能量充能动画（电池环 + 电弧凝聚 + 星尘冲击波）
-│   │   │   ├── NIOMinimalBootView.swift     # 极简快启动画
-│   │   │   └── NIOPixelLaunchSplashView.swift # 像素重制动画
-│   │   └── ContentView.swift           # App 根路由与全局主题渲染上下文
-│   ├── Resources/                      # 静态资源库
-│   │   ├── Brand/                      # 蔚来品牌 Logo 与矢量图标
-│   │   └── Cars/                       # 10 款全系蔚来车型高清 3D 渲染图与车身色库
-│   ├── wheaterApp.swift                # iOS 应用程序主入口
+│   ├── Views/NIO/                      # SwiftUI 视图层
+│   │   ├── IOSNIODashboardView.swift   # 全景车况主看板（iPhone 分段器 / iPad·Duo 侧栏双列）
+│   │   ├── NIODashboardCards.swift     # 特殊模式 / 外设 / 能耗评分 / 趋势 / 维保 / 轨迹等卡片
+│   │   ├── NIOSchematicCarView.swift   # 主页俯视车况示意图（可交互部件 + 充电动画）
+│   │   ├── IOSNIOConfigView.swift      # 凭证配置、智能填充、抓包日志、连通性测试
+│   │   ├── NIOCredentialInboxView.swift# 凭证收件箱（打码 / 复制 / 导出 / 导入）
+│   │   ├── NIOConfigBackupView.swift   # 凭证配置备份与恢复
+│   │   ├── NIOReleaseOnboardingView.swift # 版本更新引导页
+│   │   ├── NIOCarPlayScene.swift       # CarPlay 场景与车况列表
+│   │   ├── IOSAboutView.swift          # 关于页与版本更新日志
+│   │   ├── NIODatingLabView.swift      # 约会实验室（题目 / 理论卡片 / 心愿库）
+│   │   ├── NIODating*.swift            # 约会实验室数据模型 / 36 问题库 / 心愿保险箱
+│   │   ├── NIOLaunchStyle.swift        # 启动风格枚举 / 节奏 / 每日一次闸门
+│   │   ├── NIOEnergyBootView.swift     # 能量充能启动动画
+│   │   ├── NIOPixelLaunchSplashView.swift # 像素重制启动动画
+│   │   └── NIOMinimalBootView.swift    # 极简快启动画
+│   ├── ContentView.swift               # App 根路由与全局主题上下文
+│   ├── wheaterApp.swift                # 应用主入口
+│   ├── Resources/                      # 静态资源（品牌 Logo / 10 款车型渲染图与车色库）
 │   └── wheater.entitlements            # App Group 与后台刷新权限声明
-├── docs/screenshots/                   # README 展示截图（灵动岛 / 锁屏 / 小组件 / 看板 / Duo）
-├── auto_sniff.py                       # mitmproxy 抓包脚本（指纹捕获 + 局域网直推回 iPhone）
-├── sniff.sh                            # Mac 一键抓包启动器（Mac 本机 / 局域网 iPhone / 全能双模）
+├── docs/screenshots/                   # README 展示截图
+├── auto_sniff.py                       # Mac 抓包脚本（指纹捕获 + 局域网直推回 iPhone）
+├── sniff.sh                            # Mac 一键抓包启动器
 ├── scripts/
-│   ├── shadowrocket/                   # Shadowrocket 模块与脚本（sgmodule 带 #!version 版本注释）
+│   ├── shadowrocket/                   # Shadowrocket 模块与脚本
 │   ├── boxjs/                          # BoxJS 抓包配置脚本
 │   ├── ish/                            # iSH 环境抓包脚本
-│   ├── sniff_3d_model.py               # 车型 3D 渲染图素材抓包脚本（mitmproxy）
+│   ├── sniff_3d_model.py               # 车型渲染图素材抓包脚本
 │   └── sniff_3d_model.sh               # 车型素材抓包启动器
 ├── dating-lab-psychology/              # 约会实验室心理学题目与理论研究资料
-└── YumikoToysRR.xcodeproj              # Xcode 完整工程配置与多 Target 架构（App + Widget 扩展）
+└── YumikoToysRR.xcodeproj              # Xcode 工程（App + Widget 扩展 + Watch App 多 Target）
 ```
 
 ---
