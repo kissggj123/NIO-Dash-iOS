@@ -2117,7 +2117,8 @@ final class NIOService: ObservableObject {
 
     // MARK: - 后台刷新 (BGTaskScheduler)：App 退后台后仍定期拉取车况并刷新灵动岛
 
-    static let backgroundRefreshTaskID = "com.YumikoToysRR.wheater.refresh"
+    /// 任务标识为不可变常量字符串（Sendable），标记 nonisolated 供 BGTask 非主线程回调安全读取
+    nonisolated static let backgroundRefreshTaskID = "com.YumikoToysRR.wheater.refresh"
 
     /// App 启动时注册（必须在 didFinishLaunching 返回前完成，由 wheaterApp.init 调用）
     nonisolated static func registerBackgroundRefresh() {
