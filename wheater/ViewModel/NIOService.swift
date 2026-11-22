@@ -417,9 +417,33 @@ final class NIOService: ObservableObject {
             baseInterval = Double(max(60, nioVehiclePollIntervalSeconds))
         }
 
-        // 注入 ± 15~35 秒随机 Jitter，错开与 macOS / 手机 App 的并发时间窗口
-        let jitter = Double.random(in: -15...35)
-        let finalInterval = max(60.0, baseInterval + jitter)
+        // 自适应快车道（接通此前闲置的 NIOPollSchedule 调度器）：
+        // 行驶中 / 充电中把轮询提到 1 分钟——sign secret 动态签名无过期，
+        // 充电功率与行程数据在这两个时段变化最快，观感提升最明显；
+        // 驻车时段维持用户设定间隔，避免无谓打扰接口。
+        let vehicleState = vehicleData?.data?.status?.exteriorStatus?.vehicleState
+        let (adaptiveInterval, lane) = NIOPollSchedule.vehiclePollInterval(
+            driving: 60,
+            day: Int(baseInterval),
+            night: Int(baseInterval),
+            vehicleState: vehicleState
+        )
+        let effectiveInterval = Double(adaptiveInterval)
+        if lane != lastPollLane {
+            appendLog(NIOFetchLogEntry(
+                category: "scheduler", level: "info",
+                message: "轮询切换至\(lane.label)车道（\(adaptiveInterval)s）",
+                detail: vehicleState.map { "vehicleState=\($0)" } ?? "vehicleState 未知",
+                timestamp: Date(), requestURL: nil, requestMethod: nil,
+                requestBody: nil, responsePreview: nil, statusCode: nil
+            ))
+            lastPollLane = lane
+        }
+
+        // 注入随机 Jitter，错开与 macOS / 手机 App 的并发时间窗口；
+        // 快车道用小幅 Jitter（60s 基础下 ±15~35s 会把节奏拖到 95s），驻车道维持原幅度
+        let jitter = effectiveInterval <= 60 ? Double.random(in: -5...10) : Double.random(in: -15...35)
+        let finalInterval = max(60.0, effectiveInterval + jitter)
 
         vehicleTimer = Timer.scheduledTimer(withTimeInterval: finalInterval, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -428,6 +452,9 @@ final class NIOService: ObservableObject {
             }
         }
     }
+
+    /// 上一次轮询车道（行驶/白天/夜间），用于车道切换时写一条诊断日志
+    private var lastPollLane: NIOPollSchedule.PollReason?
 
     func stopScheduling() {
         vehicleTimer?.invalidate()
