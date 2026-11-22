@@ -14,6 +14,7 @@
 		AA8100032E000000 /* WatchTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000032E000000 /* WatchTheme.swift */; };
 		AA8100042E000000 /* WatchSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000042E000000 /* WatchSession.swift */; };
 		AA8100052E000000 /* WatchDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8000052E000000 /* WatchDashboardView.swift */; };
+		AA8700012E000000 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA8700002E000000 /* Assets.xcassets */; };
 		2B2BB25428BFB36300A8B2A3 /* wheaterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */; };
 		2B2BB25628BFB36300A8B2A3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2BB25528BFB36300A8B2A3 /* ContentView.swift */; };
 		2B2BB25828BFB36600A8B2A3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2B2BB25728BFB36600A8B2A3 /* Assets.xcassets */; };
@@ -108,6 +109,7 @@
 		AA8000042E000000 /* WatchSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSession.swift; sourceTree = "<group>"; };
 		AA8000052E000000 /* WatchDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardView.swift; sourceTree = "<group>"; };
 		AA8000062E000000 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA8700002E000000 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA8500002E000000 /* NIOWatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/NIOWatchBridge.swift; sourceTree = "<group>"; };
 		2B2BB25028BFB36300A8B2A3 /* YumikoToysRR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YumikoToysRR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B2BB25328BFB36300A8B2A3 /* wheaterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = wheaterApp.swift; sourceTree = "<group>"; };
@@ -302,6 +304,7 @@
 				AA8000042E000000 /* WatchSession.swift */,
 				AA8000022E000000 /* WatchSnapshot.swift */,
 				AA8000032E000000 /* WatchTheme.swift */,
+				AA8700002E000000 /* Assets.xcassets */,
 				AA8000062E000000 /* Info.plist */,
 			);
 			path = WheaterWatch;
@@ -422,6 +425,7 @@
 		AA8200022E000000 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				AA8700012E000000 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -753,6 +757,7 @@
 		AA8400012E000000 /* Debug configuration for PBXNativeTarget "YumikoToysRRWatch" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2815;
 				ENABLE_PREVIEWS = YES;
@@ -774,6 +779,7 @@
 		AA8400022E000000 /* Release configuration for PBXNativeTarget "YumikoToysRRWatch" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2815;
 				ENABLE_PREVIEWS = YES;
