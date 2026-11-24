@@ -132,11 +132,13 @@ final class StargazingWeatherService: ObservableObject {
 
     // MARK: - 主入口
 
-    /// 拉取行程观测窗口的天气（30 分钟内缓存直接命中）
-    func fetchWeather(for trip: StargazingTrip, location: RecommendedLocation? = nil) async -> StargazingWeatherReport? {
+    /// 拉取行程观测窗口的天气（30 分钟内缓存直接命中；forceRefresh 手动更新时绕过全部缓存）
+    func fetchWeather(for trip: StargazingTrip, location: RecommendedLocation? = nil, forceRefresh: Bool = false) async -> StargazingWeatherReport? {
         let tripID = trip.id
-        // 缓存命中
-        if let cached = reportByTripID[tripID], !cached.isStale {
+        if forceRefresh {
+            // 手动更新：清空日月缓存（天气/AQI 本身不落缓存，inflight 去重在外层控制）
+            skyCache.removeAll()
+        } else if let cached = reportByTripID[tripID], !cached.isStale {
             return cached
         }
         guard !inflight.contains(tripID) else { return reportByTripID[tripID] }

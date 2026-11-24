@@ -23,6 +23,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
     var parentBody: String?
     var parentType: String?
     var observationScore: Int?
+    var scoreNote: String?
+    var reasonSkip: String?
     var scoreBreakdown: ObservationScoreBreakdown?
     var activePeriod: ActivePeriod?
     var bestViewingWindow: BestViewingWindow?
@@ -43,15 +45,13 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
 
     /// 最佳窗口开始（极大夜）
     var startDate: Date? {
-        bestViewingWindow?.primary?.startDate
-            ?? bestViewingWindow?.startDate
+        bestViewingWindow?.windowStartDate
             ?? calendarEvent?.startDate
     }
 
     /// 最佳窗口结束
     var endDate: Date? {
-        bestViewingWindow?.primary?.endDate
-            ?? bestViewingWindow?.endDate
+        bestViewingWindow?.windowEndDate
             ?? calendarEvent?.endDate
     }
 
@@ -95,6 +95,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
         case parentBody = "parent_body"
         case parentType = "parent_type"
         case observationScore = "observation_score"
+        case scoreNote = "observation_score_note"
+        case reasonSkip = "reason_skip"
         case scoreBreakdown = "observation_score_breakdown"
         case activePeriod = "active_period"
         case bestViewingWindow = "best_viewing_window"
@@ -123,6 +125,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
         parentBody = try c.decodeIfPresent(String.self, forKey: .parentBody)
         parentType = try c.decodeIfPresent(String.self, forKey: .parentType)
         observationScore = try c.decodeIfPresent(Int.self, forKey: .observationScore)
+        scoreNote = try? c.decodeIfPresent(String.self, forKey: .scoreNote)
+        reasonSkip = try? c.decodeIfPresent(String.self, forKey: .reasonSkip)
         scoreBreakdown = try? c.decodeIfPresent(ObservationScoreBreakdown.self, forKey: .scoreBreakdown)
         activePeriod = try? c.decodeIfPresent(ActivePeriod.self, forKey: .activePeriod)
         bestViewingWindow = try? c.decodeIfPresent(BestViewingWindow.self, forKey: .bestViewingWindow)
@@ -150,6 +154,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
          parentBody: String? = nil,
          parentType: String? = nil,
          observationScore: Int? = nil,
+         scoreNote: String? = nil,
+         reasonSkip: String? = nil,
          scoreBreakdown: ObservationScoreBreakdown? = nil,
          activePeriod: ActivePeriod? = nil,
          bestViewingWindow: BestViewingWindow? = nil,
@@ -174,6 +180,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
         self.parentBody = parentBody
         self.parentType = parentType
         self.observationScore = observationScore
+        self.scoreNote = scoreNote
+        self.reasonSkip = reasonSkip
         self.scoreBreakdown = scoreBreakdown
         self.activePeriod = activePeriod
         self.bestViewingWindow = bestViewingWindow
@@ -232,6 +240,9 @@ struct BestViewingWindow: Codable, Equatable, Hashable {
     var startDate: Date?
     var endDate: Date?
     var displayRange: String?
+    var startUnix: Double?
+    var endUnix: Double?
+    var note: String?
 
     private enum CodingKeys: String, CodingKey {
         case primary
@@ -239,6 +250,17 @@ struct BestViewingWindow: Codable, Equatable, Hashable {
         case startDate = "start_time"
         case endDate = "end_time"
         case displayRange = "display_range"
+        case startUnix = "start_unix"
+        case endUnix = "end_unix"
+        case note
+    }
+
+    var windowStartDate: Date? {
+        primary?.startDate ?? startUnix.map { Date(timeIntervalSince1970: $0) } ?? startDate
+    }
+
+    var windowEndDate: Date? {
+        primary?.endDate ?? endUnix.map { Date(timeIntervalSince1970: $0) } ?? endDate
     }
 
     struct Window: Codable, Equatable, Hashable {
@@ -461,6 +483,7 @@ struct MoonInterference: Codable, Equatable, Hashable {
     var phaseDesc: String?
     var illuminationPctAtPeak: Double?
     var illuminationAtPeakCalc: Double? { illuminationPctAtPeak }
+    var moonriseLocal: String?
     var moonsetDec14Local: String?
     var moonsetDec14Unix: Double?
     var impactLevel: String?
@@ -470,15 +493,60 @@ struct MoonInterference: Codable, Equatable, Hashable {
         case phase
         case phaseDesc = "phase_desc"
         case illuminationPctAtPeak = "illumination_pct_at_peak"
+        case illuminationPct = "illumination_pct"
+        case moonriseLocal = "moonrise_local"
         case moonsetDec14Local = "moonset_dec14_local"
+        case moonsetLocal = "moonset_local"
         case moonsetDec14Unix = "moonset_dec14_unix"
         case impactLevel = "impact_level"
         case note
     }
 
-    /// 月相 emoji（娥眉月/满月等粗映射）
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        phase = try? c.decodeIfPresent(String.self, forKey: .phase)
+        phaseDesc = try? c.decodeIfPresent(String.self, forKey: .phaseDesc)
+        illuminationPctAtPeak = (try? c.decodeIfPresent(Double.self, forKey: .illuminationPctAtPeak))
+            ?? (try? c.decodeIfPresent(Double.self, forKey: .illuminationPct))
+        moonriseLocal = try? c.decodeIfPresent(String.self, forKey: .moonriseLocal)
+        moonsetDec14Local = (try? c.decodeIfPresent(String.self, forKey: .moonsetDec14Local))
+            ?? (try? c.decodeIfPresent(String.self, forKey: .moonsetLocal))
+        moonsetDec14Unix = try? c.decodeIfPresent(Double.self, forKey: .moonsetDec14Unix)
+        impactLevel = try? c.decodeIfPresent(String.self, forKey: .impactLevel)
+        note = try? c.decodeIfPresent(String.self, forKey: .note)
+    }
+
+    /// 供本地存档编码用
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try? c.encodeIfPresent(phase, forKey: .phase)
+        try? c.encodeIfPresent(phaseDesc, forKey: .phaseDesc)
+        try? c.encodeIfPresent(illuminationPctAtPeak, forKey: .illuminationPctAtPeak)
+        try? c.encodeIfPresent(moonriseLocal, forKey: .moonriseLocal)
+        try? c.encodeIfPresent(moonsetDec14Local, forKey: .moonsetDec14Local)
+        try? c.encodeIfPresent(moonsetDec14Unix, forKey: .moonsetDec14Unix)
+        try? c.encodeIfPresent(impactLevel, forKey: .impactLevel)
+        try? c.encodeIfPresent(note, forKey: .note)
+    }
+
+    /// 供本地存档编码用
+    init(phase: String? = nil, phaseDesc: String? = nil, illuminationPctAtPeak: Double? = nil,
+         moonriseLocal: String? = nil, moonsetDec14Local: String? = nil,
+         moonsetDec14Unix: Double? = nil, impactLevel: String? = nil, note: String? = nil) {
+        self.phase = phase
+        self.phaseDesc = phaseDesc
+        self.illuminationPctAtPeak = illuminationPctAtPeak
+        self.moonriseLocal = moonriseLocal
+        self.moonsetDec14Local = moonsetDec14Local
+        self.moonsetDec14Unix = moonsetDec14Unix
+        self.impactLevel = impactLevel
+        self.note = note
+    }
+
+    /// 月相 emoji（兼容 "full_moon" 枚举与 "Full Moon" 英文文本）
     var phaseEmoji: String {
-        switch phase {
+        let normalized = (phase ?? "").lowercased().replacingOccurrences(of: " ", with: "_")
+        switch normalized {
         case "new_moon": return "🌑"
         case "waxing_crescent": return "🌒"
         case "first_quarter": return "🌓"

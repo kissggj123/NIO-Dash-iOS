@@ -19,6 +19,20 @@ final class StargazingCalendarService: ObservableObject {
 
     @Published var lastResult: String?
     @Published var isError = false
+    /// 已成功写入系统日历的行程 ID（持久化，供按钮显示"已添加"）
+    @Published var addedEventIDs: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(addedEventIDs), forKey: Self.persistKey)
+        }
+    }
+
+    private static let persistKey = "nio_stargazing_added_events"
+
+    private init() {
+        if let saved = UserDefaults.standard.stringArray(forKey: Self.persistKey) {
+            addedEventIDs = Set(saved)
+        }
+    }
 
     func saveToCalendar(trip: StargazingTrip) async {
         guard let event = trip.calendarEvent,
@@ -61,6 +75,7 @@ final class StargazingCalendarService: ObservableObject {
 
         do {
             try eventStore.save(ekEvent, span: .thisEvent)
+            addedEventIDs.insert(trip.id)
             lastResult = "已加入系统日历：\(ekEvent.title ?? "")"
             isError = false
         } catch {

@@ -677,11 +677,31 @@ struct NIOAboutRelease {
 
 enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
+        // v5.9.0
+        NIOAboutRelease(
+            version: "v5.9.0 (Build 2819)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("🔭 观星行程增强", [
+                    "📥 智能导入解析：自动识别单行程 / 行程数组 / 年历包裹（events）三种 JSON 形态，一次导入多个天象事件（超级月亮、行星冲日、流星雨）",
+                    "🌙 月相字段别名归一：illumination_pct / moonrise_local 等新 schema 字段自动映射，纯文本日期窗口（「全夜」「黎明前」）智能推断起止时间",
+                    "⛔ 跳过事件不再静默：reason_skip 自动展示为提示；评分说明（observation_score_note）卡片内显示",
+                    "🌗 月相卡新增月出时间显示（超级月亮东升即看）"
+                ]),
+                ("🔄 实时数据与分享", [
+                    "🆕 手动更新按钮：一键强制刷新 Open-Meteo / 7Timer / 日月 / AQI 全部数据源，绕过缓存并显示更新时间",
+                    "📨 系统分享导入：在文件 App / 微信中分享 .json 观星计划文件到本 App 即自动解析入库",
+                    "✅ 日历按钮状态持久化：写入系统日历后按钮变「已添加日历」，重启不丢失",
+                    "🎨 实时活动主题换装：灵动岛 / 锁屏卡片配色跟随 App 全局主题，切主题即时热更新",
+                    "🖌 主题切换即时生效：观星页背景与卡片随全局主题平滑过渡，无需重启"
+                ])
+            ]),
         // v5.8.0
         NIOAboutRelease(
             version: "v5.8.0 (Build 2816)",
             date: "2026-11",
-            isLatest: true,
+            isLatest: false,
             items: [
                 ("🔭 观星行程与暗夜追星", [
                     "🗺 观测计划 JSON 导入：支持解析专业天文观测计划（IMO/AMS 规范），包含极大期窗口、ZHR 流量、辐射点轨迹、月相光害与推荐观测点",

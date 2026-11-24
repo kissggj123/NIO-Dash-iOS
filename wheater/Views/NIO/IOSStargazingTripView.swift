@@ -35,6 +35,8 @@ private struct RedNightVisionModifier: ViewModifier {
 struct IOSStargazingTripView: View {
     @ObservedObject private var store = StargazingTripStore.shared
     @ObservedObject private var activityManager = StargazingTripActivityManager.shared
+    @ObservedObject private var themeService = AnimeThemeService.shared
+    @ObservedObject private var calendar = StargazingCalendarService.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var showImporter = false
@@ -54,6 +56,11 @@ struct IOSStargazingTripView: View {
             }
             .navigationTitle("观星行程")
             .navigationBarTitleDisplayMode(.inline)
+            .animation(.easeInOut(duration: 0.28), value: themeService.currentStyle)
+            .onChange(of: themeService.currentStyle) { _, newStyle in
+                // 主题换装：正在展示的实时活动同步跟随全局主题
+                Task { await activityManager.updateTheme(newStyle.rawValue) }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: {
@@ -193,13 +200,15 @@ struct IOSStargazingTripView: View {
 
                 // 加入系统日历
                 Button {
+                    guard !calendar.addedEventIDs.contains(trip.id) else { return }
                     Task { await StargazingCalendarService.shared.saveToCalendar(trip: trip) }
                 } label: {
-                    Label("添加到日历", systemImage: "calendar.badge.plus")
+                    Label(calendar.addedEventIDs.contains(trip.id) ? "已添加日历" : "添加到日历",
+                          systemImage: calendar.addedEventIDs.contains(trip.id) ? "checkmark.calendar" : "calendar.badge.plus")
                         .font(.caption.bold())
                 }
                 .buttonStyle(NIOPressableButtonStyle())
-                .tint(NIOThemePaint.accent)
+                .tint(calendar.addedEventIDs.contains(trip.id) ? .green : NIOThemePaint.accent)
             }
         }
         .padding(16)
@@ -346,6 +355,7 @@ struct StargazingTripDetailView: View {
 
     @ObservedObject private var weather = StargazingWeatherService.shared
     @ObservedObject private var calendar = StargazingCalendarService.shared
+    @ObservedObject private var themeService = AnimeThemeService.shared
     @AppStorage("nio_stargazing_red_mode") private var stargazingRedMode = false
     @State private var showEnvCards = true
 
@@ -371,6 +381,7 @@ struct StargazingTripDetailView: View {
         }
         .navigationTitle(trip.name)
         .navigationBarTitleDisplayMode(.inline)
+        .animation(.easeInOut(duration: 0.28), value: themeService.currentStyle)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -503,6 +514,12 @@ struct StargazingTripDetailView: View {
                               highlight: false)
                 }
             }
+            if let note = trip.scoreNote {
+                Text(note)
+                    .font(.caption2)
+                    .foregroundStyle(NIOThemePaint.textSoft)
+                    .lineLimit(3)
+            }
             // 一键日历按钮
             Button {
                 Task { await calendar.saveToCalendar(trip: trip) }
@@ -557,20 +574,46 @@ struct StargazingTripDetailView: View {
 
     // MARK: 环境卡片组（月光 / 天气矩阵）
 
+    @State private var isRefreshingData = false
+
+    private static func timeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
     private var envCards: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("观测环境", systemImage: "cloud.moon")
                     .font(.subheadline.bold())
                     .foregroundStyle(NIOThemePaint.text)
+                if let report = weather.reportByTripID[trip.id] {
+                    Text("实时数据 · 更新于 \(Self.timeText(report.fetchedAt))")
+                        .font(.caption2)
+                        .foregroundStyle(NIOThemePaint.textSoft)
+                }
                 Spacer()
                 Button {
-                    Task { _ = await weather.fetchWeather(for: trip) }
+                    guard !isRefreshingData else { return }
+                    isRefreshingData = true
+                    Task {
+                        _ = await weather.fetchWeather(for: trip, forceRefresh: true)
+                        isRefreshingData = false
+                    }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
+                    Image(systemName: isRefreshingData ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                        .font(.caption.bold())
+                        .rotationEffect(.degrees(isRefreshingData ? 360 : 0))
+                        .animation(
+                            isRefreshingData
+                                ? .linear(duration: 1).repeatForever(autoreverses: false)
+                                : .default,
+                            value: isRefreshingData)
+                        .foregroundStyle(NIOThemePaint.accent)
                 }
-                .disabled(weather.reportByTripID[trip.id] != nil && !weather.reportByTripID[trip.id]!.isStale)
+                .disabled(isRefreshingData)
+                .accessibilityLabel("手动更新观测数据")
             }
 
             TabView {
@@ -590,8 +633,8 @@ struct StargazingTripDetailView: View {
         let report = weather.reportByTripID[trip.id]
         let jsonMoon = trip.moonInterference
         let illum = report?.moonIllumPct ?? jsonMoon?.illuminationPctAtPeak
-        let moonrise = report?.moonriseText ?? jsonMoon?.moonsetDec14Local?.replacingOccurrences(of: "^月落 ", with: "")
-        let moonset = report?.moonsetText
+        let moonrise = report?.moonriseText ?? jsonMoon?.moonriseLocal
+        let moonset = report?.moonsetText ?? jsonMoon?.moonsetDec14Local?.replacingOccurrences(of: "^月落 ", with: "")
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(moonPhaseEmoji(report: report, jsonMoon: jsonMoon))
@@ -791,9 +834,8 @@ struct StargazingTripDetailView: View {
                             Text(note)
                                 .font(.caption2)
                                 .foregroundStyle(NIOThemePaint.textSoft)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .frame(maxWidth: 130, alignment: .trailing)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                     .padding(.vertical, 2)
@@ -981,6 +1023,8 @@ enum StargazingCategory: String, CaseIterable {
     case aurora
     case birding
     case deepSky
+    case supermoon
+    case planet
     case general
 
     init(from type: String) {
@@ -991,6 +1035,10 @@ enum StargazingCategory: String, CaseIterable {
             self = .aurora
         } else if text.contains("bird") || text.contains("鸟") || text.contains("migration") || text.contains("迁徙") {
             self = .birding
+        } else if text.contains("supermoon") || text.contains("超级月亮") || text.contains("满月") {
+            self = .supermoon
+        } else if text.contains("planet") || text.contains("行星") || text.contains("opposition") || text.contains("冲日") {
+            self = .planet
         } else if text.contains("deep") || text.contains("深空") || text.contains("star") || text.contains("观星") {
             self = .deepSky
         } else {
@@ -1004,6 +1052,8 @@ enum StargazingCategory: String, CaseIterable {
         case .aurora: return "rainbow"
         case .birding: return "bird.fill"
         case .deepSky: return "telescope"
+        case .supermoon: return "moon.max"
+        case .planet: return "sun.haze"
         case .general: return "star"
         }
     }
@@ -1014,6 +1064,8 @@ enum StargazingCategory: String, CaseIterable {
         case .aurora: return "极光"
         case .birding: return "观鸟"
         case .deepSky: return "观星"
+        case .supermoon: return "超级月亮"
+        case .planet: return "行星天象"
         case .general: return "观测"
         }
     }

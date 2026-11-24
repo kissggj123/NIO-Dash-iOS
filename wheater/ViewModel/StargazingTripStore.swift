@@ -55,16 +55,9 @@ final class StargazingTripStore: ObservableObject {
         guard let data = raw.data(using: .utf8) else {
             throw StargazingImportError.encoding
         }
-        // 先探明是数组还是单对象
+        // 智能解析：兼容 单对象 / 行程数组 / {events: [...]} 年历包裹 三种形态
         let any = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-        let payloads: [Data]
-        if let array = any as? [Any] {
-            payloads = try array.map { try JSONSerialization.data(withJSONObject: $0) }
-        } else if let dict = any as? [String: Any] {
-            payloads = [try JSONSerialization.data(withJSONObject: dict)]
-        } else {
-            throw StargazingImportError.unsupportedFormat
-        }
+        let payloads = try smartPayloads(from: any)
 
         let decoder = JSONDecoder()
         var parsed: [StargazingTrip] = []
@@ -108,6 +101,170 @@ final class StargazingTripStore: ObservableObject {
     func delete(_ trip: StargazingTrip) {
         trips.removeAll { $0.id == trip.id }
         saveArchive()
+    }
+
+    // MARK: 智能导入规范化（schema 2.0-complete 年历 / 单行程 / 数组）
+
+    /// 从任意 JSON 顶层形态提取事件字典列表（自动解包 events 包裹）
+    private func smartPayloads(from any: Any) throws -> [Data] {
+        let eventDicts: [[String: Any]]
+        if let array = any as? [Any] {
+            eventDicts = try array.compactMap(normalizeEvent)
+        } else if let dict = any as? [String: Any] {
+            if let events = dict["events"] as? [Any] {
+                eventDicts = try events.compactMap(normalizeEvent)
+            } else {
+                eventDicts = [try normalizeEvent(dict)]
+            }
+        } else {
+            throw StargazingImportError.unsupportedFormat
+        }
+        guard !eventDicts.isEmpty else {
+            throw StargazingImportError.notTripJSON(parseErrors: 0)
+        }
+        return try eventDicts.map { try JSONSerialization.data(withJSONObject: $0) }
+    }
+
+    /// 单事件规范化：moon→moon_interference 别名、窗口时间补全、跳过原因入 tips
+    private func normalizeEvent(_ any: Any) throws -> [String: Any] {
+        guard var dict = any as? [String: Any] else {
+            throw StargazingImportError.unsupportedFormat
+        }
+
+        // ① moon（新版）→ moon_interference（旧版键名）
+        if let moon = dict["moon"] as? [String: Any] {
+            var mi = (dict["moon_interference"] as? [String: Any]) ?? [:]
+            if mi["phase"] == nil, let p = moon["phase"] { mi["phase"] = p }
+            if mi["phase_desc"] == nil, let pd = moon["phase_desc"] { mi["phase_desc"] = pd }
+            if mi["illumination_pct_at_peak"] == nil {
+                if let v = (moon["illumination_pct_at_peak"] as? Double)
+                    ?? (moon["illumination_pct"] as? Double) {
+                    mi["illumination_pct_at_peak"] = v
+                }
+            }
+            if mi["moonrise_local"] == nil, let mr = moon["moonrise_local"] as? String {
+                mi["moonrise_local"] = mr
+            }
+            if mi["moonset_dec14_local"] == nil, let ms = moon["moonset_local"] as? String {
+                mi["moonset_dec14_local"] = ms
+            }
+            dict["moon_interference"] = mi
+        }
+
+        // ② best_viewing_window 时间补全
+        if let w = dict["best_viewing_window"] as? [String: Any] {
+            dict["best_viewing_window"] = normalizeWindow(w, peak: dict["peak"] as? [String: Any])
+        } else if let peak = dict["peak"] as? [String: Any],
+                  let peakUnix = (peak["peak_unix"] as? NSNumber)?.doubleValue {
+            // 无窗口但有峰值 → 以峰值为中心造一个窗口
+            dict["best_viewing_window"] = [
+                "start_unix": peakUnix - 5 * 3600,
+                "end_unix": peakUnix + 5 * 3600,
+                "display_range": (peak["peak_local"] as? String) ?? "",
+            ]
+        }
+
+        // ③ reason_skip → 追加到 tips 保持可见
+        if let skip = dict["reason_skip"] as? String, !skip.isEmpty {
+            var tips = (dict["tips"] as? [String]) ?? []
+            tips.insert("⚠️ 跳过建议：\(skip)", at: 0)
+            dict["tips"] = tips
+        }
+        return dict
+    }
+
+    /// 窗口时间归一：数字时间戳、primary 镜像、display_range 文本推断
+    private func normalizeWindow(_ window: [String: Any], peak: [String: Any]?) -> [String: Any] {
+        var w = window
+        // start_time/end_time 若是数字（新 schema），转 start_unix/end_unix
+        if w["start_unix"] == nil, let n = w["start_time"] as? NSNumber { w["start_unix"] = n.doubleValue }
+        if w["end_unix"] == nil, let n = w["end_time"] as? NSNumber { w["end_unix"] = n.doubleValue }
+
+        // 镜像进 primary（模型优先读 primary）
+        if w["primary"] == nil,
+           let s = (w["start_unix"] as? NSNumber)?.doubleValue,
+           let e = (w["end_unix"] as? NSNumber)?.doubleValue {
+            w["primary"] = ["start_unix": s, "end_unix": e,
+                            "display_range": (w["display_range"] as? String) ?? ""]
+        }
+
+        // 完全无时间：从 display_range / peak_local 文本推断
+        if w["start_unix"] == nil {
+            let rangeText = (w["display_range"] as? String)
+                ?? (peak?["peak_local"] as? String) ?? ""
+            if let (start, end) = parseRangeText(rangeText) {
+                w["start_unix"] = start.timeIntervalSince1970
+                w["end_unix"] = end.timeIntervalSince1970
+                w["primary"] = ["start_unix": w["start_unix"]!, "end_unix": w["end_unix"]!,
+                                "display_range": rangeText]
+            } else if let peakUnix = (peak?["peak_unix"] as? NSNumber)?.doubleValue {
+                w["start_unix"] = peakUnix - 5 * 3600
+                w["end_unix"] = peakUnix + 5 * 3600
+                w["primary"] = ["start_unix": w["start_unix"]!, "end_unix": w["end_unix"]!]
+            }
+        }
+        return w
+    }
+
+    /// 解析 "2026-11-24 17:00 ~ 2026-11-25 03:00" / "2026-11-25 全夜" / "2026-11-26 黎明前" / "12-14 21:30 ~ 12-15 05:00"
+    private func parseRangeText(_ text: String) -> (Date, Date)? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+
+        // 拆分起止段
+        let parts = text.components(separatedBy: "~").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let head = parts.first, !head.isEmpty else { return nil }
+        let tail = parts.count > 1 ? parts[1] : nil
+
+        func component(_ regex: String, in text: String) -> String? {
+            text.range(of: regex, options: .regularExpression).map { String(text[$0]) }
+        }
+        // 年月日（第二段允许只有 MM-dd，继承第一段年份）
+        let headDate = component(#"\d{4}-\d{2}-\d{2}"#, in: head)
+        let headTime = component(#"\d{2}:\d{2}"#, in: head)
+        guard let headDate else { return nil }
+        let headParts = headDate.split(separator: "-").compactMap { Int($0) }
+        guard headParts.count == 3 else { return nil }
+        var startComps = DateComponents(year: headParts[0], month: headParts[1], day: headParts[2])
+        if let headTime {
+            let t = headTime.split(separator: ":").compactMap { Int($0) }
+            startComps.hour = t.first ?? 20
+            startComps.minute = t.count > 1 ? t[1] : 0
+        } else if head.contains("黎明") {
+            startComps.hour = 5
+        } else {
+            startComps.hour = 20
+        }
+        guard let start = calendar.date(from: startComps) else { return nil }
+
+        var endComps = DateComponents()
+        if let tail {
+            let tailDateFull = component(#"\d{4}-\d{2}-\d{2}"#, in: tail)
+            let tailDateShort = component(#"\d{2}-\d{2}\b"#, in: tail) ?? component(#"\b\d{2}-\d{2}"#, in: tail)
+            let tailTime = component(#"\d{2}:\d{2}"#, in: tail)
+            if let full = tailDateFull {
+                let p = full.split(separator: "-").compactMap { Int($0) }
+                endComps.year = p.first; endComps.month = p.count > 1 ? p[1] : nil; endComps.day = p.count > 2 ? p[2] : nil
+            } else if let short = tailDateShort {
+                let p = short.split(separator: "-").compactMap { Int($0) }
+                if p.count == 2 {
+                    endComps.year = headParts[0]
+                    endComps.month = p[0] < (startComps.month ?? 0) ? headParts[0] + 1 : headParts[0]
+                    endComps.day = p[1]
+                }
+            }
+            if let tailTime {
+                let t = tailTime.split(separator: ":").compactMap { Int($0) }
+                endComps.hour = t.first ?? 5
+                endComps.minute = t.count > 1 ? t[1] : 0
+            } else {
+                endComps.hour = 5; endComps.minute = 0
+            }
+        }
+        if endComps.year == nil && endComps.month == nil && endComps.day == nil {
+            return (start, start.addingTimeInterval(10 * 3600))
+        }
+        return (start, calendar.date(from: endComps) ?? start.addingTimeInterval(10 * 3600))
     }
 
     /// IMO 静态年历兜底：JSON 缺 ZHR/辐射点赤经赤纬/母体时按星座/名称补齐
@@ -232,6 +389,15 @@ final class StargazingTripActivityManager: ObservableObject {
             isFinished: state.endDate < Date())
         guard newState.fingerprint != state.fingerprint else { return }
         await activity.update(using: newState)
+    }
+
+    /// 主题换装：App 内切换主题后，热更新正在展示的实时活动配色
+    func updateTheme(_ themeRaw: String?) async {
+        guard let activity else { return }
+        var state = activity.contentState
+        guard state.themeRaw != themeRaw else { return }
+        state.themeRaw = themeRaw
+        await activity.update(ActivityContent(state: state, staleDate: state.endDate.addingTimeInterval(600)))
     }
 
     /// 结束当前实时活动

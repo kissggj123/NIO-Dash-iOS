@@ -34,7 +34,7 @@ struct wheaterApp: App {
                         Task { await NIOService.shared.refreshAll(force: true) }
                         NIOService.shared.islandEntryPulse = Date()
                     default:
-                        break
+                        importSharedJSON(url)
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in
@@ -51,6 +51,24 @@ struct wheaterApp: App {
                         break
                     }
                 }
+        }
+    }
+
+    /// 系统分享/文件打开：接收 .json/.txt 观星行程并导入（仅处理文件 URL，避免误吞其他深链）
+    private func importSharedJSON(_ url: URL) {
+        guard url.isFileURL else { return }
+        let ext = url.pathExtension.lowercased()
+        guard ext.isEmpty || ["json", "txt", "csv", "text"].contains(ext) else { return }
+        let secured = url.startAccessingSecurityScopedResource()
+        defer { if secured { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let count = try StargazingTripStore.shared.importJSON(text)
+            StargazingTripStore.shared.importNotice =
+                .init(text: "已从分享导入 \(count) 个观星行程", isError: false)
+        } catch {
+            StargazingTripStore.shared.importNotice =
+                .init(text: "分享导入失败：\(error.localizedDescription)", isError: true)
         }
     }
 }
