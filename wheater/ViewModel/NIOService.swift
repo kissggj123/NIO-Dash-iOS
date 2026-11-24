@@ -290,6 +290,11 @@ final class NIOService: ObservableObject {
         }
         loadPersistedData()
         startScheduling()
+        // 蜂窝开关解锁预热：侧载 App 的「Cellular Data」开关可能因"从未使用过网络"被置灰。
+        // 冷启动后台静默发探测请求，给系统"该 App 在用网络"的信号，促使开关解锁/弹授权弹窗。
+        Task.detached { [weak self] in
+            await self?.primeCellularActivation()
+        }
         // 配置探测门：未配置时延迟复核一次 UserDefaults，确认是真未配置还是冷启动域未就绪
         if isConfigured {
             configProbeFinished = true
@@ -548,6 +553,34 @@ final class NIOService: ObservableObject {
             widgetStatus = await fetchWidgetData(url: widgetUrl, token: token)
         }
 
+        // 跨设备连通自愈：同一份备份恢复到另一台设备后，签名算法键（nio_vehicle_sign_algo）
+        // 可能缺失或与该 Token 实际配对不符——签名被服务端拒绝 401/403，表现为"同样的配置无法连通"。
+        // 用备选算法（md5_full ↔ md5_append）重建 URL 重试一次，成功则记住正确算法，后续请求直接命中。
+        if widgetStatus == nil {
+            let currentAlgo = nioVehicleSignAlgo.isEmpty ? "md5_append" : nioVehicleSignAlgo
+            let alternateAlgo = currentAlgo == "md5_full" ? "md5_append" : "md5_full"
+            if let altUrl = buildWidgetTargetURL(algoOverride: alternateAlgo) {
+                appendLog(NIOFetchLogEntry(
+                    category: "vehicle_widget", level: "info",
+                    message: "跨设备连通自愈 · 当前算法 \(currentAlgo) 未获数据，尝试备选签名算法 \(alternateAlgo)…",
+                    detail: nil, timestamp: Date(),
+                    requestURL: altUrl.absoluteString, requestMethod: "GET",
+                    requestBody: nil, responsePreview: nil, statusCode: nil
+                ))
+                if let altStatus = await fetchWidgetData(url: altUrl, token: token) {
+                    widgetStatus = altStatus
+                    nioVehicleSignAlgo = alternateAlgo
+                    appendLog(NIOFetchLogEntry(
+                        category: "vehicle_widget", level: "info",
+                        message: "跨设备连通自愈成功 · 备选签名算法 \(alternateAlgo) 已记住，后续请求自动生效",
+                        detail: nil, timestamp: Date(),
+                        requestURL: nil, requestMethod: nil,
+                        requestBody: nil, responsePreview: nil, statusCode: 200
+                    ))
+                }
+            }
+        }
+
         // 2. Full RVS telemetry is deliberately decoupled from the high-frequency
         // Widget path. A user may paste several signed captures (one per line),
         // e.g. a lightweight live-status request plus a full tyre/FOTA request.
@@ -627,11 +660,12 @@ final class NIOService: ObservableObject {
         }
     }
 
-    private func buildWidgetTargetURL() -> URL? {
+    /// - Parameter algoOverride: 签名算法覆盖（跨设备自愈时用备选算法重建 URL），nil 则用当前持久化算法
+    private func buildWidgetTargetURL(algoOverride: String? = nil) -> URL? {
         // md5_full（Android/iOS 通用逆向算法）实测打通 widget/info：
         // app_id=10001 + 车级 vehicle_token + md5(GET+path+?+canon+secret+Bearer头值) → 200 全量车况。
         // 旧算法（md5_append 等）沿用 iOS 抓包语境：app_id=10002 + iOS secret。
-        let algo = nioVehicleSignAlgo.isEmpty ? "md5_append" : nioVehicleSignAlgo
+        let algo = algoOverride ?? (nioVehicleSignAlgo.isEmpty ? "md5_append" : nioVehicleSignAlgo)
         let isFullAlgo = algo == "md5_full"
         if !nioVehicleId.isEmpty {
             let devId = nioDeviceId.isEmpty ? "iOS_Device_\(nioVehicleId.prefix(6))" : nioDeviceId
@@ -806,6 +840,35 @@ final class NIOService: ObservableObject {
     }
 
     /// 从 401/403 响应体提取 resultCode / errorMsg 供诊断展示；无法解析时展示原文前 80 字符
+    /// 中国区 iOS「无线数据」联网权限受限识别：侧载 App 可能默认关闭且不弹询问，
+    /// 表现为网络明明在线但请求报 -1009（无网络连接）/ -1005（连接丢失）。
+    /// 命中时设置特征文案 lastError，设置页连通测试据此展示"前往设置"一键跳转。
+    func noteNetworkRestriction(_ error: Error) {
+        guard let urlError = error as? URLError,
+              urlError.code == .notConnectedToInternet || urlError.code == .networkConnectionLost else { return }
+        lastError = "网络权限受限 · 请到系统设置 → 蔚来看板 → 无线数据 选择「WLAN 与蜂窝网络」"
+    }
+
+    /// 触发系统「允许"App"使用无线数据？」弹窗：该弹窗由系统在 App 发起网络请求时自动弹出，
+    /// 无公开 API 直接调起。这里补发一个轻量探测请求（captive.apple.com，苹果连通性探测域名，
+    /// 无副作用），当系统权限状态为"未询问"时会触发弹窗，用户点「WLAN 与蜂窝网络」即完成授权。
+    /// 若已被拒绝过则弹窗不会再出现，由设置页的"前往设置"按钮兜底。
+    func triggerNetworkPermissionPrompt() {
+        var req = URLRequest(url: URL(string: "https://captive.apple.com/hotspot-detect.html")!)
+        req.httpMethod = "HEAD"
+        req.timeoutInterval = 8
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
+    /// 蜂窝开关解锁预热：冷启动后分三轮（间隔 2s）静默探测，覆盖系统延迟解锁窗口。
+    /// 请求打向苹果连通性探测域名，HEAD + 8s 超时，无任何业务副作用。
+    private func primeCellularActivation() async {
+        for _ in 0..<3 {
+            triggerNetworkPermissionPrompt()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+    }
+
     private func extractErrorDetail(from body: String?) -> String {
         guard let body, !body.isEmpty else { return "" }
         guard let json = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any] else {
@@ -871,6 +934,7 @@ final class NIOService: ObservableObject {
             }
         } catch {
             updateLog(logEntry, statusCode: nil, preview: error.localizedDescription)
+            noteNetworkRestriction(error)
         }
         return nil
     }
@@ -944,6 +1008,7 @@ final class NIOService: ObservableObject {
             }
         } catch {
             updateLog(logEntry, statusCode: nil, preview: error.localizedDescription)
+            noteNetworkRestriction(error)
         }
         return nil
     }

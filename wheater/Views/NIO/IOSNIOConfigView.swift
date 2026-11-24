@@ -21,6 +21,7 @@ struct IOSNIOConfigView: View {
     @ObservedObject private var keepAlive = NIOLocationKeepAlive.shared
     @AppStorage("nio_location_keepalive") private var keepAliveEnabled = true
     @State private var testStatusText: String?
+    @State private var testNeedsNetworkPermission = false
     @State private var isTesting = false
     @State private var showLogsSheet = false
     @State private var showInboxSheet = false
@@ -1549,6 +1550,22 @@ struct IOSNIOConfigView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(res.contains("成功") ? Color.green.opacity(0.12) : Color.orange.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    // 网络权限受限：iOS 不允许 App 修改系统「无线数据」开关，一键跳本 App 设置页手动放开
+                    if testNeedsNetworkPermission {
+                        Button(action: openAppNetworkSettings) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gear.badge.questionmark")
+                                Text("前往设置开启网络权限")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(sakuraPink)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
                 }
             }
         }
@@ -1755,15 +1772,28 @@ struct IOSNIOConfigView: View {
     private func testConnection() {
         isTesting = true
         testStatusText = nil
+        testNeedsNetworkPermission = false
         Task {
             await service.fetchVehicle()
             isTesting = false
             if let err = service.lastError {
                 testStatusText = "连通失败：\(err)"
+                // 网络权限受限特征文案 → 补发探测请求触发系统「允许使用无线数据」弹窗，
+                // 并展示"前往设置"按钮兜底（弹窗被拒过一次后不再出现，只能去设置放开）
+                testNeedsNetworkPermission = err.contains("网络权限受限")
+                if testNeedsNetworkPermission {
+                    service.triggerNetworkPermissionPrompt()
+                }
             } else {
                 testStatusText = "连通成功！已同步最新车况数据 🌸"
             }
         }
+    }
+
+    /// 跳转系统设置中本 App 的页面（无线数据开关就在这一页）
+    private func openAppNetworkSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     /// 配置页可选的签名算法（与 NIOVehicleLib.computeWidgetSign 支持的算法一致）

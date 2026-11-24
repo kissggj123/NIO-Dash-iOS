@@ -677,11 +677,26 @@ struct NIOAboutRelease {
 
 enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
+        // v5.12.0
+        NIOAboutRelease(
+            version: "v5.12.0 (Build 2822)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("🔗 跨设备连通性自愈", [
+                    "🧬 签名算法自动回退：恢复备份到新设备后，若签名算法与 Token 配对不符被拒（401/403），自动用备选算法重试并记住正确配置，无需手动改设置",
+                    "📡 网络权限诊断：连通失败命中「无线数据」受限（-1009）时给出明确提示，一键前往系统设置放开",
+                    "🪄 联网弹窗触发：网络受限时补发轻量探测请求，触发系统「允许使用无线数据」授权弹窗；冷启动后台预热，辅助解锁侧载 App 被置灰的蜂窝开关"
+                ]),
+                ("✨ 界面修复", [
+                    "🖼 版本更新引导页图标真正读取 App 图标资源（此前显示 SF Symbol 兜底箭头）"
+                ])
+            ]),
         // v5.11.0
         NIOAboutRelease(
             version: "v5.11.0 (Build 2821)",
             date: "2026-11",
-            isLatest: true,
+            isLatest: false,
             items: [
                 ("📦 分类备份与智能路由", [
                     "🗃 备份范围勾选导出：车辆凭证 / 观星行程 / 基础偏好可单独导出或勾选合集，文件名带范围标记",

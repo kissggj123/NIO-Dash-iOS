@@ -101,7 +101,7 @@ struct NIOReleaseOnboardingView: View {
         VStack(spacing: 8) {
             // App 图标（阴影随主题光晕）
             Group {
-                if let icon = UIImage(named: "AppIcon") {
+                if let icon = UIImage(named: "AppIconPreview") {
                     Image(uiImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
