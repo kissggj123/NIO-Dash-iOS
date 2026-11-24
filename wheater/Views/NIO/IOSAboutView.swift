@@ -689,7 +689,7 @@ enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
         // v5.12.0
         NIOAboutRelease(
-            version: "v5.12.0 (Build 2823)",
+            version: "v5.12.0 (Build 2824)",
             date: "2026-11",
             isLatest: true,
             items: [
@@ -702,6 +702,10 @@ enum NIOAboutReleases {
                     "🖼 版本更新引导页图标真正读取 App 图标资源（此前显示 SF Symbol 兜底箭头）",
                     "📝 关于页更新日志副标题自动汇总最新版本亮点，发新版无需手动维护",
                     "🧩 核心机能矩阵焕新：新增观星行程看板 / 跨设备连通自愈 / 智能识别与备份三项能力展示"
+                ]),
+                ("⚡️ 能耗评分", [
+                    "📊 推测电耗采集进度条：能耗卡显示采集中 N/10 段，采满提示「样本充足 · 数据已就绪」",
+                    "🫥 修复有行驶段但缺评分基准时实测行整行隐藏，现在也展示采集中进度"
                 ])
             ]),
         // v5.11.0

@@ -136,6 +136,8 @@ final class NIOService: ObservableObject {
     @Published var history: [NIOVehicleSnapshot] = []
     /// SOC 差值实测电耗（近 10 段纯行驶段加权均值），随 history 更新在后台重算，供能耗评分卡直接读取
     @Published var measuredConsumption: NIOConsumptionLib.MeasuredConsumption? = nil
+    /// 推测电耗采集进度：当前累计有效行驶段数（目标 NIOConsumptionLib.segmentTarget = 10 段）
+    @Published var measuredSegmentCount: Int = 0
     @Published var dailyPaths: [NIODailyPath] = []
     @Published var dailyMileageDeltas: [NIODailyDelta] = []
     /// 最近一次完整行程（journey_merge/status）与当日里程统计（journeys/daily_data）
@@ -1445,10 +1447,12 @@ final class NIOService: ObservableObject {
             let paths = NIOVehicleLib.buildDailyPaths(history: copy)
             let deltas = NIOVehicleLib.computeDailyMileageDeltas(history: copy)
             let measured = NIOConsumptionLib.measuredConsumption(from: copy, batteryCapacityKwh: capacity)
+            let segmentCount = NIOConsumptionLib.validSegmentCount(from: copy, batteryCapacityKwh: capacity)
             await MainActor.run {
                 NIOService.shared.dailyPaths = paths
                 NIOService.shared.dailyMileageDeltas = deltas
                 NIOService.shared.measuredConsumption = measured
+                NIOService.shared.measuredSegmentCount = segmentCount
             }
         }
     }

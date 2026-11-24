@@ -2261,6 +2261,14 @@ enum NIOConsumptionLib {
             lastSegmentTime: segs.last?.endTime
         )
     }
+
+    /// 当前累计的有效行驶段数（不截断），供"推测电耗采集中"进度展示：达到 maxSegments 即采集完成
+    static func validSegmentCount(from history: [NIOVehicleSnapshot], batteryCapacityKwh: Double) -> Int {
+        segments(from: history, batteryCapacityKwh: batteryCapacityKwh).count
+    }
+
+    /// 参与均值统计的段数上限（对外暴露给 UI 进度条用）
+    static var segmentTarget: Int { maxSegments }
 }
 
 // MARK: - 维保周期与耗材寿命追踪 (nsom_so_maintenance)

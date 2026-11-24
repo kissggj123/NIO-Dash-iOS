@@ -269,6 +269,8 @@ struct NIOEfficiencyCard: View {
     let batteryCapacityKwh: Double
     /// SOC 差值实测电耗（NIOService 随 history 后台预计算），nil 时该行隐藏
     var measured: NIOConsumptionLib.MeasuredConsumption? = nil
+    /// 推测电耗采集进度：当前累计有效段数（目标 NIOConsumptionLib.segmentTarget），进度条展示"还要多久出数据"
+    var measuredSegmentCount: Int = 0
 
     private var nominalRange: Double? {
         guard let cltc = soc?.remainingRange, cltc > 0, let pct = soc?.soc, pct > 0 else { return nil }
@@ -334,19 +336,22 @@ struct NIOEfficiencyCard: View {
 
                 if let measured {
                     Divider()
-                    HStack {
-                        Label("近期实测", systemImage: "gauge.with.dial.needle.bottom.50percent")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(String(format: "%.1f kWh/100km", measured.kwhPer100Km))
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(.primary)
-                            Text("\(measured.segmentCount) 段 · \(String(format: "%.0f", measured.distanceKm)) km")
-                                .font(.caption2)
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Label("近期实测", systemImage: "gauge.with.dial.needle.bottom.50percent")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(String(format: "%.1f kWh/100km", measured.kwhPer100Km))
+                                    .font(.caption.weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(.primary)
+                                Text("\(measured.segmentCount) 段 · \(String(format: "%.0f", measured.distanceKm)) km")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        measuredProgressRow(count: measured.segmentCount)
                     }
                 }
 
@@ -375,6 +380,16 @@ struct NIOEfficiencyCard: View {
                                     measured.kwhPer100Km, measured.segmentCount, measured.distanceKm))
                             .font(.caption.weight(.semibold).monospacedDigit())
                     }
+                    measuredProgressRow(count: measured.segmentCount)
+                }
+                .padding(.vertical, 4)
+            } else if measuredSegmentCount > 0 {
+                // 推测电耗采集中：尚无评分基准（缺续航达成率）但已有有效行驶段，展示进度让用户知道"还要多久出数据"
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("推测电耗采集中 · 行驶里程越多越准确")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    measuredProgressRow(count: measuredSegmentCount)
                 }
                 .padding(.vertical, 4)
             } else {
@@ -383,6 +398,20 @@ struct NIOEfficiencyCard: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             }
+        }
+    }
+
+    /// 采集进度条：有效行驶段数 / 目标段数（10 段），采满后显示"已就绪"
+    @ViewBuilder
+    private func measuredProgressRow(count: Int) -> some View {
+        let target = NIOConsumptionLib.segmentTarget
+        let progress = Double(min(count, target)) / Double(target)
+        VStack(alignment: .leading, spacing: 3) {
+            ProgressView(value: progress)
+                .tint(progress >= 1.0 ? .green : .blue)
+            Text(count >= target ? "样本充足 · 数据已就绪" : "采集中 \(count)/\(target) 段 · 有效行驶段随日常用车自动累积")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
         }
     }
 }
