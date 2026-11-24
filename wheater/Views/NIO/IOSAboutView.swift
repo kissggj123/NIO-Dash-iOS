@@ -31,6 +31,13 @@ struct IOSAboutView: View {
         ?? "2700"
     }
 
+    /// 最新版本亮点一句话：自动从更新日志第一个版本的分类标题汇总，发新版无需手动维护
+    private var latestReleaseSummary: String {
+        guard let latest = NIOAboutReleases.all.first else { return "查看版本优化记录" }
+        let categories = latest.items.map { $0.0 }.joined(separator: " · ")
+        return categories.isEmpty ? "查看版本优化记录" : "本版亮点：\(categories)"
+    }
+
     // 交互状态
     @State private var isIconBouncing = false
     @State private var bounceWork = NIOScheduledWork()
@@ -406,7 +413,8 @@ struct IOSAboutView: View {
                             .foregroundStyle(mintCyan)
                             .clipShape(Capsule())
                     }
-                    Text("查看全新 FOTA、换电大屏、Widget 签名模式与优化记录")
+                    // 副标题自动汇总当前最新版本的分类亮点，发新版无需手动改这句
+                    Text(latestReleaseSummary)
                         .font(.system(size: 10))
                         .foregroundStyle(NIOThemePaint.text.opacity(0.6))
                         .lineLimit(1)
@@ -527,10 +535,12 @@ struct IOSAboutView: View {
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 featureBadge(icon: "🏝️", title: "灵动岛 & 实时活动", subtitle: "锁屏与灵动岛实时监控")
+                featureBadge(icon: "🔭", title: "观星行程看板", subtitle: "多源天文天气/辐射点/月相")
+                featureBadge(icon: "🧬", title: "跨设备连通自愈", subtitle: "签名算法自动回退记住正确配置")
                 featureBadge(icon: "⚡️", title: "全维电池 & 12V电瓶", subtitle: "功率/达成率/电瓶诊断")
                 featureBadge(icon: "🚪", title: "雪豹海獭车门锁闭", subtitle: "7 门全景动态结界")
                 featureBadge(icon: "🛞", title: "4 轮萌爪胎压监测", subtitle: "实时胎压与胎温网格")
-                featureBadge(icon: "♨️", title: "超强干燥与座舱温控", subtitle: "极速除霜/制冷制热/干燥")
+                featureBadge(icon: "🧠", title: "智能识别与备份", subtitle: "分类路由/勾选导出/一键恢复")
                 featureBadge(icon: "📑", title: "换电足迹财务大屏", subtitle: "累计花费与站点排行榜")
                 featureBadge(icon: "📍", title: "高精度寻车导航", subtitle: "WGS-84/苹果/高德导航")
                 featureBadge(icon: "🔐", title: "Widget 动态签名", subtitle: "动态 MD5 签名长期不失效")
@@ -679,7 +689,7 @@ enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
         // v5.12.0
         NIOAboutRelease(
-            version: "v5.12.0 (Build 2822)",
+            version: "v5.12.0 (Build 2823)",
             date: "2026-11",
             isLatest: true,
             items: [
@@ -689,7 +699,9 @@ enum NIOAboutReleases {
                     "🪄 联网弹窗触发：网络受限时补发轻量探测请求，触发系统「允许使用无线数据」授权弹窗；冷启动后台预热，辅助解锁侧载 App 被置灰的蜂窝开关"
                 ]),
                 ("✨ 界面修复", [
-                    "🖼 版本更新引导页图标真正读取 App 图标资源（此前显示 SF Symbol 兜底箭头）"
+                    "🖼 版本更新引导页图标真正读取 App 图标资源（此前显示 SF Symbol 兜底箭头）",
+                    "📝 关于页更新日志副标题自动汇总最新版本亮点，发新版无需手动维护",
+                    "🧩 核心机能矩阵焕新：新增观星行程看板 / 跨设备连通自愈 / 智能识别与备份三项能力展示"
                 ])
             ]),
         // v5.11.0
