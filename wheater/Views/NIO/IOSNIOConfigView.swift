@@ -28,6 +28,8 @@ struct IOSNIOConfigView: View {
     @State private var showReleaseNotesSheet = false
     @State private var showLaunchPreview = false
     // 恋爱好感度实验室：触发彩蛋（关于页点击兔子头像）后常驻显示
+    // 🔭 观星行程 sheet
+    @State private var showStargazingTripSheet = false
     @AppStorage(NIODatingVault.discoveredKey) private var datingLabDiscovered = false
     @State private var showDatingLabSheet = false
     @AppStorage("nio_prefer_actual_range") private var preferActualRange = false
@@ -215,6 +217,9 @@ struct IOSNIOConfigView: View {
             }
             .adaptivePresentation(isPresented: $showReleaseNotesSheet) {
                 IOSReleaseNotesView()
+            }
+            .adaptivePresentation(isPresented: $showStargazingTripSheet) {
+                IOSStargazingTripView()
             }
             .fullScreenCover(isPresented: $showLaunchPreview) {
                 NIOLaunchPreviewHost(isPresented: $showLaunchPreview)
@@ -1680,6 +1685,31 @@ struct IOSNIOConfigView: View {
                 }
                 .buttonStyle(NIOPressableButtonStyle())
             }
+
+            // 🔭 观星行程：JSON 导入 / 实时天气 / 实时活动 / 系统日历
+            Button(action: { showStargazingTripSheet = true }) {
+                HStack(spacing: 8) {
+                    Text("🔭")
+                        .font(.system(size: 14))
+                    Text("观星行程")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(NIOThemePaint.text)
+                    Spacer()
+                    Text("导入 JSON · 天气 · 日历")
+                        .font(.system(size: 10))
+                        .foregroundStyle(mintCyan)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NIOThemePaint.text.opacity(0.4))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(NIOThemePaint.fill)
+                .foregroundStyle(NIOThemePaint.text)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(mintCyan.opacity(0.35), lineWidth: 1))
+            }
+            .buttonStyle(NIOPressableButtonStyle())
         }
     }
 

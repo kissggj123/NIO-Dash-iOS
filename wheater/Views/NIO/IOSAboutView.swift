@@ -677,11 +677,25 @@ struct NIOAboutRelease {
 
 enum NIOAboutReleases {
     static let all: [NIOAboutRelease] = [
+        // v5.8.0
+        NIOAboutRelease(
+            version: "v5.8.0 (Build 2816)",
+            date: "2026-11",
+            isLatest: true,
+            items: [
+                ("🔭 观星行程与暗夜追星", [
+                    "🗺 观测计划 JSON 导入：支持解析专业天文观测计划（IMO/AMS 规范），包含极大期窗口、ZHR 流量、辐射点轨迹、月相光害与推荐观测点",
+                    "🌤 实时视宁度与天气评估：观测窗口逐小时大气云量、透明度、视宁度角秒综合评分与预警",
+                    "📅 系统日历同步：一键将观测窗口及多级提前提醒添加到系统日历",
+                    "📱 灵动岛 / 实时活动：支持观星行程锁屏实时活动，抬腕即可追踪倒计时与天况"
+                ])
+            ]
+        ),
         // v5.7.0
         NIOAboutRelease(
             version: "v5.7.0 (Build 2815)",
             date: "2026-11",
-            isLatest: true,
+            isLatest: false,
             items: [
                 ("⌚️ Apple Watch 腕上速览", [
                     "📱 全新独立 watchOS App：SOC 极光环 + 续航 + 充电倒计时 + 胎压四宫格 + 车内外温度，抬腕即览",

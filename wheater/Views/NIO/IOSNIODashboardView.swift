@@ -89,6 +89,7 @@ struct IOSNIODashboardView: View {
     @AppStorage("nio_vehicle_selected_model") private var selectedModelSlug = "et5_special"
     @State private var showSettings = false
     @State private var showLogs = false
+    @State private var showStargazing = false
     @State private var selectedSection: DashboardSection = .overview
     @State private var sidebarSection: NIOSidebarSection? = .overview
     @State private var splitVisibility: NavigationSplitViewVisibility = .all
@@ -175,6 +176,9 @@ struct IOSNIODashboardView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                     .disabled(service.isLoadingVehicle)
+                    Button { showStargazing = true } label: {
+                        Image(systemName: "sparkles")
+                    }
                     Button { showSettings = true } label: {
                         Image(systemName: "slider.horizontal.3")
                     }
@@ -182,6 +186,7 @@ struct IOSNIODashboardView: View {
             }
             .sheet(isPresented: $showSettings) { IOSNIOConfigView() }
             .sheet(isPresented: $showLogs) { IOSNIOFetchLogView() }
+            .sheet(isPresented: $showStargazing) { IOSStargazingTripView() }
         }
     }
 
@@ -217,6 +222,11 @@ struct IOSNIODashboardView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button { showStargazing = true } label: {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.borderless)
                     Button { showSettings = true } label: {
                         Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 14))
@@ -226,6 +236,7 @@ struct IOSNIODashboardView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
             }
+            .sheet(isPresented: $showStargazing) { IOSStargazingTripView() }
         } detail: {
             GeometryReader { geo in
                 // Duo 展开态 / iPad 宽屏：卡片双列铺满；侧栏展开或折叠窄屏：单列

@@ -22,6 +22,7 @@ struct WheaterStatusBundle: WidgetBundle {
         WheaterStatusLiveActivityWidget()
         WheaterIslandControlWidget()
         NIOVehicleStatusWidget()
+        StargazingTripLiveActivityWidget()
     }
 }
 
