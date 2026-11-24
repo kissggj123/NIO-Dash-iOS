@@ -81,13 +81,16 @@ struct IOSStargazingTripView: View {
                     }
                 }
             }
-            .fileImporter(isPresented: $showImporter,
-                          allowedContentTypes: [.json, .item],
-                          allowsMultipleSelection: false) { result in
-                handleFileImport(result)
+            .sheet(isPresented: $showImporter) {
+                // SwiftUI fileImporter 依赖文件 UTI 元数据，重装/迁移恢复的 JSON 常被置灰；
+                // 改用 UIDocumentPicker 不做类型过滤，任何文件都可选，解析交给 importJSON 容错
+                NIODocumentPicker { result in
+                    showImporter = false
+                    handleFileImport(result)
+                }
             }
             .navigationDestination(item: $selectedTrip) { trip in
-                StargazingTripDetailView(trip: trip)
+                StargazingTripDetailView(initialTrip: trip)
             }
             .task { await activityManager.discoverExistingActivities() }
             .overlay(alignment: .bottom) {
@@ -329,6 +332,34 @@ struct IOSStargazingTripView: View {
     }
 }
 
+// MARK: - 文件选择器（UIDocumentPicker 封装，不做 UTI 过滤避免迁移后置灰）
+
+struct NIODocumentPicker: UIViewControllerRepresentable {
+    let onPick: (Result<[URL], Error>) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: false)
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (Result<[URL], Error>) -> Void
+        init(onPick: @escaping (Result<[URL], Error>) -> Void) { self.onPick = onPick }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onPick(.success(urls))
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
+    }
+}
+
 // MARK: - 结果横幅
 
 struct StargazingNoticeBanner: View {
@@ -351,13 +382,19 @@ struct StargazingNoticeBanner: View {
 // MARK: - 行程详情
 
 struct StargazingTripDetailView: View {
-    let trip: StargazingTrip
+    let initialTrip: StargazingTrip
 
+    @ObservedObject private var store = StargazingTripStore.shared
     @ObservedObject private var weather = StargazingWeatherService.shared
     @ObservedObject private var calendar = StargazingCalendarService.shared
     @ObservedObject private var themeService = AnimeThemeService.shared
     @AppStorage("nio_stargazing_red_mode") private var stargazingRedMode = false
     @State private var showEnvCards = true
+
+    /// 实时行程（补全/重导入后跟随 store 更新，保证 UI 响应）
+    private var trip: StargazingTrip {
+        store.trips.first { $0.id == initialTrip.id } ?? initialTrip
+    }
 
     var body: some View {
         ZStack {
@@ -366,11 +403,13 @@ struct StargazingTripDetailView: View {
                 VStack(spacing: 14) {
                     headerCard
                     countdownCard
+                    if !completionFields.isEmpty { completionCard }
                     envCards
                     starMapCard
-                    locationsCard
-                    timelineCard
-                    tipsCard
+                    if !trip.recommendedLocations.isEmpty { locationsCard }
+                    if trip.itinerarySegment?.timeline.isEmpty == false { timelineCard }
+                    if !(trip.species ?? []).isEmpty || trip.tide != nil { birdingCard }
+                    if !trip.tips.isEmpty { tipsCard }
                     attributionCard
                 }
                 .padding(.horizontal, 16)
@@ -572,6 +611,170 @@ struct StargazingTripDetailView: View {
         }
     }
 
+    // MARK: 字段补全卡（JSON 结构异常/缺失时手动补全，并保存为解析规则）
+
+    private var completionFields: [String] {
+        var m: [String] = []
+        if trip.startDate == nil || trip.endDate == nil { m.append("观测窗口") }
+        if trip.type?.lowercased().contains("meteor") == true && trip.zhr == nil { m.append("ZHR") }
+        if trip.moonInterference == nil { m.append("月光") }
+        if trip.radiant?.horizontal?.maxAltitudeDeg == nil && trip.radiant?.equatorial == nil { m.append("辐射点") }
+        if trip.primaryLocation?.bortleClass == nil { m.append("Bortle") }
+        return m
+    }
+
+    @State private var compWindowStart = Date()
+    @State private var compWindowEnd = Date().addingTimeInterval(8 * 3600)
+    @State private var compZHR = 100
+    @State private var compMoonPhase = "waxing_crescent"
+    @State private var compMoonIllum = 0.0
+    @State private var compRadiantAz = "NE"
+    @State private var compRadiantAlt = 45.0
+    @State private var compBortle = 4
+    @State private var compLoaded = false
+
+    private static let moonPhaseOptions = [
+        ("new_moon", "🌑 新月"), ("waxing_crescent", "🌒 娥眉月"),
+        ("first_quarter", "🌓 上弦"), ("waxing_gibbous", "🌔 盈凸"),
+        ("full_moon", "🌕 满月"), ("waning_gibbous", "🌖 亏凸"),
+        ("last_quarter", "🌗 下弦"), ("waning_crescent", "🌘 残月"),
+    ]
+    private static let compassOptions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                                         "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+
+    private var completionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("缺失字段补全", systemImage: "slider.horizontal.3")
+                .font(.subheadline.bold())
+                .foregroundStyle(NIOThemePaint.text)
+            Text("JSON 中缺失：\(completionFields.joined(separator: "、"))。补全后会保存为解析规则，再次导入同 event_id 自动应用。")
+                .font(.caption2)
+                .foregroundStyle(NIOThemePaint.textSoft)
+
+            if completionFields.contains("观测窗口") {
+                HStack(spacing: 10) {
+                    DatePicker("开始", selection: $compWindowStart)
+                        .font(.caption)
+                    DatePicker("结束", selection: $compWindowEnd)
+                        .font(.caption)
+                }
+            }
+            if completionFields.contains("ZHR") {
+                Stepper("ZHR 天顶流量：\(compZHR)/h", value: $compZHR, in: 5...500, step: 5)
+                    .font(.caption)
+            }
+            if completionFields.contains("月光") {
+                Picker("月相", selection: $compMoonPhase) {
+                    ForEach(Self.moonPhaseOptions, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                .font(.caption)
+                HStack {
+                    Text("月光照度 \(Int(compMoonIllum))%")
+                        .font(.caption)
+                    Slider(value: $compMoonIllum, in: 0...100, step: 1)
+                }
+            }
+            if completionFields.contains("辐射点") {
+                Picker("辐射点方位", selection: $compRadiantAz) {
+                    ForEach(Self.compassOptions, id: \.self) { Text($0).tag($0) }
+                }
+                .font(.caption)
+                HStack {
+                    Text("极大高度 \(Int(compRadiantAlt))°")
+                        .font(.caption)
+                    Slider(value: $compRadiantAlt, in: 0...90, step: 1)
+                }
+            }
+            if completionFields.contains("Bortle") {
+                Picker("波特尔暗空等级", selection: $compBortle) {
+                    ForEach(1...9, id: \.self) { Text("Bortle \($0)").tag($0) }
+                }
+                .font(.caption)
+            }
+
+            Button {
+                saveCompletion()
+            } label: {
+                Label("保存补全并记住规则", systemImage: "checkmark.seal")
+                    .font(.caption.bold())
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(NIOPressableButtonStyle())
+            .tint(NIOThemePaint.accent)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(NIOThemePaint.fill)
+                .overlay(NIOThemePaint.cardSheen)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(NIOThemePaint.warm.opacity(0.5), lineWidth: 1))
+        .onAppear(perform: loadCompletionDefaults)
+    }
+
+    private func loadCompletionDefaults() {
+        guard !compLoaded else { return }
+        compLoaded = true
+        if let s = trip.startDate { compWindowStart = s }
+        if let e = trip.endDate { compWindowEnd = e }
+        if let z = trip.zhr { compZHR = z }
+        if let mi = trip.moonInterference {
+            if let p = mi.phase { compMoonPhase = p.lowercased().replacingOccurrences(of: " ", with: "_") }
+            if let i = mi.illuminationPctAtPeak { compMoonIllum = i }
+        }
+        if let maxAlt = trip.radiant?.horizontal?.maxAltitudeDeg {
+            compRadiantAlt = maxAlt
+            if let desc = trip.radiant?.horizontal?.azimuthDesc {
+                for option in Self.compassOptions where desc.uppercased().contains(option) {
+                    compRadiantAz = option
+                    break
+                }
+            }
+        }
+        if let b = trip.primaryLocation?.bortleClass { compBortle = b }
+    }
+
+    private func saveCompletion() {
+        var completion: [String: Any] = [:]
+        if completionFields.contains("观测窗口") {
+            completion["best_viewing_window"] = [
+                "start_unix": compWindowStart.timeIntervalSince1970,
+                "end_unix": compWindowEnd.timeIntervalSince1970,
+            ]
+        }
+        if completionFields.contains("ZHR") {
+            completion["zhr"] = compZHR
+        }
+        if completionFields.contains("月光") {
+            completion["moon_interference"] = [
+                "phase": compMoonPhase,
+                "illumination_pct_at_peak": compMoonIllum,
+            ]
+        }
+        if completionFields.contains("辐射点") {
+            completion["radiant"] = ["horizontal": [
+                "max_altitude_deg": compRadiantAlt,
+                "azimuth_desc": "方位 \(compRadiantAz)（导入补全）",
+                "altaz_timeline": [[
+                    "alt_deg": compRadiantAlt,
+                    "az_compass": compRadiantAz,
+                    "note": "导入补全",
+                ]],
+            ]]
+        }
+        if completionFields.contains("Bortle") {
+            completion["recommended_locations"] = trip.recommendedLocations.map { loc in
+                ["id": loc.id, "name": loc.name,
+                 "coordinates": ["lat": loc.lat, "lng": loc.lng],
+                 "bortle_class": loc == trip.primaryLocation ? compBortle : (loc.bortleClass ?? compBortle)]
+            }
+        }
+
+        if store.applyCompletion(completion, to: trip) {
+            store.importNotice = .init(text: "已补全并保存解析规则（下次导入自动应用）", isError: false)
+        }
+    }
+
     // MARK: 环境卡片组（月光 / 天气矩阵）
 
     @State private var isRefreshingData = false
@@ -755,29 +958,30 @@ struct StargazingTripDetailView: View {
     }
 
     private func weatherMetric(icon: String, label: String, value: Double?, unit: String, digits: Int = 0, isText: Bool = false) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Label(label, systemImage: icon)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(NIOThemePaint.textSoft)
                 .lineLimit(1)
-            if isText {
-                Text(value == nil ? (unit == "—" ? "—" : unit) : unit)
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.text)
-                    .lineLimit(1)
-            } else if let value {
-                Text("\(value.formatted(.number.precision(.fractionLength(digits == 0 ? 0 : 1))))\(unit)")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.text)
-                    .lineLimit(1)
-            } else {
-                Text("—")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
-                    .foregroundStyle(NIOThemePaint.textSoft)
+                .minimumScaleFactor(0.8)
+            Group {
+                if isText {
+                    Text(value == nil ? (unit == "—" ? "—" : unit) : unit)
+                } else if let value {
+                    Text("\(value.formatted(.number.precision(.fractionLength(digits == 0 ? 0 : 1))))\(unit)")
+                } else {
+                    Text("—")
+                }
             }
+            .font(.system(size: 13, weight: .heavy, design: .rounded))
+            .foregroundStyle(value == nil && !isText ? NIOThemePaint.textSoft : NIOThemePaint.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(height: 16, alignment: .center)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.vertical, 8)
+        .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 10).fill(NIOThemePaint.fill))
     }
 
@@ -990,6 +1194,80 @@ struct StargazingTripDetailView: View {
     }
 
     // MARK: 观测建议
+
+    // MARK: 观鸟卡（物种清单 + 潮汐预估）
+
+    private var birdingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("目标物种与潮汐", systemImage: "bird")
+                .font(.subheadline.bold())
+                .foregroundStyle(NIOThemePaint.text)
+
+            ForEach(trip.species ?? []) { sp in
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(sp.name)
+                            .font(.caption.bold())
+                            .foregroundStyle(NIOThemePaint.text)
+                        if let en = sp.nameEn, !en.isEmpty {
+                            Text(en)
+                                .font(.caption2)
+                                .foregroundStyle(NIOThemePaint.textSoft)
+                        }
+                    }
+                    Spacer()
+                    if let count = sp.count, !count.isEmpty {
+                        Text(count)
+                            .font(.caption2.bold())
+                            .foregroundStyle(NIOThemePaint.warm)
+                    }
+                    if let prot = sp.protection, !prot.isEmpty {
+                        Text(prot)
+                            .font(.system(size: 9, weight: .heavy))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(NIOThemePaint.warm.opacity(0.18)))
+                            .foregroundStyle(NIOThemePaint.warm)
+                    }
+                }
+                .padding(.vertical, 5)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(NIOThemePaint.textSoft.opacity(0.12)).frame(height: 0.7)
+                }
+            }
+
+            if let tide = trip.tide {
+                HStack(spacing: 12) {
+                    if let high = tide.highTideEstimate {
+                        Label("涨潮 \(high)", systemImage: "water.wave")
+                            .font(.caption2)
+                            .foregroundStyle(NIOThemePaint.textSoft)
+                    }
+                    if let low = tide.lowTideEstimate {
+                        Label("落潮 \(low)", systemImage: "water.wave.slash")
+                            .font(.caption2)
+                            .foregroundStyle(NIOThemePaint.textSoft)
+                    }
+                }
+                if let note = tide.note {
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(NIOThemePaint.textSoft)
+                }
+                if let station = tide.station {
+                    Text("参考站：\(station)")
+                        .font(.caption2)
+                        .foregroundStyle(NIOThemePaint.textSoft.opacity(0.8))
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(NIOThemePaint.fill)
+                .overlay(NIOThemePaint.cardSheen)
+        )
+    }
 
     private var tipsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1253,7 +1531,43 @@ struct RadiantCompassView: View {
                 Text(currentLabel)
                     .font(.system(size: 10, weight: .heavy)).foregroundColor(glowColor),
                 at: CGPoint(x: currentPoint.x, y: currentPoint.y + 22))
+
+            // 圆心信息读数：当前高度/方位 + 状态（白圈不再空白）
+            let alt = current.altDeg ?? 0
+            let azCompass = current.azCompass
+                ?? (current.azDeg.map { Self.compassName($0) } ?? "—")
+            let status: String
+            if belowHorizon {
+                status = "未升起 · 等待窗口"
+            } else if alt >= 30 {
+                status = "观测条件良好"
+            } else {
+                status = "高度偏低 · 建议等待"
+            }
+            context.draw(
+                Text("\(String(format: "%.0f", max(0, alt)))°")
+                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .foregroundColor(.primary.opacity(0.85)),
+                at: CGPoint(x: center.x, y: center.y - 12))
+            context.draw(
+                Text("方位 \(azCompass)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary),
+                at: CGPoint(x: center.x, y: center.y + 8))
+            context.draw(
+                Text(status)
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary.opacity(0.9)),
+                at: CGPoint(x: center.x, y: center.y + 24))
         }
+    }
+
+    /// 方位角 → 罗盘名（N/NE/...）
+    static func compassName(_ az: Double) -> String {
+        let names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                     "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+        let idx = Int(((az + 11.25) / 22.5).truncatingRemainder(dividingBy: 16))
+        return names[idx < 0 ? idx + 16 : idx]
     }
 
     /// 方位角（0=北, 顺时针）→ Canvas 角度

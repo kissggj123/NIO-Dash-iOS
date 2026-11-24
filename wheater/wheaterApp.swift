@@ -63,9 +63,9 @@ struct wheaterApp: App {
         defer { if secured { url.stopAccessingSecurityScopedResource() } }
         do {
             let text = try String(contentsOf: url, encoding: .utf8)
-            let count = try StargazingTripStore.shared.importJSON(text)
-            StargazingTripStore.shared.importNotice =
-                .init(text: "已从分享导入 \(count) 个观星行程", isError: false)
+            _ = try StargazingTripStore.shared.importJSON(text)
+            // 导入成功：自动跳转观星界面（结果横幅由 importJSON 统一给出）
+            NotificationCenter.default.post(name: .stargazingOpenRequest, object: nil)
         } catch {
             StargazingTripStore.shared.importNotice =
                 .init(text: "分享导入失败：\(error.localizedDescription)", isError: true)

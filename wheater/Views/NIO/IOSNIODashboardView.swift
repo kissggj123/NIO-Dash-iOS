@@ -187,6 +187,10 @@ struct IOSNIODashboardView: View {
             .sheet(isPresented: $showSettings) { IOSNIOConfigView() }
             .sheet(isPresented: $showLogs) { IOSNIOFetchLogView() }
             .sheet(isPresented: $showStargazing) { IOSStargazingTripView() }
+            .onReceive(NotificationCenter.default.publisher(for: .stargazingOpenRequest)) { _ in
+                // 系统分享导入成功后自动跳转观星界面
+                showStargazing = true
+            }
         }
     }
 
@@ -237,6 +241,9 @@ struct IOSNIODashboardView: View {
                 .padding(.vertical, 10)
             }
             .sheet(isPresented: $showStargazing) { IOSStargazingTripView() }
+            .onReceive(NotificationCenter.default.publisher(for: .stargazingOpenRequest)) { _ in
+                showStargazing = true
+            }
         } detail: {
             GeometryReader { geo in
                 // Duo 展开态 / iPad 宽屏：卡片双列铺满；侧栏展开或折叠窄屏：单列

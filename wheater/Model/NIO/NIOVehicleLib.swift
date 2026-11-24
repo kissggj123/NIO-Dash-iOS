@@ -35,8 +35,15 @@ enum NIOFormatters {
 
 // MARK: - 智能解析返回结果
 
-struct NIOSmartParseResult {
-    var mode: String?              // "url" | "widget"
+/// 粘贴内容类型：智能识别先分类再路由，避免车辆凭证 / 观星行程 / 备份整包互相串道
+enum NIOSmartContentKind {
+    case backupBundle      // 设置页导出的备份合集（backup_version + defaults）
+    case stargazingJSON    // 观星行程 JSON（单行程 / 数组 / events 年历）
+    case vehicleCapture    // 车辆凭证：Token / 抓包 URL / cURL
+    case unknown
+}
+
+struct NIOSmartParseResult {    var mode: String?              // "url" | "widget"
     var vehicleURL: String?
     var vehicleToken: String?
     var userToken: String?
@@ -60,6 +67,38 @@ struct NIOSmartParseResult {
 enum NIOVehicleLib {
 
     static let widgetBaseURL = "https://app.nio.com/app/api/icar/v2/widget/info"
+
+    // MARK: - 粘贴内容分类（备份合集 / 观星行程 / 车辆凭证）
+
+    static func classifySmartText(_ text: String) -> NIOSmartContentKind {
+        let sanitized = StargazingTripStore.sanitizeJSONText(text)
+        if let data = sanitized.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
+            if let dict = obj as? [String: Any] {
+                if dict["backup_version"] != nil, dict["defaults"] != nil { return .backupBundle }
+                // 观星特征：单行程 / 年历包裹 / 行程关键字段
+                if dict["event_id"] != nil || dict["events"] != nil
+                    || dict["best_viewing_window"] != nil || dict["recommended_locations"] != nil
+                    || dict["observation_score"] != nil || dict["radiant"] != nil {
+                    return .stargazingJSON
+                }
+                // 其他 JSON 对象按观星宽容解析（导入会给出明确错误）
+                return .stargazingJSON
+            }
+            if let arr = obj as? [[String: Any]],
+               arr.contains(where: { ($0["event_id"] != nil) || ($0["best_viewing_window"] != nil) }) {
+                return .stargazingJSON
+            }
+        }
+        // 车辆凭证特征：NIO 域名 / Bearer / JWT 头
+        let lower = text.lowercased()
+        if lower.contains("nio.com") || lower.contains("bearer ")
+            || lower.contains("authorization:") || lower.contains("vehicle_token")
+            || text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("eyJ") {
+            return .vehicleCapture
+        }
+        return .unknown
+    }
 
     // MARK: - GPS 校验
 

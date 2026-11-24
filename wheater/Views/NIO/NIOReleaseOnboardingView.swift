@@ -99,13 +99,25 @@ struct NIOReleaseOnboardingView: View {
 
     private var header: some View {
         VStack(spacing: 8) {
-            Image(systemName: isWelcome ? "sparkles" : "arrow.up.circle.fill")
-                .font(.system(size: 42, weight: .bold))
-                .foregroundStyle(
-                    LinearGradient(colors: [gradientStart, gradientEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
-                )
-                .shadow(color: glow.opacity(0.5), radius: 8)
-            Text(isWelcome ? "欢迎来到兔可可" : "兔可可已更新")
+            // App 图标（阴影随主题光晕）
+            Group {
+                if let icon = UIImage(named: "AppIcon") {
+                    Image(uiImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Image(systemName: isWelcome ? "sparkles" : "arrow.up.circle.fill")
+                        .font(.system(size: 42, weight: .bold))
+                }
+            }
+            .frame(width: 88, height: 88)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(gradientStart.opacity(0.55), lineWidth: 1.5)
+            )
+            .shadow(color: glow.opacity(0.5), radius: 10, y: 4)
+            Text(isWelcome ? "欢迎来到蔚来看板" : "蔚来看板已更新")
                 .font(.title.weight(.heavy))
                 .foregroundStyle(textPrimary)
             Text(isWelcome ? "专为蔚来车主打造的二次元萌系车况看板" : release?.version ?? "")

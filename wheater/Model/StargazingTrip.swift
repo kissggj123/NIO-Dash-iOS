@@ -36,6 +36,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
     var atmosphere: Atmosphere?
     var recommendedLocations: [RecommendedLocation]
     var tips: [String]
+    var species: [BirdSpecies]?
+    var tide: TideInfo?
     var schemaVersion: String?
     var importedAt: Date
 
@@ -108,6 +110,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
         case atmosphere
         case recommendedLocations = "recommended_locations"
         case tips
+        case species
+        case tide
         case schemaVersion = "schema_version"
         case importedAt
     }
@@ -138,6 +142,8 @@ struct StargazingTrip: Codable, Identifiable, Equatable, Hashable {
         atmosphere = try? c.decodeIfPresent(Atmosphere.self, forKey: .atmosphere)
         recommendedLocations = (try? c.decodeIfPresent([RecommendedLocation].self, forKey: .recommendedLocations)) ?? []
         tips = (try? c.decodeIfPresent([String].self, forKey: .tips)) ?? []
+        species = try? c.decodeIfPresent([BirdSpecies].self, forKey: .species)
+        tide = try? c.decodeIfPresent(TideInfo.self, forKey: .tide)
         schemaVersion = try c.decodeIfPresent(String.self, forKey: .schemaVersion)
         importedAt = try c.decodeIfPresent(Date.self, forKey: .importedAt) ?? Date()
     }
@@ -755,6 +761,35 @@ private extension Double {
     func normalizedDegrees0to360() -> Double {
         let value = truncatingRemainder(dividingBy: 360)
         return value < 0 ? value + 360 : value
+    }
+}
+
+// MARK: - 观鸟物种 / 潮汐（birding 类行程）
+
+struct BirdSpecies: Codable, Equatable, Hashable, Identifiable {
+    var name: String
+    var nameEn: String?
+    var count: String?
+    var protection: String?
+    var id: String { name }
+    enum CodingKeys: String, CodingKey {
+        case name
+        case nameEn = "name_en"
+        case count
+        case protection
+    }
+}
+
+struct TideInfo: Codable, Equatable, Hashable {
+    var highTideEstimate: String?
+    var lowTideEstimate: String?
+    var note: String?
+    var station: String?
+    enum CodingKeys: String, CodingKey {
+        case highTideEstimate = "high_tide_estimate"
+        case lowTideEstimate = "low_tide_estimate"
+        case note
+        case station
     }
 }
 

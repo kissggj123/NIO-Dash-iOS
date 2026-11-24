@@ -54,47 +54,89 @@ struct NIOConfigBackupView: View {
     @State private var showRestoreConfirm = false
     @State private var resultText: String?
     @State private var resultIsError = false
+    // 备份范围勾选（合集导出：可单独导出车辆凭证 / 观星，或全选整包）
+    @State private var scopeVehicle = true
+    @State private var scopeStargazing = true
+    @State private var scopeCore = true
+
+    private var selectedScopes: [String] {
+        var s: [String] = []
+        if scopeVehicle { s.append("vehicle") }
+        if scopeStargazing { s.append("stargazing") }
+        if scopeCore { s.append("core") }
+        return s
+    }
+
+    private var scopeLabel: String {
+        let all = selectedScopes.count == 3
+        if all { return "整包" }
+        let names = ["vehicle": "车辆凭证", "stargazing": "观星", "core": "基础偏好"]
+        return selectedScopes.compactMap { names[$0] }.joined(separator: "+")
+    }
 
     private var defaultFileName: String {
         let f = DateFormatter()
         f.dateFormat = "yyyyMMdd-HHmm"
-        return "yumikotoys_backup_\(f.string(from: Date()))"
+        let kind = selectedScopes.count == 3 ? "" : "_\(selectedScopes.joined(separator: "-"))"
+        return "yumikotoys_backup\(kind)_\(f.string(from: Date()))"
     }
 
     /// 永不备份/恢复的键：运行日志（体积大且无恢复价值）
     private static let excludedKeyFragments = ["log", "logs"]
 
-    /// 导出载荷：App 自身持久域全量键值 + 元信息
-    private func buildBackupPayload() -> [String: Any] {
+    /// 键 → 备份范围分类（stargazing / vehicle / core，可多属）
+    static func scopeKey(_ key: String) -> Set<String> {
+        var scopes: Set<String> = []
+        let k = key.lowercased()
+        if k.contains("stargazing") { scopes.insert("stargazing") }
+        if k.contains("vehicle") || k.contains("token") || k.contains("device_id")
+            || k.contains("user_agent") || k.contains("captured") || k.contains("sign")
+            || k.contains("api_url") || k.contains("checkin") || k.contains("fetch")
+            || k.contains("push_payload") || k.contains("widget") {
+            scopes.insert("vehicle")
+        }
+        if scopes.isEmpty { scopes.insert("core") }
+        return scopes
+    }
+
+    /// 导出载荷：按勾选范围过滤的持久域键值 + 元信息（backup_scopes 标记范围，恢复端据此识别）
+    private func buildBackupPayload(scopes: [String]) -> [String: Any] {
         let bundleID = Bundle.main.bundleIdentifier ?? ""
         let domain = UserDefaults.standard.persistentDomain(forName: bundleID) ?? [:]
+        let isFull = scopes.count >= 3
         let filtered = domain.filter { key, _ in
-            !Self.excludedKeyFragments.contains { key.lowercased().contains($0) }
+            if Self.excludedKeyFragments.contains(where: { key.lowercased().contains($0) }) { return false }
+            if isFull { return true }
+            return !Self.scopeKey(key).isDisjoint(with: scopes)
         }
         let iso = ISO8601DateFormatter()
         var payload: [String: Any] = [
             "backup_version": 1,
+            "backup_scopes": scopes,
+            "backup_kind": isFull ? "full" : "custom",
             "exported_at": iso.string(from: Date()),
             "app_version": (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "",
             "build": (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "",
             "bundle_id": bundleID,
             "defaults": filtered
         ]
-        // 收件箱载荷（内含最近一次直推的凭证与抓包样本）一并带上
-        if let inbox = UserDefaults.standard.object(forKey: "nio_last_push_payload") {
+        // 收件箱载荷（内含最近一次直推的凭证与抓包样本）仅整车导出时带上
+        if scopes.contains("vehicle"), let inbox = UserDefaults.standard.object(forKey: "nio_last_push_payload") {
             payload["nio_last_push_payload"] = inbox
         }
         return payload
     }
 
-    /// 恢复：整包写回 UserDefaults，返回恢复的键数量
+    /// 恢复：整包写回 UserDefaults，返回恢复的键数量（智能识别卡粘贴备份时也会调用）
     @discardableResult
-    private static func restore(from payload: [String: Any]) -> Int {
+    static func restore(from payload: [String: Any]) -> Int {
         guard payload["backup_version"] != nil,
               let defaults = payload["defaults"] as? [String: Any] else { return 0 }
         let ud = UserDefaults.standard
         var count = 0
         for (key, value) in defaults where !excludedKeyFragments.contains(where: { key.lowercased().contains($0) }) {
+            // 观星存档/规则是 Data 类型（JSON 里为 base64 字符串），走专用恢复保证类型正确
+            if key.contains("stargazing") { continue }
             switch value {
             case let n as NSNumber:
                 // JSON 反序列化里 Bool 与数字都是 NSNumber，用 CF 类型区分避免 true 变 1.0
@@ -109,8 +151,10 @@ struct NIOConfigBackupView: View {
             }
             count += 1
         }
+        // 观星数据专用恢复：行程去重合并入库 + 解析规则合并（旧档已补全内容不丢）
+        let stargazingCount = StargazingTripStore.shared.restoreBackupStargazing(from: defaults)
         ud.synchronize()
-        return count
+        return count + stargazingCount
     }
 
     var body: some View {
@@ -121,12 +165,31 @@ struct NIOConfigBackupView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("备份范围") {
+                Toggle("车辆凭证与抓包（Token/API/设备指纹）", isOn: $scopeVehicle)
+                    .font(.system(size: 12))
+                Toggle("观星行程与解析规则", isOn: $scopeStargazing)
+                    .font(.system(size: 12))
+                Toggle("基础偏好与其他配置（主题等）", isOn: $scopeCore)
+                    .font(.system(size: 12))
+            }
+
             Section("备份") {
                 Button {
-                    exportDocument = NIOConfigBackupDocument(json: buildBackupPayload())
+                    let scopes = selectedScopes
+                    guard !scopes.isEmpty else {
+                        showResult("请至少勾选一个备份范围", isError: true)
+                        return
+                    }
+                    exportDocument = NIOConfigBackupDocument(json: buildBackupPayload(scopes: scopes))
                     isExporting = true
                 } label: {
-                    Label("导出配置备份到「文件」", systemImage: "square.and.arrow.up")
+                    Label("导出\(scopeLabel)备份到「文件」", systemImage: "square.and.arrow.up")
+                }
+                if selectedScopes.count < 3 {
+                    Text("已按勾选范围过滤，文件名含范围标记；恢复时自动识别，只还原对应部分")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -173,25 +236,43 @@ struct NIOConfigBackupView: View {
                 showResult("备份失败：\(error.localizedDescription)", isError: true)
             }
         }
-        .fileImporter(isPresented: $isImporting, allowedContentTypes: [.json]) { result in
-            switch result {
-            case .success(let url):
-                let secured = url.startAccessingSecurityScopedResource()
-                defer { if secured { url.stopAccessingSecurityScopedResource() } }
-                do {
-                    let data = try Data(contentsOf: url)
-                    if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       obj["backup_version"] != nil {
+        .sheet(isPresented: $isImporting) {
+            // SwiftUI fileImporter 对重装/迁移恢复的文件（UTI 元数据缺失）会置灰不可选，
+            // 改用 UIDocumentPicker 不过滤类型，选中后自行校验 backup_version
+            NIODocumentPicker { result in
+                isImporting = false
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    let secured = url.startAccessingSecurityScopedResource()
+                    defer { if secured { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        // 不指定编码让系统自动探测（重装/微信中转的文件可能是 UTF-16/带 BOM）
+                        let raw = try String(contentsOf: url)
+                        let text = StargazingTripStore.sanitizeJSONText(raw)
+                        guard let data = text.data(using: .utf8),
+                              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                            let parsed = try? JSONSerialization.jsonObject(with: Data(text.utf8))
+                            if parsed == nil {
+                                showResult("JSON 解析失败：文件内容不是有效 JSON（已尝试 BOM 清洗与截取）", isError: true)
+                            } else {
+                                showResult("不是有效的备份文件：顶层不是 JSON 对象", isError: true)
+                            }
+                            return
+                        }
+                        guard obj["backup_version"] != nil else {
+                            let keys = obj.keys.prefix(5).joined(separator: "、")
+                            showResult("不是有效的备份文件（缺少 backup_version，顶层键：\(keys)…）", isError: true)
+                            return
+                        }
                         pendingImportDocument = NIOConfigBackupDocument(json: obj)
                         showRestoreConfirm = true
-                    } else {
-                        showResult("不是有效的备份文件（缺少 backup_version）", isError: true)
+                    } catch {
+                        showResult("读取失败：\(error.localizedDescription)", isError: true)
                     }
-                } catch {
+                case .failure(let error):
                     showResult("读取失败：\(error.localizedDescription)", isError: true)
                 }
-            case .failure:
-                break
             }
         }
         .confirmationDialog(

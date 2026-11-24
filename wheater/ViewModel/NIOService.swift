@@ -1250,6 +1250,37 @@ final class NIOService: ObservableObject {
             trimmed = String(trimmed.dropFirst().dropLast())
         }
 
+        // ⚡️ 先分类再路由：备份合集 / 观星行程 / 车辆凭证，互不串道
+        let sanitized = StargazingTripStore.sanitizeJSONText(trimmed)
+        switch NIOVehicleLib.classifySmartText(trimmed) {
+        case .backupBundle:
+            if let data = sanitized.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let defaults = obj["defaults"] as? [String: Any], !defaults.isEmpty {
+                let count = NIOConfigBackupView.restore(from: obj)
+                let ver = "v\(obj["app_version"] as? String ?? "?") (Build \(obj["build"] as? String ?? "?"))"
+                lastParseNotes = [
+                    "识别为智能备份整包（来自 \(ver)，导出于 \(obj["exported_at"] as? String ?? "未知时间")）",
+                    "已恢复 \(count) 项配置（含观星行程与解析规则）",
+                    "请杀掉 App 重新打开，所有页面即按备份配置刷新",
+                ]
+                return true
+            }
+
+        case .stargazingJSON:
+            if let added = try? StargazingTripStore.shared.importJSON(sanitized), added > 0 {
+                lastParseNotes = [
+                    "识别为观星行程 JSON（已导入 \(added) 个行程）",
+                    "即将自动跳转观星界面查看",
+                ]
+                NotificationCenter.default.post(name: .stargazingOpenRequest, object: nil)
+                return true
+            }
+
+        case .vehicleCapture, .unknown:
+            break // 走下方车辆凭证解析流程
+        }
+
         let parsed = NIOVehicleLib.smartParseInput(trimmed)
         // 解析过程备注（过滤了什么 / 识别到什么），供设置页智能识别卡展示
         lastParseNotes = parsed.notes
